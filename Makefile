@@ -25,8 +25,8 @@ vet: ## Run go vet
 lint: ## Run golangci-lint
 	golangci-lint run
 
-vuln: ## Run govulncheck
-	go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+vuln: ## Scan Go dependencies and reachable code for known vulnerabilities
+	go run golang.org/x/vuln/cmd/govulncheck@v1.1.4 ./...
 
 clean: ## Remove build artifacts
 	rm -rf $(BIN_DIR) dist coverage.out

@@ -35,7 +35,7 @@ Terraform directory: /absolute/path/to/terraform/prod
 
 Requirements:
 
-- Go 1.25 or newer
+- Go 1.26 or newer
 - Docker, for container builds
 - `golangci-lint`, for local linting
 
