@@ -51,8 +51,12 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			fmt.Fprintln(stdout, "TerraDrift scan initialized")
-			fmt.Fprintf(stdout, "Terraform directory: %s\n", absDir)
+			if _, err := fmt.Fprintln(stdout, "TerraDrift scan initialized"); err != nil {
+				return fmt.Errorf("write scan output: %w", err)
+			}
+			if _, err := fmt.Fprintf(stdout, "Terraform directory: %s\n", absDir); err != nil {
+				return fmt.Errorf("write scan output: %w", err)
+			}
 			return nil
 		},
 	}
