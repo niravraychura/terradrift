@@ -1,0 +1,22 @@
+# Security Policy
+
+## Supported versions
+
+TerraDrift is pre-1.0 and under active development. Security fixes are applied to the default branch until a formal release policy is published.
+
+## Reporting a vulnerability
+
+Please report suspected vulnerabilities privately by opening a GitHub security advisory for this repository. If advisories are unavailable, contact the maintainer directly before publishing details.
+
+Include:
+
+- Affected TerraDrift version or commit
+- Reproduction steps
+- Potential impact
+- Any suggested mitigation
+
+## Current security posture
+
+The bootstrap CLI validates local directory input only. It does not execute Terraform, contact cloud APIs, read Terraform state, or persist scan results yet.
+
+Future Terraform execution must treat Terraform modules, providers, plans, state files, and logs as potentially sensitive. Contributors should avoid adding behavior that prints secrets, commits state files, or executes untrusted Terraform without explicit user action.
