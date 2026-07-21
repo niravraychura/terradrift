@@ -1,21 +1,52 @@
 # TerraDrift
 
-TerraDrift is an open-source, self-hosted Terraform drift detection tool.
+TerraDrift is an open-source, self-hosted Terraform drift detection tool. It is being built to help teams identify infrastructure changes that happened outside their normal Terraform workflow and surface those changes in a clear, automation-friendly way.
 
-> **Project status:** TerraDrift is under active development. The current bootstrap release only validates a local Terraform directory. Terraform drift execution and plan parsing are intentionally deferred to the next implementation phase.
+> [!WARNING]
+> TerraDrift is under active development. The current bootstrap release validates a local Terraform directory only. It does **not** run Terraform, detect drift, parse plans, send Slack messages, or provide a dashboard yet.
 
 ## Why TerraDrift exists
 
-Terraform-managed infrastructure can drift when resources are changed outside normal infrastructure-as-code workflows. TerraDrift aims to make drift detection simple to run in local, CI, and self-hosted environments without requiring a hosted SaaS dashboard.
+Terraform is the source of truth for many infrastructure teams, but real environments can still drift when resources are changed manually, by emergency scripts, by provider-side defaults, or by systems outside Terraform. TerraDrift aims to provide a simple self-hosted workflow for detecting that drift without requiring a hosted SaaS platform.
 
-## Planned features
+The long-term goal is to make drift detection easy to run from a developer laptop, CI pipeline, scheduled job, or private automation runner, then publish clear results to humans and automation systems.
 
-- Local Terraform directory scanning
-- Terraform `init`, refresh-only `plan`, and JSON plan parsing
-- Clear drift reports for humans and automation
-- CI-friendly exit codes
-- Configurable logging and output formats
-- Future self-hosted dashboard and history storage
+## Current status
+
+The first version of TerraDrift is a project foundation. It includes:
+
+- A Go module and Cobra-based CLI named `terradrift`
+- A `scan` command with `--directory` / `-d` support
+- Directory validation and absolute path reporting
+- Structured logging foundations with `log/slog`
+- Domain models for future drift reports
+- A Terraform runner interface for future Terraform CLI integration
+- Unit tests that do not require Terraform or cloud credentials
+- Docker, Makefile, GitHub Actions CI, Dependabot, and security policy scaffolding
+
+Actual Terraform execution is the next major implementation step.
+
+## Do Terraform files need to be in this repository?
+
+No. Terraform code does **not** need to live in the TerraDrift repository.
+
+TerraDrift is intended to scan any local Terraform directory that is available to the process at runtime. That directory can come from:
+
+- The same repository as TerraDrift during local development
+- A separate infrastructure repository checked out by CI
+- A mounted directory in Docker
+- A cloned repository on a VM or scheduled runner
+- Any local filesystem path containing Terraform configuration
+
+For example, all of these future usage patterns should be valid:
+
+```bash
+terradrift scan --directory ./terraform/prod
+terradrift scan --directory ../company-infra/environments/prod
+terradrift scan --directory /workspace/infrastructure/aws/prod
+```
+
+For CI usage, the recommended pattern is usually to run TerraDrift in the same job after checking out the Terraform repository you want to scan.
 
 ## Current CLI usage
 
@@ -24,81 +55,199 @@ terradrift scan --directory ./terraform/prod
 terradrift scan -d ./terraform/prod
 ```
 
-Current output validates the directory and prints the absolute Terraform path:
+Current output:
 
 ```text
 TerraDrift scan initialized
 Terraform directory: /absolute/path/to/terraform/prod
 ```
 
-## Local development
+Today, this only confirms that the directory argument was provided, resolves it to an absolute path, and verifies that the path exists and is a directory.
 
-Requirements:
+## Logging
+
+The CLI supports a global `--log-level` flag:
+
+```bash
+terradrift --log-level debug scan --directory ./terraform/prod
+```
+
+Supported values:
+
+- `debug`
+- `info`
+- `warn`
+- `error`
+
+The default log level is `info`.
+
+## Installation and local development
+
+### Requirements
 
 - Go 1.26 or newer
 - Docker, for container builds
 - `golangci-lint`, for local linting
 
-Install dependencies:
+### Download dependencies
 
 ```bash
 go mod download
 ```
 
-Run the CLI:
+### Run from source
 
 ```bash
 go run ./cmd/terradrift scan --directory .
 ```
 
-## Build
+### Build the binary
 
 ```bash
 make build
 ```
 
-The binary is written to `bin/terradrift`.
+The binary is written to:
 
-## Test
+```text
+bin/terradrift
+```
+
+### Run tests and checks
 
 ```bash
+make fmt
+make vet
 make test
 make test-race
-make vet
 make lint
 make vuln
 ```
 
-Tests do not require Terraform, cloud credentials, or network access.
+Tests do not require Terraform, cloud credentials, or network access. The vulnerability scan requires access to Go's vulnerability database.
 
-## Docker build
+## Docker
+
+Build the image:
 
 ```bash
 make docker-build
 ```
 
-The runtime image does not include Terraform yet. Terraform will be added when command execution is implemented.
+The current runtime image intentionally does not install Terraform yet. Terraform will be included, mounted, or otherwise discovered when command execution is implemented.
 
-## Roadmap
+## Planned real drift detection flow
 
-1. Implement Terraform CLI runner for `init`, refresh-only `plan`, and `show -json`.
-2. Parse Terraform JSON output into TerraDrift drift reports.
-3. Add machine-readable output formats and CI-oriented exit codes.
-4. Add configuration files and ignore rules.
-5. Build dashboard and historical reporting after the CLI foundation is stable.
+The next implementation should make `terradrift scan` perform this flow:
+
+1. Validate the Terraform directory.
+2. Run `terraform init`.
+3. Run `terraform plan -refresh-only -detailed-exitcode -out <planfile>`.
+4. Run `terraform show -json <planfile>`.
+5. Parse the JSON plan.
+6. Produce a TerraDrift drift report.
+7. Return clear exit codes for no drift, drift detected, and scan failure.
+
+## Slack and notifications
+
+Slack notifications are not implemented yet.
+
+The intended future workflow is to generate a drift report and optionally send a concise summary to Slack, for example:
+
+```text
+🚨 Terraform drift detected
+Environment: prod
+Resources checked: 124
+Changed resources: 3
+```
+
+A future command may look like:
+
+```bash
+terradrift scan \
+  --directory ./terraform/prod \
+  --notify slack \
+  --slack-webhook-url "$SLACK_WEBHOOK_URL"
+```
+
+Notification work should include secret-safe logging, webhook redaction, tests for message formatting, and tests proving sensitive values are not printed.
+
+## Do you need to host TerraDrift?
+
+For the CLI-first version, no hosting is required.
+
+You can run TerraDrift from:
+
+- A developer laptop
+- GitHub Actions
+- Another CI system
+- A cron job on a VM
+- A Docker container on a scheduled runner
+
+A hosted service or dashboard may be useful later for historical drift reports, team visibility, and long-term tracking, but that is intentionally not part of the initial CLI foundation.
+
+## Example future GitHub Actions usage
+
+Once Terraform execution is implemented, a scheduled drift scan could look like this:
+
+```yaml
+name: Terraform Drift Scan
+
+on:
+  schedule:
+    - cron: "0 * * * *"
+  workflow_dispatch:
+
+jobs:
+  drift:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout infrastructure
+        uses: actions/checkout@v7
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Run TerraDrift
+        run: terradrift scan --directory ./terraform/prod
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+```
+
+## High-level roadmap
+
+1. Implement the Terraform CLI runner.
+2. Add refresh-only plan execution and JSON plan parsing.
+3. Convert Terraform plan output into TerraDrift report models.
+4. Add text and JSON output formats.
+5. Add CI-friendly exit codes.
+6. Add Slack notifications.
+7. Add configuration file support.
+8. Add redaction and security-focused tests.
+9. Add Docker runtime support for Terraform execution.
+10. Consider a self-hosted dashboard after the CLI workflow is stable.
 
 ## Security considerations
 
-- TerraDrift will execute Terraform in user-provided directories in a future release. Review Terraform providers and modules before scanning untrusted code.
-- Do not commit credentials, state files, plans, or logs containing secrets.
-- Prefer least-privilege cloud credentials for drift detection.
+- Treat Terraform configuration, state, plans, provider output, and logs as sensitive.
+- Do not commit credentials, state files, generated plans, or logs containing secrets.
+- Use least-privilege cloud credentials for drift detection.
+- Do not log Slack webhook URLs or provider credentials.
+- Review Terraform modules and providers before scanning untrusted code.
 - This bootstrap release does not contact cloud APIs or execute Terraform.
-- Use `make vuln` to run Go vulnerability checks during development.
 - See [SECURITY.md](SECURITY.md) for vulnerability reporting guidance.
 
 ## Contributing
 
-Contributions are welcome. Please keep changes focused, add tests for new behavior, and run formatting, vetting, linting, tests, and builds before opening a pull request.
+Contributions are welcome. Please keep changes focused, add tests for new behavior, and run the standard checks before opening a pull request:
+
+```bash
+make fmt
+make vet
+make test
+make test-race
+make lint
+```
 
 ## License
 

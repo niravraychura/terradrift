@@ -6,7 +6,7 @@ RUN go mod download
 COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/terradrift ./cmd/terradrift
 
-FROM alpine:3.22
+FROM alpine:3.24
 RUN addgroup -S terradrift && adduser -S -G terradrift terradrift
 RUN apk --no-cache add ca-certificates
 # Terraform will be included when command execution is implemented.
