@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -70,5 +71,20 @@ func TestLogLevelUnsupported(t *testing.T) {
 	_, _, err := executeCommand("--log-level", "trace", "scan", "-d", t.TempDir())
 	if err == nil || !strings.Contains(err.Error(), "unsupported log level") {
 		t.Fatalf("expected unsupported log level error, got %v", err)
+	}
+}
+
+type failingWriter struct{}
+
+func (failingWriter) Write([]byte) (int, error) {
+	return 0, errors.New("write failed")
+}
+
+func TestScanReturnsOutputWriteError(t *testing.T) {
+	cmd := newRootCommand(failingWriter{}, &bytes.Buffer{})
+	cmd.SetArgs([]string{"scan", "-d", t.TempDir()})
+	err := cmd.Execute()
+	if err == nil || !strings.Contains(err.Error(), "write scan output") {
+		t.Fatalf("expected output write error, got %v", err)
 	}
 }

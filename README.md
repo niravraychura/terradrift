@@ -35,7 +35,7 @@ Terraform directory: /absolute/path/to/terraform/prod
 
 Requirements:
 
-- Go 1.25 or newer
+- Go 1.26 or newer
 - Docker, for container builds
 - `golangci-lint`, for local linting
 
@@ -66,6 +66,7 @@ make test
 make test-race
 make vet
 make lint
+make vuln
 ```
 
 Tests do not require Terraform, cloud credentials, or network access.
@@ -92,6 +93,8 @@ The runtime image does not include Terraform yet. Terraform will be added when c
 - Do not commit credentials, state files, plans, or logs containing secrets.
 - Prefer least-privilege cloud credentials for drift detection.
 - This bootstrap release does not contact cloud APIs or execute Terraform.
+- Use `make vuln` to run Go vulnerability checks during development.
+- See [SECURITY.md](SECURITY.md) for vulnerability reporting guidance.
 
 ## Contributing
 
