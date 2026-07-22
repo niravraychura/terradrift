@@ -255,6 +255,31 @@ func TestScanDashboardIncludesHistory(t *testing.T) {
 	}
 }
 
+func TestScanRunsPolicyCommand(t *testing.T) {
+	policyOutput := filepath.Join(t.TempDir(), "policy-input.json")
+	_, _, err := executeCommand("scan", "-d", t.TempDir(), "--policy-command", "sh", "--policy-arg", "-c", "--policy-arg", "cat > \"$1\"", "--policy-arg", "sh", "--policy-arg", policyOutput)
+	if err != nil {
+		t.Fatalf("expected policy command to pass: %v", err)
+	}
+	data, err := os.ReadFile(policyOutput)
+	if err != nil {
+		t.Fatalf("read policy input: %v", err)
+	}
+	if !strings.Contains(string(data), `"status":"no_drift"`) {
+		t.Fatalf("expected policy input report, got %q", data)
+	}
+}
+
+func TestScanReturnsPolicyFailure(t *testing.T) {
+	_, _, err := executeCommand("scan", "-d", t.TempDir(), "--policy-command", "sh", "--policy-arg", "-c", "--policy-arg", "echo token=secret-value >&2; exit 1")
+	if err == nil {
+		t.Fatal("expected policy failure")
+	}
+	if strings.Contains(err.Error(), "secret-value") {
+		t.Fatalf("expected policy failure to be redacted, got %v", err)
+	}
+}
+
 func TestScanRejectsUnsupportedNotificationTarget(t *testing.T) {
 	_, _, err := executeCommand("scan", "-d", t.TempDir(), "--notify", "email")
 	if err == nil || !strings.Contains(err.Error(), "unsupported notification target") {

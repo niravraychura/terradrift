@@ -53,7 +53,7 @@ This plan tracks security, performance, code quality, and feature work for Terra
 - [x] Add Microsoft Teams notification target with redacted connector-card payloads.
 - [x] Add generic webhook notification target with SSRF-safe URL validation and payload controls.
 - [x] Add historical report storage and dashboard trend views with restrictive local file permissions.
-- [ ] Add policy-as-code hooks for expected drift and security guardrails.
+- [x] Add policy-as-code hooks for expected drift and security guardrails with no implicit shell execution and redacted bounded output.
 - [ ] Add optional cost-impact enrichment for drifted resources.
 - [ ] Add human-reviewed remediation guidance for update-code, sync-state, and revert-infrastructure workflows.
 

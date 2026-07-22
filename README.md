@@ -66,6 +66,7 @@ terradrift scan --config .terradrift.json
 terradrift scan -d ./terraform/prod --notify slack --slack-webhook-url "$SLACK_WEBHOOK_URL"
 terradrift scan -d ./terraform/prod --dashboard-html terradrift-report.html
 terradrift scan -d ./terraform/prod --history-dir .terradrift-history --dashboard-html terradrift-report.html
+terradrift scan -d ./terraform/prod --policy-command conftest --policy-arg test --policy-arg -
 terradrift init
 ```
 
@@ -79,7 +80,7 @@ The `--workspace-root` flag evaluates symlinks and requires the selected Terrafo
 
 By default, TerraDrift still emits the bootstrap no-drift report. Use `--terraform-exec` to run the Terraform CLI flow: `terraform init`, `terraform plan -refresh-only -detailed-exitcode`, and `terraform show -json`. This requires Terraform to be installed and available on `PATH`.
 
-The `terradrift init` command writes a starter `.terradrift.json` file with safe local defaults for repeated local or CI usage. Config files can also define optional scan settings such as `terraform_exec`, `workspace_root`, `notify`, `slack_webhook_url`, `teams_webhook_url`, `webhook_url`, `dashboard_html`, and `history_dir`; explicit CLI flags always take precedence.
+The `terradrift init` command writes a starter `.terradrift.json` file with safe local defaults for repeated local or CI usage. Config files can also define optional scan settings such as `terraform_exec`, `workspace_root`, `notify`, `slack_webhook_url`, `teams_webhook_url`, `webhook_url`, `dashboard_html`, `history_dir`, `policy_command`, and `policy_args`; explicit CLI flags always take precedence.
 
 Slack notifications are available with `--notify slack --slack-webhook-url "$SLACK_WEBHOOK_URL"`. Microsoft Teams notifications are available with `--notify teams --teams-webhook-url "$TEAMS_WEBHOOK_URL"`. Generic HTTPS webhooks are available with `--notify webhook --webhook-url "$WEBHOOK_URL"`. Notification messages use concise summaries and avoid including local filesystem paths or webhook secrets.
 
@@ -217,9 +218,23 @@ The CLI reserves these exit codes for automation-friendly workflows:
 Recent drift-detection guidance emphasizes scheduled scans, clear notifications, human-reviewed remediation, policy guardrails, and cost visibility. Based on that landscape, useful next TerraDrift additions include:
 
 - Scheduled CI examples for GitHub Actions, cron, and container runners so teams can detect drift within hours instead of relying on ad-hoc checks.
-- Policy-as-code hooks for tools such as OPA/Conftest to distinguish expected drift from security-relevant drift before alerting.
 - Optional cost-impact enrichment from tools such as Infracost or cloud billing APIs so drift alerts can prioritize high-cost changes.
 - Remediation guidance that keeps a human in the loop: update Terraform code, re-import state, or revert infrastructure only after review.
+
+## Policy-as-code hooks
+
+Use `--policy-command <command>` to run an external policy tool after the scan report is written and before notifications are sent. TerraDrift passes the redacted scan report JSON on stdin and never invokes a shell implicitly; pass each argument explicitly with repeated `--policy-arg` flags. A non-zero policy exit fails the scan, and policy stdout/stderr included in errors is size-limited and redacted before display.
+
+Example with Conftest-style stdin usage:
+
+```bash
+terradrift scan \
+  --directory ./terraform/prod \
+  --redact-paths \
+  --policy-command conftest \
+  --policy-arg test \
+  --policy-arg -
+```
 
 ## Notifications
 

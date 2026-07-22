@@ -16,6 +16,7 @@ import (
 	"github.com/niravraychura/terradrift/internal/history"
 	"github.com/niravraychura/terradrift/internal/logger"
 	"github.com/niravraychura/terradrift/internal/notify"
+	"github.com/niravraychura/terradrift/internal/policy"
 	"github.com/niravraychura/terradrift/internal/report"
 	"github.com/niravraychura/terradrift/internal/scanner"
 	"github.com/niravraychura/terradrift/internal/terraform"
@@ -118,6 +119,8 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 	var webhookURL string
 	var dashboardHTMLPath string
 	var historyDir string
+	var policyCommand string
+	var policyArgs []string
 
 	cmd := &cobra.Command{
 		Use:   "scan",
@@ -171,6 +174,12 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 				if !cmd.Flags().Changed("history-dir") {
 					historyDir = cfg.HistoryDir
 				}
+				if !cmd.Flags().Changed("policy-command") {
+					policyCommand = cfg.PolicyCommand
+				}
+				if !cmd.Flags().Changed("policy-arg") {
+					policyArgs = append([]string(nil), cfg.PolicyArgs...)
+				}
 			}
 
 			parsedFormat, err := parseOutputFormat(format)
@@ -215,6 +224,11 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 					return err
 				}
 			}
+			if policyCommand != "" {
+				if err := policy.Run(cmd.Context(), policy.Options{Command: policyCommand, Args: policyArgs}, scanReport); err != nil {
+					return err
+				}
+			}
 			if notifyTarget != "" {
 				if err := sendNotification(cmd.Context(), notifyTarget, slackWebhookURL, teamsWebhookURL, webhookURL, scanReport); err != nil {
 					return err
@@ -239,6 +253,8 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 	cmd.Flags().StringVar(&webhookURL, "webhook-url", "", "generic HTTPS webhook URL")
 	cmd.Flags().StringVar(&dashboardHTMLPath, "dashboard-html", "", "write a static HTML dashboard report to this path")
 	cmd.Flags().StringVar(&historyDir, "history-dir", "", "write JSON scan history to this directory and include recent history in dashboards")
+	cmd.Flags().StringVar(&policyCommand, "policy-command", "", "policy command to run with the scan report JSON on stdin")
+	cmd.Flags().StringArrayVar(&policyArgs, "policy-arg", nil, "policy command argument; repeat for multiple arguments")
 	return cmd
 }
 
