@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/niravraychura/terradrift/internal/config"
+	"github.com/niravraychura/terradrift/internal/cost"
 	"github.com/niravraychura/terradrift/internal/dashboard"
 	"github.com/niravraychura/terradrift/internal/history"
 	"github.com/niravraychura/terradrift/internal/logger"
@@ -121,6 +122,8 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 	var historyDir string
 	var policyCommand string
 	var policyArgs []string
+	var costCommand string
+	var costArgs []string
 
 	cmd := &cobra.Command{
 		Use:   "scan",
@@ -180,6 +183,12 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 				if !cmd.Flags().Changed("policy-arg") {
 					policyArgs = append([]string(nil), cfg.PolicyArgs...)
 				}
+				if !cmd.Flags().Changed("cost-command") {
+					costCommand = cfg.CostCommand
+				}
+				if !cmd.Flags().Changed("cost-arg") {
+					costArgs = append([]string(nil), cfg.CostArgs...)
+				}
 			}
 
 			parsedFormat, err := parseOutputFormat(format)
@@ -202,6 +211,13 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 			}
 
 			scanReport := result.Report
+			if costCommand != "" {
+				enrichedReport, err := cost.Enrich(cmd.Context(), cost.Options{Command: costCommand, Args: costArgs}, scanReport)
+				if err != nil {
+					return err
+				}
+				scanReport = enrichedReport
+			}
 			if redactPaths {
 				scanReport.Directory = "[REDACTED]"
 			}
@@ -255,6 +271,8 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 	cmd.Flags().StringVar(&historyDir, "history-dir", "", "write JSON scan history to this directory and include recent history in dashboards")
 	cmd.Flags().StringVar(&policyCommand, "policy-command", "", "policy command to run with the scan report JSON on stdin")
 	cmd.Flags().StringArrayVar(&policyArgs, "policy-arg", nil, "policy command argument; repeat for multiple arguments")
+	cmd.Flags().StringVar(&costCommand, "cost-command", "", "cost command to enrich the scan report from JSON stdin/stdout")
+	cmd.Flags().StringArrayVar(&costArgs, "cost-arg", nil, "cost command argument; repeat for multiple arguments")
 	return cmd
 }
 

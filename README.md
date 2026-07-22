@@ -67,6 +67,7 @@ terradrift scan -d ./terraform/prod --notify slack --slack-webhook-url "$SLACK_W
 terradrift scan -d ./terraform/prod --dashboard-html terradrift-report.html
 terradrift scan -d ./terraform/prod --history-dir .terradrift-history --dashboard-html terradrift-report.html
 terradrift scan -d ./terraform/prod --policy-command conftest --policy-arg test --policy-arg -
+terradrift scan -d ./terraform/prod --cost-command infracost --cost-arg breakdown --cost-arg --format=json
 terradrift init
 ```
 
@@ -80,7 +81,7 @@ The `--workspace-root` flag evaluates symlinks and requires the selected Terrafo
 
 By default, TerraDrift still emits the bootstrap no-drift report. Use `--terraform-exec` to run the Terraform CLI flow: `terraform init`, `terraform plan -refresh-only -detailed-exitcode`, and `terraform show -json`. This requires Terraform to be installed and available on `PATH`.
 
-The `terradrift init` command writes a starter `.terradrift.json` file with safe local defaults for repeated local or CI usage. Config files can also define optional scan settings such as `terraform_exec`, `workspace_root`, `notify`, `slack_webhook_url`, `teams_webhook_url`, `webhook_url`, `dashboard_html`, `history_dir`, `policy_command`, and `policy_args`; explicit CLI flags always take precedence.
+The `terradrift init` command writes a starter `.terradrift.json` file with safe local defaults for repeated local or CI usage. Config files can also define optional scan settings such as `terraform_exec`, `workspace_root`, `notify`, `slack_webhook_url`, `teams_webhook_url`, `webhook_url`, `dashboard_html`, `history_dir`, `policy_command`, `policy_args`, `cost_command`, and `cost_args`; explicit CLI flags always take precedence.
 
 Slack notifications are available with `--notify slack --slack-webhook-url "$SLACK_WEBHOOK_URL"`. Microsoft Teams notifications are available with `--notify teams --teams-webhook-url "$TEAMS_WEBHOOK_URL"`. Generic HTTPS webhooks are available with `--notify webhook --webhook-url "$WEBHOOK_URL"`. Notification messages use concise summaries and avoid including local filesystem paths or webhook secrets.
 
@@ -218,7 +219,20 @@ The CLI reserves these exit codes for automation-friendly workflows:
 Recent drift-detection guidance emphasizes scheduled scans, clear notifications, human-reviewed remediation, policy guardrails, and cost visibility. Based on that landscape, useful next TerraDrift additions include:
 
 - Scheduled CI examples for GitHub Actions, cron, and container runners so teams can detect drift within hours instead of relying on ad-hoc checks.
-- Optional cost-impact enrichment from tools such as Infracost or cloud billing APIs so drift alerts can prioritize high-cost changes.
+
+## Cost-impact enrichment
+
+Use `--cost-command <command>` to run an external cost tool before output, history, dashboards, policies, and notifications are produced. TerraDrift passes the current scan report JSON on stdin and expects JSON on stdout in this shape:
+
+```json
+{
+  "resource_costs": [
+    {"address": "aws_instance.web", "monthly_delta": "+$12.34/mo"}
+  ]
+}
+```
+
+Cost tool output is bounded before parsing, command errors are redacted, and arguments must be passed explicitly with repeated `--cost-arg` flags. Matching `address` values are copied into each resource change as `cost_impact`.
 
 ## Remediation guidance
 

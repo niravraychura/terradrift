@@ -255,6 +255,26 @@ func TestScanDashboardIncludesHistory(t *testing.T) {
 	}
 }
 
+func TestScanRunsCostCommand(t *testing.T) {
+	stdout, _, err := executeCommand("scan", "-d", t.TempDir(), "--output", "json", "--cost-command", "sh", "--cost-arg", "-c", "--cost-arg", `cat >/dev/null; printf '{"resource_costs":[]}'`)
+	if err != nil {
+		t.Fatalf("expected cost command to pass: %v", err)
+	}
+	if !json.Valid([]byte(stdout)) {
+		t.Fatalf("expected JSON output, got %q", stdout)
+	}
+}
+
+func TestScanReturnsCostFailure(t *testing.T) {
+	_, _, err := executeCommand("scan", "-d", t.TempDir(), "--cost-command", "sh", "--cost-arg", "-c", "--cost-arg", "echo password=secret-value >&2; exit 1")
+	if err == nil {
+		t.Fatal("expected cost failure")
+	}
+	if strings.Contains(err.Error(), "secret-value") {
+		t.Fatalf("expected cost failure to be redacted, got %v", err)
+	}
+}
+
 func TestScanRunsPolicyCommand(t *testing.T) {
 	policyOutput := filepath.Join(t.TempDir(), "policy-input.json")
 	_, _, err := executeCommand("scan", "-d", t.TempDir(), "--policy-command", "sh", "--policy-arg", "-c", "--policy-arg", "cat > \"$1\"", "--policy-arg", "sh", "--policy-arg", policyOutput)

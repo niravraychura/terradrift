@@ -24,6 +24,8 @@ type Config struct {
 	HistoryDir      string   `json:"history_dir"`
 	PolicyCommand   string   `json:"policy_command"`
 	PolicyArgs      []string `json:"policy_args"`
+	CostCommand     string   `json:"cost_command"`
+	CostArgs        []string `json:"cost_args"`
 }
 
 // Default returns a safe bootstrap configuration.

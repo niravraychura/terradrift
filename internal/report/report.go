@@ -21,6 +21,7 @@ type ResourceChange struct {
 	Name        string   `json:"name"`
 	Actions     []string `json:"actions"`
 	Remediation string   `json:"remediation,omitempty"`
+	CostImpact  string   `json:"cost_impact,omitempty"`
 }
 
 // DriftReport captures the domain result of a Terraform drift scan.
