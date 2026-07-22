@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -99,6 +100,20 @@ func TestScanValidDirectoryJSONOutput(t *testing.T) {
 	if scanReport.Status != report.ScanStatusNoDrift {
 		t.Fatalf("expected no drift status, got %q", scanReport.Status)
 	}
+	if scanReport.ResourceChanges == nil {
+		t.Fatal("expected resource changes to be an empty slice, got nil")
+	}
+}
+
+func TestScanAcceptsCaseInsensitiveTrimmedOutputFormat(t *testing.T) {
+	dir := t.TempDir()
+	stdout, _, err := executeCommand("scan", "-d", dir, "--output", " JSON ")
+	if err != nil {
+		t.Fatalf("expected normalized output format to be valid, got %v", err)
+	}
+	if !json.Valid([]byte(stdout)) {
+		t.Fatalf("expected JSON output, got %q", stdout)
+	}
 }
 
 func TestScanRejectsUnsupportedOutputFormat(t *testing.T) {
@@ -114,6 +129,20 @@ func TestLogLevelSupported(t *testing.T) {
 		if err != nil {
 			t.Fatalf("expected log level %q to be supported: %v", level, err)
 		}
+	}
+}
+
+func TestLogLevelConfiguresDefaultLogger(t *testing.T) {
+	var stderr bytes.Buffer
+	cmd := newRootCommand(&bytes.Buffer{}, &stderr)
+	cmd.SetArgs([]string{"--log-level", "debug", "scan", "-d", t.TempDir()})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("expected command to execute: %v", err)
+	}
+
+	slog.Debug("debug message")
+	if !strings.Contains(stderr.String(), "debug message") {
+		t.Fatalf("expected default logger to write debug message to stderr, got %q", stderr.String())
 	}
 }
 

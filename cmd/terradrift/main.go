@@ -4,8 +4,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/niravraychura/terradrift/internal/logger"
@@ -47,7 +49,7 @@ func newRootCommand(stdout, stderr io.Writer) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			_ = logger.New(stderr, level)
+			slog.SetDefault(logger.New(stderr, level))
 			return nil
 		},
 	}
@@ -89,9 +91,10 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 }
 
 func parseOutputFormat(format string) (outputFormat, error) {
-	switch outputFormat(format) {
+	normalized := strings.ToLower(strings.TrimSpace(format))
+	switch outputFormat(normalized) {
 	case outputFormatTable, outputFormatJSON:
-		return outputFormat(format), nil
+		return outputFormat(normalized), nil
 	default:
 		return "", fmt.Errorf("unsupported output format %q; supported values: table, json", format)
 	}
@@ -121,10 +124,11 @@ func validateDirectory(directory string) (string, error) {
 func newBootstrapScanReport(directory string) report.DriftReport {
 	now := time.Now().UTC()
 	return report.DriftReport{
-		Status:      report.ScanStatusNoDrift,
-		Directory:   directory,
-		StartedAt:   now,
-		CompletedAt: now,
+		Status:          report.ScanStatusNoDrift,
+		Directory:       directory,
+		ResourceChanges: []report.ResourceChange{},
+		StartedAt:       now,
+		CompletedAt:     now,
 	}
 }
 
