@@ -2,11 +2,14 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/niravraychura/terradrift/internal/report"
 )
 
 func executeCommand(args ...string) (string, string, error) {
@@ -17,10 +20,18 @@ func executeCommand(args ...string) (string, string, error) {
 	return stdout.String(), stderr.String(), err
 }
 
-func TestScanRequiresDirectory(t *testing.T) {
-	_, _, err := executeCommand("scan")
-	if err == nil || !strings.Contains(err.Error(), "terraform directory is required") {
-		t.Fatalf("expected missing directory error, got %v", err)
+func TestScanDefaultsToCurrentDirectory(t *testing.T) {
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("get wd: %v", err)
+	}
+
+	stdout, _, err := executeCommand("scan")
+	if err != nil {
+		t.Fatalf("expected current directory default to be valid, got %v", err)
+	}
+	if !strings.Contains(stdout, "Terraform directory: "+wd) {
+		t.Fatalf("expected stdout to include current directory %q, got %q", wd, stdout)
 	}
 }
 
@@ -43,7 +54,7 @@ func TestScanRejectsFilePath(t *testing.T) {
 	}
 }
 
-func TestScanValidDirectory(t *testing.T) {
+func TestScanValidDirectoryTableOutput(t *testing.T) {
 	dir := t.TempDir()
 	stdout, _, err := executeCommand("scan", "-d", dir)
 	if err != nil {
@@ -53,8 +64,47 @@ func TestScanValidDirectory(t *testing.T) {
 	if err != nil {
 		t.Fatalf("abs fixture: %v", err)
 	}
-	if !strings.Contains(stdout, "TerraDrift scan initialized") || !strings.Contains(stdout, "Terraform directory: "+absDir) {
-		t.Fatalf("unexpected stdout: %q", stdout)
+	for _, want := range []string{
+		"TerraDrift scan initialized",
+		"Status: no_drift",
+		"Terraform directory: " + absDir,
+		"Resources checked: 0",
+		"Changed resources: 0",
+	} {
+		if !strings.Contains(stdout, want) {
+			t.Fatalf("expected stdout to contain %q, got %q", want, stdout)
+		}
+	}
+}
+
+func TestScanValidDirectoryJSONOutput(t *testing.T) {
+	dir := t.TempDir()
+	stdout, _, err := executeCommand("scan", "-d", dir, "--output", "json")
+	if err != nil {
+		t.Fatalf("expected valid directory, got %v", err)
+	}
+
+	var scanReport report.DriftReport
+	if err := json.Unmarshal([]byte(stdout), &scanReport); err != nil {
+		t.Fatalf("expected valid JSON output, got %v: %q", err, stdout)
+	}
+
+	absDir, err := filepath.Abs(dir)
+	if err != nil {
+		t.Fatalf("abs fixture: %v", err)
+	}
+	if scanReport.Directory != absDir {
+		t.Fatalf("expected directory %q, got %q", absDir, scanReport.Directory)
+	}
+	if scanReport.Status != report.ScanStatusNoDrift {
+		t.Fatalf("expected no drift status, got %q", scanReport.Status)
+	}
+}
+
+func TestScanRejectsUnsupportedOutputFormat(t *testing.T) {
+	_, _, err := executeCommand("scan", "--output", "xml")
+	if err == nil || !strings.Contains(err.Error(), "unsupported output format") {
+		t.Fatalf("expected unsupported output format error, got %v", err)
 	}
 }
 
@@ -86,5 +136,11 @@ func TestScanReturnsOutputWriteError(t *testing.T) {
 	err := cmd.Execute()
 	if err == nil || !strings.Contains(err.Error(), "write scan output") {
 		t.Fatalf("expected output write error, got %v", err)
+	}
+}
+
+func TestExitCodeConstants(t *testing.T) {
+	if exitCodeOK != 0 || exitCodeFailure != 1 || exitCodeDriftDetected != 2 {
+		t.Fatalf("unexpected exit code constants: ok=%d failure=%d drift=%d", exitCodeOK, exitCodeFailure, exitCodeDriftDetected)
 	}
 }

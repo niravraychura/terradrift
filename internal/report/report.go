@@ -25,6 +25,7 @@ type ResourceChange struct {
 // DriftReport captures the domain result of a Terraform drift scan.
 type DriftReport struct {
 	Status                ScanStatus       `json:"status"`
+	Directory             string           `json:"directory"`
 	TotalResourcesChecked int              `json:"total_resources_checked"`
 	TotalChangedResources int              `json:"total_changed_resources"`
 	ResourceChanges       []ResourceChange `json:"resource_changes"`

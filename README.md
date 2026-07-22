@@ -16,8 +16,10 @@ The long-term goal is to make drift detection easy to run from a developer lapto
 The first version of TerraDrift is a project foundation. It includes:
 
 - A Go module and Cobra-based CLI named `terradrift`
-- A `scan` command with `--directory` / `-d` support
+- A `scan` command that defaults to the current directory and supports `--directory` / `-d`
 - Directory validation and absolute path reporting
+- Human-friendly table output and automation-friendly JSON output
+- Documented exit codes for future CI drift workflows
 - Structured logging foundations with `log/slog`
 - Domain models for future drift reports
 - A Terraform runner interface for future Terraform CLI integration
@@ -41,6 +43,7 @@ TerraDrift is intended to scan any local Terraform directory that is available t
 For example, all of these future usage patterns should be valid:
 
 ```bash
+terradrift scan
 terradrift scan --directory ./terraform/prod
 terradrift scan --directory ../company-infra/environments/prod
 terradrift scan --directory /workspace/infrastructure/aws/prod
@@ -51,18 +54,39 @@ For CI usage, the recommended pattern is usually to run TerraDrift in the same j
 ## Current CLI usage
 
 ```bash
+terradrift scan
 terradrift scan --directory ./terraform/prod
 terradrift scan -d ./terraform/prod
+terradrift scan -d ./terraform/prod --output json
 ```
 
-Current output:
+If `--directory` is omitted, TerraDrift scans the current working directory.
+
+Default table output:
 
 ```text
 TerraDrift scan initialized
+Status: no_drift
 Terraform directory: /absolute/path/to/terraform/prod
+Resources checked: 0
+Changed resources: 0
 ```
 
-Today, this only confirms that the directory argument was provided, resolves it to an absolute path, and verifies that the path exists and is a directory.
+JSON output is available for automation:
+
+```json
+{
+  "status": "no_drift",
+  "directory": "/absolute/path/to/terraform/prod",
+  "total_resources_checked": 0,
+  "total_changed_resources": 0,
+  "resource_changes": null,
+  "started_at": "2026-07-22T00:00:00Z",
+  "completed_at": "2026-07-22T00:00:00Z"
+}
+```
+
+Today, this only resolves the selected directory to an absolute path, verifies that it exists and is a directory, and emits a bootstrap no-drift report. Real Terraform execution is still planned next.
 
 ## Logging
 
@@ -98,7 +122,7 @@ go mod download
 ### Run from source
 
 ```bash
-go run ./cmd/terradrift scan --directory .
+go run ./cmd/terradrift scan
 ```
 
 ### Build the binary
@@ -147,6 +171,14 @@ The next implementation should make `terradrift scan` perform this flow:
 5. Parse the JSON plan.
 6. Produce a TerraDrift drift report.
 7. Return clear exit codes for no drift, drift detected, and scan failure.
+
+The CLI reserves these exit codes for automation-friendly workflows:
+
+| Exit code | Meaning |
+| ---: | --- |
+| `0` | Scan completed successfully with no drift. |
+| `1` | Scan failed before producing a reliable result. |
+| `2` | Scan completed successfully and drift was detected. |
 
 ## Slack and notifications
 
@@ -209,7 +241,7 @@ jobs:
         uses: hashicorp/setup-terraform@v3
 
       - name: Run TerraDrift
-        run: terradrift scan --directory ./terraform/prod
+        run: terradrift scan --directory ./terraform/prod --output json
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
 ```
@@ -219,10 +251,10 @@ jobs:
 1. Implement the Terraform CLI runner.
 2. Add refresh-only plan execution and JSON plan parsing.
 3. Convert Terraform plan output into TerraDrift report models.
-4. Add text and JSON output formats.
-5. Add CI-friendly exit codes.
-6. Add Slack notifications.
-7. Add configuration file support.
+4. Wire real drift outcomes to the documented exit codes.
+5. Add config file support for repeated local and CI usage.
+6. Add a guided `terradrift init` setup command.
+7. Add notification integrations such as Slack with secret-safe defaults.
 8. Add redaction and security-focused tests.
 9. Add Docker runtime support for Terraform execution.
 10. Consider a self-hosted dashboard after the CLI workflow is stable.
