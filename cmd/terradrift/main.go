@@ -4,12 +4,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
-	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/niravraychura/terradrift/internal/logger"
 	"github.com/niravraychura/terradrift/internal/report"
+	"github.com/niravraychura/terradrift/internal/scanner"
 	"github.com/spf13/cobra"
 )
 
@@ -47,7 +49,7 @@ func newRootCommand(stdout, stderr io.Writer) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			_ = logger.New(stderr, level)
+			slog.SetDefault(logger.New(stderr, level))
 			return nil
 		},
 	}
@@ -61,6 +63,8 @@ func newRootCommand(stdout, stderr io.Writer) *cobra.Command {
 func newScanCommand(stdout io.Writer) *cobra.Command {
 	var directory string
 	var format string
+	var timeout time.Duration
+	var redactPaths bool
 
 	cmd := &cobra.Command{
 		Use:   "scan",
@@ -74,57 +78,35 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 				return err
 			}
 
-			absDir, err := validateDirectory(directory)
+			result, err := scanner.Scan(cmd.Context(), scanner.Options{
+				Directory: directory,
+				Timeout:   timeout,
+			})
 			if err != nil {
 				return err
 			}
 
-			scanReport := newBootstrapScanReport(absDir)
+			scanReport := result.Report
+			if redactPaths {
+				scanReport.Directory = "[REDACTED]"
+			}
 			return writeScanReport(stdout, scanReport, parsedFormat)
 		},
 	}
 	cmd.Flags().StringVarP(&directory, "directory", "d", ".", "Terraform directory to scan")
 	cmd.Flags().StringVarP(&format, "output", "o", string(outputFormatTable), "output format: table, json")
+	cmd.Flags().DurationVar(&timeout, "timeout", scanner.DefaultTimeout, "maximum scan duration")
+	cmd.Flags().BoolVar(&redactPaths, "redact-paths", false, "redact local filesystem paths from scan output")
 	return cmd
 }
 
 func parseOutputFormat(format string) (outputFormat, error) {
-	switch outputFormat(format) {
+	normalized := strings.ToLower(strings.TrimSpace(format))
+	switch outputFormat(normalized) {
 	case outputFormatTable, outputFormatJSON:
-		return outputFormat(format), nil
+		return outputFormat(normalized), nil
 	default:
 		return "", fmt.Errorf("unsupported output format %q; supported values: table, json", format)
-	}
-}
-
-func validateDirectory(directory string) (string, error) {
-	if directory == "" {
-		directory = "."
-	}
-	absDir, err := filepath.Abs(directory)
-	if err != nil {
-		return "", fmt.Errorf("resolve terraform directory: %w", err)
-	}
-	info, err := os.Stat(absDir)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return "", fmt.Errorf("terraform directory does not exist: %s", absDir)
-		}
-		return "", fmt.Errorf("inspect terraform directory %s: %w", absDir, err)
-	}
-	if !info.IsDir() {
-		return "", fmt.Errorf("terraform path is not a directory: %s", absDir)
-	}
-	return absDir, nil
-}
-
-func newBootstrapScanReport(directory string) report.DriftReport {
-	now := time.Now().UTC()
-	return report.DriftReport{
-		Status:      report.ScanStatusNoDrift,
-		Directory:   directory,
-		StartedAt:   now,
-		CompletedAt: now,
 	}
 }
 
