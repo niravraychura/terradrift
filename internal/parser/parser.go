@@ -35,10 +35,11 @@ func ParsePlan(data []byte) ([]report.ResourceChange, int, error) {
 			continue
 		}
 		changes = append(changes, report.ResourceChange{
-			Address: resourceChange.Address,
-			Type:    resourceChange.Type,
-			Name:    resourceChange.Name,
-			Actions: append([]string(nil), resourceChange.Change.Actions...),
+			Address:     resourceChange.Address,
+			Type:        resourceChange.Type,
+			Name:        resourceChange.Name,
+			Actions:     append([]string(nil), resourceChange.Change.Actions...),
+			Remediation: report.RemediationForActions(resourceChange.Change.Actions),
 		})
 	}
 

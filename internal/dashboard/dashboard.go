@@ -32,8 +32,8 @@ var reportTemplate = template.Must(template.New("dashboard").Parse(`<!doctype ht
     </dl>
     <h2>Changed resources</h2>
     <table>
-      <thead><tr><th>Address</th><th>Type</th><th>Name</th><th>Actions</th></tr></thead>
-      <tbody>{{range .Current.ResourceChanges}}<tr><td>{{.Address}}</td><td>{{.Type}}</td><td>{{.Name}}</td><td>{{range .Actions}}{{.}} {{end}}</td></tr>{{else}}<tr><td colspan="4">No changed resources</td></tr>{{end}}</tbody>
+      <thead><tr><th>Address</th><th>Type</th><th>Name</th><th>Actions</th><th>Remediation</th></tr></thead>
+      <tbody>{{range .Current.ResourceChanges}}<tr><td>{{.Address}}</td><td>{{.Type}}</td><td>{{.Name}}</td><td>{{range .Actions}}{{.}} {{end}}</td><td>{{.Remediation}}</td></tr>{{else}}<tr><td colspan="5">No changed resources</td></tr>{{end}}</tbody>
     </table>
     <h2>Recent scan history</h2>
     <table>

@@ -219,7 +219,10 @@ Recent drift-detection guidance emphasizes scheduled scans, clear notifications,
 
 - Scheduled CI examples for GitHub Actions, cron, and container runners so teams can detect drift within hours instead of relying on ad-hoc checks.
 - Optional cost-impact enrichment from tools such as Infracost or cloud billing APIs so drift alerts can prioritize high-cost changes.
-- Remediation guidance that keeps a human in the loop: update Terraform code, re-import state, or revert infrastructure only after review.
+
+## Remediation guidance
+
+Each changed resource includes conservative remediation guidance based on Terraform plan actions. The guidance intentionally keeps a human in the loop and frames choices such as updating Terraform configuration, importing or syncing state, restoring deleted infrastructure, or reverting an out-of-band change only after review and approval.
 
 ## Policy-as-code hooks
 

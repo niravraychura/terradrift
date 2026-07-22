@@ -55,7 +55,7 @@ This plan tracks security, performance, code quality, and feature work for Terra
 - [x] Add historical report storage and dashboard trend views with restrictive local file permissions.
 - [x] Add policy-as-code hooks for expected drift and security guardrails with no implicit shell execution and redacted bounded output.
 - [ ] Add optional cost-impact enrichment for drifted resources.
-- [ ] Add human-reviewed remediation guidance for update-code, sync-state, and revert-infrastructure workflows.
+- [x] Add human-reviewed remediation guidance for update-code, sync-state, and revert-infrastructure workflows.
 
 ## Ongoing quality gates
 
