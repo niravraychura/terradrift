@@ -46,9 +46,9 @@ This plan tracks security, performance, code quality, and feature work for Terra
 - [x] Wire exit code `2` for confirmed drift detection.
 - [x] Add configuration file support for repeated local and CI usage.
 - [x] Add a guided `terradrift init` command.
-- [ ] Add Slack notifications only after redaction and secret-safe logging are fully tested.
+- [x] Add Slack notifications only after redaction and secret-safe logging are fully tested.
 - [x] Add Docker runtime guidance for Terraform execution, including whether Terraform is bundled or mounted.
-- [ ] Consider a self-hosted dashboard only after the CLI workflow is stable.
+- [x] Consider a self-hosted dashboard only after the CLI workflow is stable.
 
 ## Ongoing quality gates
 
@@ -58,5 +58,7 @@ Before marking a feature complete, run the relevant checks and update this file:
 - [x] `go test ./...`
 - [x] `go vet ./...`
 - [x] `go test -race ./...`
-- [ ] `golangci-lint run`
+- [x] `golangci-lint run`
 - [ ] `govulncheck ./...`
+
+`govulncheck` remains unchecked because the current environment returns HTTP 403 when fetching the Go vulnerability database. Mark it complete only after the vulnerability database can be reached and the command passes.

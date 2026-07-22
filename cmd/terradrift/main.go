@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -11,7 +12,9 @@ import (
 	"time"
 
 	"github.com/niravraychura/terradrift/internal/config"
+	"github.com/niravraychura/terradrift/internal/dashboard"
 	"github.com/niravraychura/terradrift/internal/logger"
+	"github.com/niravraychura/terradrift/internal/notify"
 	"github.com/niravraychura/terradrift/internal/report"
 	"github.com/niravraychura/terradrift/internal/scanner"
 	"github.com/niravraychura/terradrift/internal/terraform"
@@ -108,6 +111,9 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 	var terraformExec bool
 	var scanConfigPath string
 	var workspaceRoot string
+	var notifyTarget string
+	var slackWebhookURL string
+	var dashboardHTMLPath string
 
 	cmd := &cobra.Command{
 		Use:   "scan",
@@ -165,6 +171,16 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 			if err := writeScanReport(stdout, scanReport, parsedFormat); err != nil {
 				return err
 			}
+			if dashboardHTMLPath != "" {
+				if err := writeDashboard(dashboardHTMLPath, scanReport); err != nil {
+					return err
+				}
+			}
+			if notifyTarget != "" {
+				if err := sendNotification(cmd.Context(), notifyTarget, slackWebhookURL, scanReport); err != nil {
+					return err
+				}
+			}
 			if result.Outcome == scanner.OutcomeDriftDetected {
 				return errDriftDetected
 			}
@@ -178,7 +194,34 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 	cmd.Flags().BoolVar(&terraformExec, "terraform-exec", false, "run Terraform init, refresh-only plan, and show -json")
 	cmd.Flags().StringVar(&scanConfigPath, "config", "", "optional TerraDrift config file to load")
 	cmd.Flags().StringVar(&workspaceRoot, "workspace-root", "", "require the Terraform directory to resolve inside this workspace root")
+	cmd.Flags().StringVar(&notifyTarget, "notify", "", "notification target: slack")
+	cmd.Flags().StringVar(&slackWebhookURL, "slack-webhook-url", "", "Slack incoming webhook URL")
+	cmd.Flags().StringVar(&dashboardHTMLPath, "dashboard-html", "", "write a static HTML dashboard report to this path")
 	return cmd
+}
+
+func writeDashboard(path string, scanReport report.DriftReport) error {
+	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
+	if err != nil {
+		return fmt.Errorf("create dashboard HTML %s: %w", path, err)
+	}
+	if err := dashboard.Render(file, scanReport); err != nil {
+		_ = file.Close()
+		return err
+	}
+	if err := file.Close(); err != nil {
+		return fmt.Errorf("close dashboard HTML %s: %w", path, err)
+	}
+	return nil
+}
+
+func sendNotification(ctx context.Context, target string, slackWebhookURL string, scanReport report.DriftReport) error {
+	switch strings.ToLower(strings.TrimSpace(target)) {
+	case "slack":
+		return notify.SlackNotifier{WebhookURL: slackWebhookURL}.Notify(ctx, scanReport)
+	default:
+		return fmt.Errorf("unsupported notification target %q; supported values: slack", target)
+	}
 }
 
 func parseOutputFormat(format string) (outputFormat, error) {

@@ -3,7 +3,7 @@
 TerraDrift is an open-source, self-hosted Terraform drift detection tool. It is being built to help teams identify infrastructure changes that happened outside their normal Terraform workflow and surface those changes in a clear, automation-friendly way.
 
 > [!WARNING]
-> TerraDrift is under active development. The current bootstrap release validates a local Terraform directory only. It does **not** run Terraform, detect drift, parse plans, send Slack messages, or provide a dashboard yet.
+> TerraDrift is under active development. The default scan still emits a bootstrap report unless `--terraform-exec` is explicitly enabled. Treat Terraform execution, Slack notifications, and static dashboard output as early CLI features and review their output before relying on them in production automation.
 
 ## Why TerraDrift exists
 
@@ -17,12 +17,13 @@ The first version of TerraDrift is a project foundation. It includes:
 
 - A Go module and Cobra-based CLI named `terradrift`
 - A `scan` command that defaults to the current directory and supports `--directory` / `-d`
-- Directory validation and absolute path reporting
+- Directory validation, optional workspace-root enforcement, and absolute path reporting
 - Human-friendly table output and automation-friendly JSON output
 - Documented exit codes for future CI drift workflows
 - Structured logging foundations with `log/slog`
 - Domain models for future drift reports
-- A Terraform runner interface for future Terraform CLI integration
+- A Terraform runner interface and explicit Terraform CLI execution mode
+- Secret-safe Slack notifications and static HTML dashboard output
 - Unit tests that do not require Terraform or cloud credentials
 - Docker, Makefile, GitHub Actions CI, Dependabot, and security policy scaffolding
 
@@ -62,6 +63,8 @@ terradrift scan -d ./terraform/prod --timeout 2m --redact-paths
 terradrift scan -d ./terraform/prod --workspace-root "$PWD"
 terradrift scan -d ./terraform/prod --terraform-exec --output json
 terradrift scan --config .terradrift.json
+terradrift scan -d ./terraform/prod --notify slack --slack-webhook-url "$SLACK_WEBHOOK_URL"
+terradrift scan -d ./terraform/prod --dashboard-html terradrift-report.html
 terradrift init
 ```
 
@@ -76,6 +79,10 @@ The `--workspace-root` flag evaluates symlinks and requires the selected Terrafo
 By default, TerraDrift still emits the bootstrap no-drift report. Use `--terraform-exec` to run the Terraform CLI flow: `terraform init`, `terraform plan -refresh-only -detailed-exitcode`, and `terraform show -json`. This requires Terraform to be installed and available on `PATH`.
 
 The `terradrift init` command writes a starter `.terradrift.json` file with safe local defaults for repeated local or CI usage.
+
+Slack notifications are available with `--notify slack --slack-webhook-url "$SLACK_WEBHOOK_URL"`. Notification messages use concise summaries and avoid including local filesystem paths or webhook secrets.
+
+Static dashboard output is available with `--dashboard-html <path>`. This writes an escaped local HTML report that can be archived by CI or served by your own internal tooling.
 
 Default table output:
 
@@ -197,18 +204,16 @@ The CLI reserves these exit codes for automation-friendly workflows:
 
 ## Slack and notifications
 
-Slack notifications are not implemented yet.
-
-The intended future workflow is to generate a drift report and optionally send a concise summary to Slack, for example:
+Slack notifications can send a concise drift summary after the scan report is written, for example:
 
 ```text
-🚨 Terraform drift detected
-Environment: prod
+Terraform drift scan completed
+Status: drift_detected
 Resources checked: 124
 Changed resources: 3
 ```
 
-A future command may look like:
+Use CI secrets or environment variables for webhook URLs:
 
 ```bash
 terradrift scan \
@@ -217,7 +222,7 @@ terradrift scan \
   --slack-webhook-url "$SLACK_WEBHOOK_URL"
 ```
 
-Notification work should include secret-safe logging, webhook redaction, tests for message formatting, and tests proving sensitive values are not printed.
+Slack webhook URLs are redacted in notification errors, and Slack payload tests verify that local filesystem paths and webhook secrets are not included.
 
 ## Do you need to host TerraDrift?
 
@@ -231,11 +236,11 @@ You can run TerraDrift from:
 - A cron job on a VM
 - A Docker container on a scheduled runner
 
-A hosted service or dashboard may be useful later for historical drift reports, team visibility, and long-term tracking, but that is intentionally not part of the initial CLI foundation.
+No hosted service is required. For lightweight visibility, `--dashboard-html <path>` writes an escaped static HTML report that can be archived by CI or served by your own internal tooling. A richer hosted service may be useful later for historical drift reports, team visibility, and long-term tracking.
 
 ## Example future GitHub Actions usage
 
-Once Terraform execution is implemented, a scheduled drift scan could look like this:
+With Terraform execution enabled, a scheduled drift scan could look like this:
 
 ```yaml
 name: Terraform Drift Scan
@@ -263,16 +268,11 @@ jobs:
 
 ## High-level roadmap
 
-1. Implement the Terraform CLI runner.
-2. Add refresh-only plan execution and JSON plan parsing.
-3. Convert Terraform plan output into TerraDrift report models.
-4. Wire real drift outcomes to the documented exit codes.
-5. Add config file support for repeated local and CI usage.
-6. Add a guided `terradrift init` setup command.
-7. Add notification integrations such as Slack with secret-safe defaults.
-8. Add redaction and security-focused tests.
-9. Add Docker runtime support for Terraform execution.
-10. Consider a self-hosted dashboard after the CLI workflow is stable.
+1. Harden Terraform execution against more real-world provider and module edge cases.
+2. Expand configuration support as repeated CI workflows mature.
+3. Add more notification integrations with the same secret-safe defaults.
+4. Improve dashboard/report styling and historical report workflows.
+5. Continue adding redaction, security, performance, and large-fixture tests.
 
 ## Security considerations
 

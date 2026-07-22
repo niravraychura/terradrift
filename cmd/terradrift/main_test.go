@@ -170,6 +170,28 @@ func TestScanLoadsConfigFile(t *testing.T) {
 	}
 }
 
+func TestScanWritesDashboardHTML(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "dashboard.html")
+	_, _, err := executeCommand("scan", "-d", t.TempDir(), "--dashboard-html", path)
+	if err != nil {
+		t.Fatalf("expected dashboard output to succeed: %v", err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("expected dashboard file to exist: %v", err)
+	}
+	if !strings.Contains(string(data), "TerraDrift Report") {
+		t.Fatalf("expected dashboard content, got %q", data)
+	}
+}
+
+func TestScanRejectsUnsupportedNotificationTarget(t *testing.T) {
+	_, _, err := executeCommand("scan", "-d", t.TempDir(), "--notify", "email")
+	if err == nil || !strings.Contains(err.Error(), "unsupported notification target") {
+		t.Fatalf("expected unsupported notification target error, got %v", err)
+	}
+}
+
 func TestScanAcceptsCaseInsensitiveTrimmedOutputFormat(t *testing.T) {
 	dir := t.TempDir()
 	stdout, _, err := executeCommand("scan", "-d", dir, "--output", " JSON ")
