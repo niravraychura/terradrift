@@ -6,8 +6,15 @@ import (
 	"html/template"
 	"io"
 
+	"github.com/niravraychura/terradrift/internal/history"
 	"github.com/niravraychura/terradrift/internal/report"
 )
+
+// Data contains the current scan and optional historical scan reports.
+type Data struct {
+	Current report.DriftReport
+	History []history.Entry
+}
 
 var reportTemplate = template.Must(template.New("dashboard").Parse(`<!doctype html>
 <html lang="en">
@@ -19,14 +26,19 @@ var reportTemplate = template.Must(template.New("dashboard").Parse(`<!doctype ht
   <main>
     <h1>TerraDrift Report</h1>
     <dl>
-      <dt>Status</dt><dd>{{.Status}}</dd>
-      <dt>Resources checked</dt><dd>{{.TotalResourcesChecked}}</dd>
-      <dt>Changed resources</dt><dd>{{.TotalChangedResources}}</dd>
+      <dt>Status</dt><dd>{{.Current.Status}}</dd>
+      <dt>Resources checked</dt><dd>{{.Current.TotalResourcesChecked}}</dd>
+      <dt>Changed resources</dt><dd>{{.Current.TotalChangedResources}}</dd>
     </dl>
     <h2>Changed resources</h2>
     <table>
-      <thead><tr><th>Address</th><th>Type</th><th>Name</th><th>Actions</th></tr></thead>
-      <tbody>{{range .ResourceChanges}}<tr><td>{{.Address}}</td><td>{{.Type}}</td><td>{{.Name}}</td><td>{{range .Actions}}{{.}} {{end}}</td></tr>{{else}}<tr><td colspan="4">No changed resources</td></tr>{{end}}</tbody>
+      <thead><tr><th>Address</th><th>Type</th><th>Name</th><th>Actions</th><th>Remediation</th></tr></thead>
+      <tbody>{{range .Current.ResourceChanges}}<tr><td>{{.Address}}</td><td>{{.Type}}</td><td>{{.Name}}</td><td>{{range .Actions}}{{.}} {{end}}</td><td>{{.Remediation}}</td></tr>{{else}}<tr><td colspan="5">No changed resources</td></tr>{{end}}</tbody>
+    </table>
+    <h2>Recent scan history</h2>
+    <table>
+      <thead><tr><th>Completed at</th><th>Status</th><th>Resources checked</th><th>Changed resources</th></tr></thead>
+      <tbody>{{range .History}}<tr><td>{{.Report.CompletedAt}}</td><td>{{.Report.Status}}</td><td>{{.Report.TotalResourcesChecked}}</td><td>{{.Report.TotalChangedResources}}</td></tr>{{else}}<tr><td colspan="4">No history available</td></tr>{{end}}</tbody>
     </table>
   </main>
 </body>
@@ -35,7 +47,12 @@ var reportTemplate = template.Must(template.New("dashboard").Parse(`<!doctype ht
 
 // Render writes a static, escaped HTML dashboard for a scan report.
 func Render(w io.Writer, scanReport report.DriftReport) error {
-	if err := reportTemplate.Execute(w, scanReport); err != nil {
+	return RenderWithHistory(w, Data{Current: scanReport})
+}
+
+// RenderWithHistory writes a static, escaped HTML dashboard with optional history.
+func RenderWithHistory(w io.Writer, data Data) error {
+	if err := reportTemplate.Execute(w, data); err != nil {
 		return fmt.Errorf("render dashboard: %w", err)
 	}
 	return nil

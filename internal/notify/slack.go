@@ -35,7 +35,7 @@ func (notifier SlackNotifier) Notify(ctx context.Context, scanReport report.Drif
 		client = http.DefaultClient
 	}
 
-	payload := slackPayload{Text: RedactedSlackMessage(scanReport)}
+	payload := slackPayload{Text: RedactedNotificationMessage(scanReport)}
 	body, err := json.Marshal(payload)
 	if err != nil {
 		return fmt.Errorf("encode Slack notification: %w", err)
@@ -61,8 +61,8 @@ func (notifier SlackNotifier) Notify(ctx context.Context, scanReport report.Drif
 	return nil
 }
 
-// RedactedSlackMessage formats a scan summary without leaking raw local paths.
-func RedactedSlackMessage(scanReport report.DriftReport) string {
+// RedactedNotificationMessage formats a scan summary without leaking raw local paths.
+func RedactedNotificationMessage(scanReport report.DriftReport) string {
 	return fmt.Sprintf("Terraform drift scan completed\nStatus: %s\nResources checked: %d\nChanged resources: %d",
 		scanReport.Status,
 		scanReport.TotalResourcesChecked,

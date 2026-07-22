@@ -1,0 +1,36 @@
+package policy
+
+import (
+	"context"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/niravraychura/terradrift/internal/report"
+)
+
+func TestRunPassesReportJSONOnStdin(t *testing.T) {
+	outputPath := filepath.Join(t.TempDir(), "policy-input.json")
+	err := Run(context.Background(), Options{Command: "sh", Args: []string{"-c", "cat > \"$1\"", "sh", outputPath}}, report.DriftReport{Status: report.ScanStatusNoDrift})
+	if err != nil {
+		t.Fatalf("expected policy command to pass: %v", err)
+	}
+	data, err := os.ReadFile(outputPath)
+	if err != nil {
+		t.Fatalf("read policy input: %v", err)
+	}
+	if !strings.Contains(string(data), `"status":"no_drift"`) {
+		t.Fatalf("expected scan report JSON on stdin, got %q", data)
+	}
+}
+
+func TestRunRedactsPolicyFailures(t *testing.T) {
+	err := Run(context.Background(), Options{Command: "sh", Args: []string{"-c", "echo 'token=secret-value' >&2; exit 1"}}, report.DriftReport{})
+	if err == nil {
+		t.Fatal("expected policy failure")
+	}
+	if strings.Contains(err.Error(), "secret-value") {
+		t.Fatalf("expected policy error to be redacted, got %v", err)
+	}
+}

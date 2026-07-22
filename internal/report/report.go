@@ -16,10 +16,11 @@ const (
 
 // ResourceChange describes a Terraform resource with detected drift.
 type ResourceChange struct {
-	Address string   `json:"address"`
-	Type    string   `json:"type"`
-	Name    string   `json:"name"`
-	Actions []string `json:"actions"`
+	Address     string   `json:"address"`
+	Type        string   `json:"type"`
+	Name        string   `json:"name"`
+	Actions     []string `json:"actions"`
+	Remediation string   `json:"remediation,omitempty"`
 }
 
 // DriftReport captures the domain result of a Terraform drift scan.
