@@ -65,6 +65,8 @@ terradrift scan -d ./terraform/prod --terraform-exec --output json
 terradrift scan --config .terradrift.json
 terradrift scan -d ./terraform/prod --notify slack --slack-webhook-url "$SLACK_WEBHOOK_URL"
 terradrift scan -d ./terraform/prod --dashboard-html terradrift-report.html
+terradrift scan -d ./terraform/prod --history-dir .terradrift-history --dashboard-html terradrift-report.html
+terradrift scan -d ./terraform/prod --policy-command conftest --policy-arg test --policy-arg -
 terradrift init
 ```
 
@@ -78,11 +80,11 @@ The `--workspace-root` flag evaluates symlinks and requires the selected Terrafo
 
 By default, TerraDrift still emits the bootstrap no-drift report. Use `--terraform-exec` to run the Terraform CLI flow: `terraform init`, `terraform plan -refresh-only -detailed-exitcode`, and `terraform show -json`. This requires Terraform to be installed and available on `PATH`.
 
-The `terradrift init` command writes a starter `.terradrift.json` file with safe local defaults for repeated local or CI usage.
+The `terradrift init` command writes a starter `.terradrift.json` file with safe local defaults for repeated local or CI usage. Config files can also define optional scan settings such as `terraform_exec`, `workspace_root`, `notify`, `slack_webhook_url`, `teams_webhook_url`, `webhook_url`, `dashboard_html`, `history_dir`, `policy_command`, and `policy_args`; explicit CLI flags always take precedence.
 
-Slack notifications are available with `--notify slack --slack-webhook-url "$SLACK_WEBHOOK_URL"`. Notification messages use concise summaries and avoid including local filesystem paths or webhook secrets.
+Slack notifications are available with `--notify slack --slack-webhook-url "$SLACK_WEBHOOK_URL"`. Microsoft Teams notifications are available with `--notify teams --teams-webhook-url "$TEAMS_WEBHOOK_URL"`. Generic HTTPS webhooks are available with `--notify webhook --webhook-url "$WEBHOOK_URL"`. Notification messages use concise summaries and avoid including local filesystem paths or webhook secrets.
 
-Static dashboard output is available with `--dashboard-html <path>`. This writes an escaped local HTML report that can be archived by CI or served by your own internal tooling.
+Static dashboard output is available with `--dashboard-html <path>`. This writes an escaped local HTML report that can be archived by CI or served by your own internal tooling. Historical JSON report storage is available with `--history-dir <directory>`; files are written with restrictive permissions and recent history is included in dashboard output when both flags are used.
 
 Default table output:
 
@@ -172,6 +174,15 @@ make vuln
 
 Tests do not require Terraform, cloud credentials, or network access. The vulnerability scan requires access to Go's vulnerability database.
 
+## Scheduled scan examples
+
+Reusable scheduled-run templates are available for:
+
+- GitHub Actions: `examples/github-actions/terradrift-scheduled.yml`
+- Cron or VM runners: `examples/cron/terradrift.cron`
+
+Review and pin the TerraDrift, Terraform, provider, and module versions before using these examples in production. Keep cloud credentials and webhook URLs in CI secrets or a secret manager.
+
 ## Docker
 
 Build the image:
@@ -202,9 +213,32 @@ The CLI reserves these exit codes for automation-friendly workflows:
 | `1` | Scan failed before producing a reliable result. |
 | `2` | Scan completed successfully and drift was detected. |
 
-## Slack and notifications
+## Feature ideas and improvement backlog
 
-Slack notifications can send a concise drift summary after the scan report is written, for example:
+Recent drift-detection guidance emphasizes scheduled scans, clear notifications, human-reviewed remediation, policy guardrails, and cost visibility. Based on that landscape, useful next TerraDrift additions include:
+
+- Scheduled CI examples for GitHub Actions, cron, and container runners so teams can detect drift within hours instead of relying on ad-hoc checks.
+- Optional cost-impact enrichment from tools such as Infracost or cloud billing APIs so drift alerts can prioritize high-cost changes.
+- Remediation guidance that keeps a human in the loop: update Terraform code, re-import state, or revert infrastructure only after review.
+
+## Policy-as-code hooks
+
+Use `--policy-command <command>` to run an external policy tool after the scan report is written and before notifications are sent. TerraDrift passes the redacted scan report JSON on stdin and never invokes a shell implicitly; pass each argument explicitly with repeated `--policy-arg` flags. A non-zero policy exit fails the scan, and policy stdout/stderr included in errors is size-limited and redacted before display.
+
+Example with Conftest-style stdin usage:
+
+```bash
+terradrift scan \
+  --directory ./terraform/prod \
+  --redact-paths \
+  --policy-command conftest \
+  --policy-arg test \
+  --policy-arg -
+```
+
+## Notifications
+
+Slack, Microsoft Teams, and generic HTTPS webhook notifications can send a concise drift summary after the scan report is written, for example:
 
 ```text
 Terraform drift scan completed
@@ -220,9 +254,19 @@ terradrift scan \
   --directory ./terraform/prod \
   --notify slack \
   --slack-webhook-url "$SLACK_WEBHOOK_URL"
+
+terradrift scan \
+  --directory ./terraform/prod \
+  --notify teams \
+  --teams-webhook-url "$TEAMS_WEBHOOK_URL"
+
+terradrift scan \
+  --directory ./terraform/prod \
+  --notify webhook \
+  --webhook-url "$WEBHOOK_URL"
 ```
 
-Slack webhook URLs are redacted in notification errors, and Slack payload tests verify that local filesystem paths and webhook secrets are not included.
+Slack, Teams, and generic webhook URLs are redacted in notification errors, and notification payload tests verify that local filesystem paths and webhook secrets are not included. Generic webhook URLs must use HTTPS, cannot include user info, and reject localhost, loopback, private, link-local, and unspecified IP hosts to reduce SSRF risk.
 
 ## Do you need to host TerraDrift?
 
@@ -236,7 +280,7 @@ You can run TerraDrift from:
 - A cron job on a VM
 - A Docker container on a scheduled runner
 
-No hosted service is required. For lightweight visibility, `--dashboard-html <path>` writes an escaped static HTML report that can be archived by CI or served by your own internal tooling. A richer hosted service may be useful later for historical drift reports, team visibility, and long-term tracking.
+No hosted service is required. For lightweight visibility, `--dashboard-html <path>` writes an escaped static HTML report that can be archived by CI or served by your own internal tooling. Use `--history-dir <directory>` to keep secure local JSON history and include recent scan trends in the static dashboard. A richer hosted service may be useful later for team visibility and long-term tracking.
 
 ## Example future GitHub Actions usage
 

@@ -1,0 +1,3 @@
+# Run TerraDrift every 6 hours from a hardened runner.
+# Keep credentials in the runner environment or secret manager, not in this file.
+17 */6 * * * cd /srv/infrastructure && /usr/local/bin/terradrift scan --directory ./terraform/prod --workspace-root /srv/infrastructure --terraform-exec --redact-paths --dashboard-html /var/lib/terradrift/latest.html >>/var/log/terradrift.log 2>&1

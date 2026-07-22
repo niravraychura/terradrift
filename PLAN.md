@@ -44,11 +44,18 @@ This plan tracks security, performance, code quality, and feature work for Terra
 - [x] Parse Terraform plan JSON into TerraDrift report models.
 - [x] Count checked resources and changed resources from real plan data.
 - [x] Wire exit code `2` for confirmed drift detection.
-- [x] Add configuration file support for repeated local and CI usage.
+- [x] Add configuration file support for repeated local and CI usage, including advanced scan options that were previously CLI-only.
 - [x] Add a guided `terradrift init` command.
 - [x] Add Slack notifications only after redaction and secret-safe logging are fully tested.
 - [x] Add Docker runtime guidance for Terraform execution, including whether Terraform is bundled or mounted.
 - [x] Consider a self-hosted dashboard only after the CLI workflow is stable.
+- [x] Add scheduled-run templates for GitHub Actions and cron/containerized runners with secret-safe defaults.
+- [x] Add Microsoft Teams notification target with redacted connector-card payloads.
+- [x] Add generic webhook notification target with SSRF-safe URL validation and payload controls.
+- [x] Add historical report storage and dashboard trend views with restrictive local file permissions.
+- [x] Add policy-as-code hooks for expected drift and security guardrails with no implicit shell execution and redacted bounded output.
+- [ ] Add optional cost-impact enrichment for drifted resources.
+- [ ] Add human-reviewed remediation guidance for update-code, sync-state, and revert-infrastructure workflows.
 
 ## Ongoing quality gates
 
