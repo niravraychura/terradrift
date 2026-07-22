@@ -170,6 +170,38 @@ func TestScanLoadsConfigFile(t *testing.T) {
 	}
 }
 
+func TestScanLoadsExtendedConfigFile(t *testing.T) {
+	dir := t.TempDir()
+	dashboardPath := filepath.Join(t.TempDir(), "configured-dashboard.html")
+	path := filepath.Join(t.TempDir(), ".terradrift.json")
+	configJSON := `{
+  "directory": "` + filepath.ToSlash(dir) + `",
+  "output": "table",
+  "timeout": "1s",
+  "redact_paths": true,
+  "workspace_root": "` + filepath.ToSlash(dir) + `",
+  "dashboard_html": "` + filepath.ToSlash(dashboardPath) + `"
+}`
+	if err := os.WriteFile(path, []byte(configJSON), 0o600); err != nil {
+		t.Fatalf("write config fixture: %v", err)
+	}
+
+	stdout, _, err := executeCommand("scan", "--config", path)
+	if err != nil {
+		t.Fatalf("expected extended scan config to load: %v", err)
+	}
+	if !strings.Contains(stdout, "Terraform directory: [REDACTED]") {
+		t.Fatalf("expected config path redaction, got %q", stdout)
+	}
+	data, err := os.ReadFile(dashboardPath)
+	if err != nil {
+		t.Fatalf("expected configured dashboard to be written: %v", err)
+	}
+	if strings.Contains(string(data), dir) {
+		t.Fatalf("expected configured dashboard to receive redacted report, got %q", data)
+	}
+}
+
 func TestScanWritesDashboardHTML(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "dashboard.html")
 	_, _, err := executeCommand("scan", "-d", t.TempDir(), "--dashboard-html", path)
@@ -182,6 +214,89 @@ func TestScanWritesDashboardHTML(t *testing.T) {
 	}
 	if !strings.Contains(string(data), "TerraDrift Report") {
 		t.Fatalf("expected dashboard content, got %q", data)
+	}
+}
+
+func TestScanWritesHistory(t *testing.T) {
+	historyDir := filepath.Join(t.TempDir(), "history")
+	_, _, err := executeCommand("scan", "-d", t.TempDir(), "--redact-paths", "--history-dir", historyDir)
+	if err != nil {
+		t.Fatalf("expected history output to succeed: %v", err)
+	}
+	matches, err := filepath.Glob(filepath.Join(historyDir, "*.json"))
+	if err != nil {
+		t.Fatalf("glob history: %v", err)
+	}
+	if len(matches) != 1 {
+		t.Fatalf("expected one history report, got %d", len(matches))
+	}
+	data, err := os.ReadFile(matches[0])
+	if err != nil {
+		t.Fatalf("read history report: %v", err)
+	}
+	if !strings.Contains(string(data), "[REDACTED]") {
+		t.Fatalf("expected redacted history report, got %q", data)
+	}
+}
+
+func TestScanDashboardIncludesHistory(t *testing.T) {
+	historyDir := filepath.Join(t.TempDir(), "history")
+	dashboardPath := filepath.Join(t.TempDir(), "dashboard.html")
+	_, _, err := executeCommand("scan", "-d", t.TempDir(), "--history-dir", historyDir, "--dashboard-html", dashboardPath)
+	if err != nil {
+		t.Fatalf("expected dashboard with history to succeed: %v", err)
+	}
+	data, err := os.ReadFile(dashboardPath)
+	if err != nil {
+		t.Fatalf("read dashboard: %v", err)
+	}
+	if !strings.Contains(string(data), "Recent scan history") || !strings.Contains(string(data), "no_drift") {
+		t.Fatalf("expected dashboard history, got %q", data)
+	}
+}
+
+func TestScanRunsCostCommand(t *testing.T) {
+	stdout, _, err := executeCommand("scan", "-d", t.TempDir(), "--output", "json", "--cost-command", "sh", "--cost-arg", "-c", "--cost-arg", `cat >/dev/null; printf '{"resource_costs":[]}'`)
+	if err != nil {
+		t.Fatalf("expected cost command to pass: %v", err)
+	}
+	if !json.Valid([]byte(stdout)) {
+		t.Fatalf("expected JSON output, got %q", stdout)
+	}
+}
+
+func TestScanReturnsCostFailure(t *testing.T) {
+	_, _, err := executeCommand("scan", "-d", t.TempDir(), "--cost-command", "sh", "--cost-arg", "-c", "--cost-arg", "echo password=secret-value >&2; exit 1")
+	if err == nil {
+		t.Fatal("expected cost failure")
+	}
+	if strings.Contains(err.Error(), "secret-value") {
+		t.Fatalf("expected cost failure to be redacted, got %v", err)
+	}
+}
+
+func TestScanRunsPolicyCommand(t *testing.T) {
+	policyOutput := filepath.Join(t.TempDir(), "policy-input.json")
+	_, _, err := executeCommand("scan", "-d", t.TempDir(), "--policy-command", "sh", "--policy-arg", "-c", "--policy-arg", "cat > \"$1\"", "--policy-arg", "sh", "--policy-arg", policyOutput)
+	if err != nil {
+		t.Fatalf("expected policy command to pass: %v", err)
+	}
+	data, err := os.ReadFile(policyOutput)
+	if err != nil {
+		t.Fatalf("read policy input: %v", err)
+	}
+	if !strings.Contains(string(data), `"status":"no_drift"`) {
+		t.Fatalf("expected policy input report, got %q", data)
+	}
+}
+
+func TestScanReturnsPolicyFailure(t *testing.T) {
+	_, _, err := executeCommand("scan", "-d", t.TempDir(), "--policy-command", "sh", "--policy-arg", "-c", "--policy-arg", "echo token=secret-value >&2; exit 1")
+	if err == nil {
+		t.Fatal("expected policy failure")
+	}
+	if strings.Contains(err.Error(), "secret-value") {
+		t.Fatalf("expected policy failure to be redacted, got %v", err)
 	}
 }
 
