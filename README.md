@@ -58,9 +58,14 @@ terradrift scan
 terradrift scan --directory ./terraform/prod
 terradrift scan -d ./terraform/prod
 terradrift scan -d ./terraform/prod --output json
+terradrift scan -d ./terraform/prod --timeout 2m --redact-paths
 ```
 
 If `--directory` is omitted, TerraDrift scans the current working directory.
+
+The current bootstrap scan accepts any existing local directory so teams can wire the CLI into local and CI workflows before real Terraform execution lands. Terraform file discovery and stricter `.tf` validation will be decided when the Terraform runner is implemented.
+
+The `--timeout` flag reserves a scan-level deadline for the current and future scan pipeline. The `--redact-paths` flag replaces local filesystem paths in scan output with `[REDACTED]`, which is useful for CI logs.
 
 Default table output:
 

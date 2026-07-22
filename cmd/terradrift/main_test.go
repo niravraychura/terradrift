@@ -78,6 +78,20 @@ func TestScanValidDirectoryTableOutput(t *testing.T) {
 	}
 }
 
+func TestScanRedactsDirectoryWhenRequested(t *testing.T) {
+	dir := t.TempDir()
+	stdout, _, err := executeCommand("scan", "-d", dir, "--redact-paths")
+	if err != nil {
+		t.Fatalf("expected valid directory, got %v", err)
+	}
+	if strings.Contains(stdout, dir) {
+		t.Fatalf("expected directory to be redacted from stdout, got %q", stdout)
+	}
+	if !strings.Contains(stdout, "Terraform directory: [REDACTED]") {
+		t.Fatalf("expected redacted directory marker, got %q", stdout)
+	}
+}
+
 func TestScanValidDirectoryJSONOutput(t *testing.T) {
 	dir := t.TempDir()
 	stdout, _, err := executeCommand("scan", "-d", dir, "--output", "json")
@@ -102,6 +116,13 @@ func TestScanValidDirectoryJSONOutput(t *testing.T) {
 	}
 	if scanReport.ResourceChanges == nil {
 		t.Fatal("expected resource changes to be an empty slice, got nil")
+	}
+}
+
+func TestScanAcceptsTimeoutFlag(t *testing.T) {
+	_, _, err := executeCommand("scan", "-d", t.TempDir(), "--timeout", "1s")
+	if err != nil {
+		t.Fatalf("expected timeout flag to be accepted, got %v", err)
 	}
 }
 

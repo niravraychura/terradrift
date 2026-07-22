@@ -15,28 +15,28 @@ This plan tracks security, performance, code quality, and feature work for Terra
 
 - [x] Add central redaction helpers for webhook URLs, common credential assignment patterns, and sensitive query parameters.
 - [ ] Route all future Terraform stdout/stderr, notification payloads, and diagnostic logs through redaction before display.
-- [ ] Add tests proving Slack webhook URLs, tokens, passwords, secrets, and authorization values are never printed in logs or errors.
+- [x] Add tests proving Slack webhook URLs, tokens, passwords, secrets, and authorization values are never printed in logs or errors.
 - [ ] Add secure temporary plan-file handling for Terraform execution, including restrictive permissions and cleanup.
-- [ ] Add optional path-redaction or relative-path output mode for CI logs.
+- [x] Add optional path-redaction or relative-path output mode for CI logs.
 - [ ] Evaluate symlink behavior and add optional workspace-root enforcement for hosted or multi-tenant runner scenarios.
-- [ ] Document Terraform execution trust boundaries, including provider/module download risks and credential exposure risks.
+- [x] Document Terraform execution trust boundaries, including provider/module download risks and credential exposure risks.
 
 ## Performance plan
 
-- [ ] Add scan-level context timeouts and a `--timeout` CLI flag before Terraform execution is introduced.
+- [x] Add scan-level context timeouts and a `--timeout` CLI flag before Terraform execution is introduced.
 - [ ] Avoid buffering unbounded Terraform stdout/stderr in memory.
 - [ ] Keep plan parsing focused on the fields needed for drift reports.
 - [ ] Add large-plan parser fixtures or benchmarks once JSON parsing exists.
-- [ ] Revisit Makefile formatting implementation if repository size grows significantly.
+- [x] Revisit Makefile formatting implementation if repository size grows significantly.
 
 ## Code quality plan
 
 - [x] Install the configured logger as the process default logger.
 - [x] Make output format parsing consistent with log-level parsing by accepting trimmed, case-insensitive values.
-- [ ] Move scan orchestration out of Cobra command code into `internal/scanner`.
-- [ ] Add typed scan outcomes so CLI exit codes can cleanly distinguish no drift, drift detected, and scan failure.
-- [ ] Decide whether `scan` should accept any directory or require at least one `.tf` file, then update docs/tests accordingly.
-- [ ] Add clear package boundaries for Terraform execution, plan parsing, reporting, and notification delivery.
+- [x] Move scan orchestration out of Cobra command code into `internal/scanner`.
+- [x] Add typed scan outcomes so CLI exit codes can cleanly distinguish no drift, drift detected, and scan failure.
+- [x] Decide whether `scan` should accept any directory or require at least one `.tf` file, then update docs/tests accordingly.
+- [x] Add clear package boundaries for Terraform execution, plan parsing, reporting, and notification delivery.
 
 ## Feature plan
 
@@ -54,9 +54,9 @@ This plan tracks security, performance, code quality, and feature work for Terra
 
 Before marking a feature complete, run the relevant checks and update this file:
 
-- [ ] `gofmt`
-- [ ] `go test ./...`
-- [ ] `go vet ./...`
-- [ ] `go test -race ./...`
+- [x] `gofmt`
+- [x] `go test ./...`
+- [x] `go vet ./...`
+- [x] `go test -race ./...`
 - [ ] `golangci-lint run`
 - [ ] `govulncheck ./...`

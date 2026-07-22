@@ -20,3 +20,5 @@ Include:
 The bootstrap CLI validates local directory input only. It does not execute Terraform, contact cloud APIs, read Terraform state, or persist scan results yet.
 
 Future Terraform execution must treat Terraform modules, providers, plans, state files, and logs as potentially sensitive. Contributors should avoid adding behavior that prints secrets, commits state files, or executes untrusted Terraform without explicit user action.
+
+Terraform execution will expand TerraDrift's trust boundary because `terraform init` can download modules and providers, `terraform plan -refresh-only` can contact cloud APIs, and plan/state-derived data can contain sensitive infrastructure values. Future runner work must use context timeouts, clean up temporary plan files, avoid logging raw Terraform output by default, and redact sensitive values before displaying diagnostics or sending notifications.
