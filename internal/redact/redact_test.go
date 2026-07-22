@@ -31,6 +31,18 @@ func TestStringRedactsSlackWebhookURL(t *testing.T) {
 	}
 }
 
+func TestStringRedactsTeamsWebhookURL(t *testing.T) {
+	input := "posting to https://example.webhook.office.com/webhookb2/secret-value now"
+	got := String(input)
+
+	if strings.Contains(got, "secret-value") || strings.Contains(got, "webhookb2") {
+		t.Fatalf("expected Teams webhook path to be redacted, got %q", got)
+	}
+	if !strings.Contains(got, "webhook.office.com") {
+		t.Fatalf("expected host context to remain, got %q", got)
+	}
+}
+
 func TestStringRedactsSensitiveURLQueryValues(t *testing.T) {
 	input := "fetch https://example.com/callback?token=abc123&name=prod"
 	got := String(input)

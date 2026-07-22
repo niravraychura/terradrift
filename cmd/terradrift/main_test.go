@@ -170,6 +170,38 @@ func TestScanLoadsConfigFile(t *testing.T) {
 	}
 }
 
+func TestScanLoadsExtendedConfigFile(t *testing.T) {
+	dir := t.TempDir()
+	dashboardPath := filepath.Join(t.TempDir(), "configured-dashboard.html")
+	path := filepath.Join(t.TempDir(), ".terradrift.json")
+	configJSON := `{
+  "directory": "` + filepath.ToSlash(dir) + `",
+  "output": "table",
+  "timeout": "1s",
+  "redact_paths": true,
+  "workspace_root": "` + filepath.ToSlash(dir) + `",
+  "dashboard_html": "` + filepath.ToSlash(dashboardPath) + `"
+}`
+	if err := os.WriteFile(path, []byte(configJSON), 0o600); err != nil {
+		t.Fatalf("write config fixture: %v", err)
+	}
+
+	stdout, _, err := executeCommand("scan", "--config", path)
+	if err != nil {
+		t.Fatalf("expected extended scan config to load: %v", err)
+	}
+	if !strings.Contains(stdout, "Terraform directory: [REDACTED]") {
+		t.Fatalf("expected config path redaction, got %q", stdout)
+	}
+	data, err := os.ReadFile(dashboardPath)
+	if err != nil {
+		t.Fatalf("expected configured dashboard to be written: %v", err)
+	}
+	if strings.Contains(string(data), dir) {
+		t.Fatalf("expected configured dashboard to receive redacted report, got %q", data)
+	}
+}
+
 func TestScanWritesDashboardHTML(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "dashboard.html")
 	_, _, err := executeCommand("scan", "-d", t.TempDir(), "--dashboard-html", path)

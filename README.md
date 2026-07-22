@@ -78,9 +78,9 @@ The `--workspace-root` flag evaluates symlinks and requires the selected Terrafo
 
 By default, TerraDrift still emits the bootstrap no-drift report. Use `--terraform-exec` to run the Terraform CLI flow: `terraform init`, `terraform plan -refresh-only -detailed-exitcode`, and `terraform show -json`. This requires Terraform to be installed and available on `PATH`.
 
-The `terradrift init` command writes a starter `.terradrift.json` file with safe local defaults for repeated local or CI usage.
+The `terradrift init` command writes a starter `.terradrift.json` file with safe local defaults for repeated local or CI usage. Config files can also define optional scan settings such as `terraform_exec`, `workspace_root`, `notify`, `slack_webhook_url`, `teams_webhook_url`, and `dashboard_html`; explicit CLI flags always take precedence.
 
-Slack notifications are available with `--notify slack --slack-webhook-url "$SLACK_WEBHOOK_URL"`. Notification messages use concise summaries and avoid including local filesystem paths or webhook secrets.
+Slack notifications are available with `--notify slack --slack-webhook-url "$SLACK_WEBHOOK_URL"`. Microsoft Teams notifications are available with `--notify teams --teams-webhook-url "$TEAMS_WEBHOOK_URL"`. Notification messages use concise summaries and avoid including local filesystem paths or webhook secrets.
 
 Static dashboard output is available with `--dashboard-html <path>`. This writes an escaped local HTML report that can be archived by CI or served by your own internal tooling.
 
@@ -202,9 +202,20 @@ The CLI reserves these exit codes for automation-friendly workflows:
 | `1` | Scan failed before producing a reliable result. |
 | `2` | Scan completed successfully and drift was detected. |
 
-## Slack and notifications
+## Feature ideas and improvement backlog
 
-Slack notifications can send a concise drift summary after the scan report is written, for example:
+Recent drift-detection guidance emphasizes scheduled scans, clear notifications, human-reviewed remediation, policy guardrails, and cost visibility. Based on that landscape, useful next TerraDrift additions include:
+
+- Scheduled CI examples for GitHub Actions, cron, and container runners so teams can detect drift within hours instead of relying on ad-hoc checks.
+- Generic webhook notifications alongside Slack and Microsoft Teams.
+- Historical report storage so dashboards can show trends, repeated drift, and mean time to remediation.
+- Policy-as-code hooks for tools such as OPA/Conftest to distinguish expected drift from security-relevant drift before alerting.
+- Optional cost-impact enrichment from tools such as Infracost or cloud billing APIs so drift alerts can prioritize high-cost changes.
+- Remediation guidance that keeps a human in the loop: update Terraform code, re-import state, or revert infrastructure only after review.
+
+## Notifications
+
+Slack and Microsoft Teams notifications can send a concise drift summary after the scan report is written, for example:
 
 ```text
 Terraform drift scan completed
@@ -220,9 +231,14 @@ terradrift scan \
   --directory ./terraform/prod \
   --notify slack \
   --slack-webhook-url "$SLACK_WEBHOOK_URL"
+
+terradrift scan \
+  --directory ./terraform/prod \
+  --notify teams \
+  --teams-webhook-url "$TEAMS_WEBHOOK_URL"
 ```
 
-Slack webhook URLs are redacted in notification errors, and Slack payload tests verify that local filesystem paths and webhook secrets are not included.
+Slack and Teams webhook URLs are redacted in notification errors, and notification payload tests verify that local filesystem paths and webhook secrets are not included.
 
 ## Do you need to host TerraDrift?
 
