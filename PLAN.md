@@ -49,9 +49,9 @@ This plan tracks security, performance, code quality, and feature work for Terra
 - [x] Add Slack notifications only after redaction and secret-safe logging are fully tested.
 - [x] Add Docker runtime guidance for Terraform execution, including whether Terraform is bundled or mounted.
 - [x] Consider a self-hosted dashboard only after the CLI workflow is stable.
-- [ ] Add scheduled-run templates for GitHub Actions, cron, and containerized runners.
+- [x] Add scheduled-run templates for GitHub Actions and cron/containerized runners with secret-safe defaults.
 - [x] Add Microsoft Teams notification target with redacted connector-card payloads.
-- [ ] Add generic webhook notification target with SSRF-safe URL validation and payload controls.
+- [x] Add generic webhook notification target with SSRF-safe URL validation and payload controls.
 - [ ] Add historical report storage and dashboard trend views.
 - [ ] Add policy-as-code hooks for expected drift and security guardrails.
 - [ ] Add optional cost-impact enrichment for drifted resources.

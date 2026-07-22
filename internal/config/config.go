@@ -19,6 +19,7 @@ type Config struct {
 	Notify          string `json:"notify"`
 	SlackWebhookURL string `json:"slack_webhook_url"`
 	TeamsWebhookURL string `json:"teams_webhook_url"`
+	WebhookURL      string `json:"webhook_url"`
 	DashboardHTML   string `json:"dashboard_html"`
 }
 

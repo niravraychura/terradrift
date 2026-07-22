@@ -1,0 +1,41 @@
+name: TerraDrift Scheduled Scan
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 */6 * * *'
+
+permissions:
+  contents: read
+
+jobs:
+  drift-scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout infrastructure
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+      - name: Download TerraDrift
+        env:
+          TERRADRIFT_VERSION: v0.0.0
+        run: |
+          curl -fsSLo terradrift.tar.gz "https://github.com/niravraychura/terradrift/releases/download/${TERRADRIFT_VERSION}/terradrift_linux_amd64.tar.gz"
+          tar -xzf terradrift.tar.gz terradrift
+          install -m 0755 terradrift /usr/local/bin/terradrift
+      - name: Scan for Terraform drift
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          terradrift scan \
+            --directory ./terraform/prod \
+            --workspace-root "$PWD" \
+            --terraform-exec \
+            --redact-paths \
+            --notify slack \
+            --slack-webhook-url "$SLACK_WEBHOOK_URL"
