@@ -13,6 +13,7 @@ import (
 
 	"github.com/niravraychura/terradrift/internal/config"
 	"github.com/niravraychura/terradrift/internal/dashboard"
+	"github.com/niravraychura/terradrift/internal/history"
 	"github.com/niravraychura/terradrift/internal/logger"
 	"github.com/niravraychura/terradrift/internal/notify"
 	"github.com/niravraychura/terradrift/internal/report"
@@ -113,7 +114,10 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 	var workspaceRoot string
 	var notifyTarget string
 	var slackWebhookURL string
+	var teamsWebhookURL string
+	var webhookURL string
 	var dashboardHTMLPath string
+	var historyDir string
 
 	cmd := &cobra.Command{
 		Use:   "scan",
@@ -143,6 +147,30 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 				if !cmd.Flags().Changed("redact-paths") {
 					redactPaths = cfg.RedactPaths
 				}
+				if !cmd.Flags().Changed("terraform-exec") {
+					terraformExec = cfg.TerraformExec
+				}
+				if !cmd.Flags().Changed("workspace-root") {
+					workspaceRoot = cfg.WorkspaceRoot
+				}
+				if !cmd.Flags().Changed("notify") {
+					notifyTarget = cfg.Notify
+				}
+				if !cmd.Flags().Changed("slack-webhook-url") {
+					slackWebhookURL = cfg.SlackWebhookURL
+				}
+				if !cmd.Flags().Changed("teams-webhook-url") {
+					teamsWebhookURL = cfg.TeamsWebhookURL
+				}
+				if !cmd.Flags().Changed("webhook-url") {
+					webhookURL = cfg.WebhookURL
+				}
+				if !cmd.Flags().Changed("dashboard-html") {
+					dashboardHTMLPath = cfg.DashboardHTML
+				}
+				if !cmd.Flags().Changed("history-dir") {
+					historyDir = cfg.HistoryDir
+				}
 			}
 
 			parsedFormat, err := parseOutputFormat(format)
@@ -171,13 +199,24 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 			if err := writeScanReport(stdout, scanReport, parsedFormat); err != nil {
 				return err
 			}
+			var historyEntries []history.Entry
+			if historyDir != "" {
+				if _, err := history.Write(historyDir, scanReport); err != nil {
+					return err
+				}
+				entries, err := history.LoadRecent(historyDir, 10)
+				if err != nil {
+					return err
+				}
+				historyEntries = entries
+			}
 			if dashboardHTMLPath != "" {
-				if err := writeDashboard(dashboardHTMLPath, scanReport); err != nil {
+				if err := writeDashboard(dashboardHTMLPath, scanReport, historyEntries); err != nil {
 					return err
 				}
 			}
 			if notifyTarget != "" {
-				if err := sendNotification(cmd.Context(), notifyTarget, slackWebhookURL, scanReport); err != nil {
+				if err := sendNotification(cmd.Context(), notifyTarget, slackWebhookURL, teamsWebhookURL, webhookURL, scanReport); err != nil {
 					return err
 				}
 			}
@@ -194,18 +233,21 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 	cmd.Flags().BoolVar(&terraformExec, "terraform-exec", false, "run Terraform init, refresh-only plan, and show -json")
 	cmd.Flags().StringVar(&scanConfigPath, "config", "", "optional TerraDrift config file to load")
 	cmd.Flags().StringVar(&workspaceRoot, "workspace-root", "", "require the Terraform directory to resolve inside this workspace root")
-	cmd.Flags().StringVar(&notifyTarget, "notify", "", "notification target: slack")
+	cmd.Flags().StringVar(&notifyTarget, "notify", "", "notification target: slack, teams, webhook")
 	cmd.Flags().StringVar(&slackWebhookURL, "slack-webhook-url", "", "Slack incoming webhook URL")
+	cmd.Flags().StringVar(&teamsWebhookURL, "teams-webhook-url", "", "Microsoft Teams incoming webhook URL")
+	cmd.Flags().StringVar(&webhookURL, "webhook-url", "", "generic HTTPS webhook URL")
 	cmd.Flags().StringVar(&dashboardHTMLPath, "dashboard-html", "", "write a static HTML dashboard report to this path")
+	cmd.Flags().StringVar(&historyDir, "history-dir", "", "write JSON scan history to this directory and include recent history in dashboards")
 	return cmd
 }
 
-func writeDashboard(path string, scanReport report.DriftReport) error {
+func writeDashboard(path string, scanReport report.DriftReport, historyEntries []history.Entry) error {
 	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
 	if err != nil {
 		return fmt.Errorf("create dashboard HTML %s: %w", path, err)
 	}
-	if err := dashboard.Render(file, scanReport); err != nil {
+	if err := dashboard.RenderWithHistory(file, dashboard.Data{Current: scanReport, History: historyEntries}); err != nil {
 		_ = file.Close()
 		return err
 	}
@@ -215,12 +257,16 @@ func writeDashboard(path string, scanReport report.DriftReport) error {
 	return nil
 }
 
-func sendNotification(ctx context.Context, target string, slackWebhookURL string, scanReport report.DriftReport) error {
+func sendNotification(ctx context.Context, target string, slackWebhookURL string, teamsWebhookURL string, webhookURL string, scanReport report.DriftReport) error {
 	switch strings.ToLower(strings.TrimSpace(target)) {
 	case "slack":
 		return notify.SlackNotifier{WebhookURL: slackWebhookURL}.Notify(ctx, scanReport)
+	case "teams":
+		return notify.TeamsNotifier{WebhookURL: teamsWebhookURL}.Notify(ctx, scanReport)
+	case "webhook":
+		return notify.WebhookNotifier{WebhookURL: webhookURL}.Notify(ctx, scanReport)
 	default:
-		return fmt.Errorf("unsupported notification target %q; supported values: slack", target)
+		return fmt.Errorf("unsupported notification target %q; supported values: slack, teams, webhook", target)
 	}
 }
 
