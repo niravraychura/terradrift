@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -77,6 +78,20 @@ func TestScanValidDirectoryTableOutput(t *testing.T) {
 	}
 }
 
+func TestScanRedactsDirectoryWhenRequested(t *testing.T) {
+	dir := t.TempDir()
+	stdout, _, err := executeCommand("scan", "-d", dir, "--redact-paths")
+	if err != nil {
+		t.Fatalf("expected valid directory, got %v", err)
+	}
+	if strings.Contains(stdout, dir) {
+		t.Fatalf("expected directory to be redacted from stdout, got %q", stdout)
+	}
+	if !strings.Contains(stdout, "Terraform directory: [REDACTED]") {
+		t.Fatalf("expected redacted directory marker, got %q", stdout)
+	}
+}
+
 func TestScanValidDirectoryJSONOutput(t *testing.T) {
 	dir := t.TempDir()
 	stdout, _, err := executeCommand("scan", "-d", dir, "--output", "json")
@@ -99,6 +114,93 @@ func TestScanValidDirectoryJSONOutput(t *testing.T) {
 	if scanReport.Status != report.ScanStatusNoDrift {
 		t.Fatalf("expected no drift status, got %q", scanReport.Status)
 	}
+	if scanReport.ResourceChanges == nil {
+		t.Fatal("expected resource changes to be an empty slice, got nil")
+	}
+}
+
+func TestScanAcceptsTimeoutFlag(t *testing.T) {
+	_, _, err := executeCommand("scan", "-d", t.TempDir(), "--timeout", "1s")
+	if err != nil {
+		t.Fatalf("expected timeout flag to be accepted, got %v", err)
+	}
+}
+
+func TestInitCreatesDefaultConfig(t *testing.T) {
+	path := filepath.Join(t.TempDir(), ".terradrift.json")
+	stdout, _, err := executeCommand("init", "--config", path)
+	if err != nil {
+		t.Fatalf("expected init to create config: %v", err)
+	}
+	if !strings.Contains(stdout, "Created TerraDrift config: "+path) {
+		t.Fatalf("expected init output to include config path, got %q", stdout)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("expected config file to exist: %v", err)
+	}
+	if !strings.Contains(string(data), `"directory": "."`) {
+		t.Fatalf("expected default config content, got %q", data)
+	}
+}
+
+func TestScanLoadsConfigFile(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(t.TempDir(), ".terradrift.json")
+	configJSON := `{
+  "directory": "` + filepath.ToSlash(dir) + `",
+  "output": "json",
+  "timeout": "1s",
+  "redact_paths": true
+}`
+	if err := os.WriteFile(path, []byte(configJSON), 0o600); err != nil {
+		t.Fatalf("write config fixture: %v", err)
+	}
+
+	stdout, _, err := executeCommand("scan", "--config", path)
+	if err != nil {
+		t.Fatalf("expected scan config to load: %v", err)
+	}
+	var scanReport report.DriftReport
+	if err := json.Unmarshal([]byte(stdout), &scanReport); err != nil {
+		t.Fatalf("expected JSON output from config, got %v: %q", err, stdout)
+	}
+	if scanReport.Directory != "[REDACTED]" {
+		t.Fatalf("expected redacted directory from config, got %q", scanReport.Directory)
+	}
+}
+
+func TestScanWritesDashboardHTML(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "dashboard.html")
+	_, _, err := executeCommand("scan", "-d", t.TempDir(), "--dashboard-html", path)
+	if err != nil {
+		t.Fatalf("expected dashboard output to succeed: %v", err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("expected dashboard file to exist: %v", err)
+	}
+	if !strings.Contains(string(data), "TerraDrift Report") {
+		t.Fatalf("expected dashboard content, got %q", data)
+	}
+}
+
+func TestScanRejectsUnsupportedNotificationTarget(t *testing.T) {
+	_, _, err := executeCommand("scan", "-d", t.TempDir(), "--notify", "email")
+	if err == nil || !strings.Contains(err.Error(), "unsupported notification target") {
+		t.Fatalf("expected unsupported notification target error, got %v", err)
+	}
+}
+
+func TestScanAcceptsCaseInsensitiveTrimmedOutputFormat(t *testing.T) {
+	dir := t.TempDir()
+	stdout, _, err := executeCommand("scan", "-d", dir, "--output", " JSON ")
+	if err != nil {
+		t.Fatalf("expected normalized output format to be valid, got %v", err)
+	}
+	if !json.Valid([]byte(stdout)) {
+		t.Fatalf("expected JSON output, got %q", stdout)
+	}
 }
 
 func TestScanRejectsUnsupportedOutputFormat(t *testing.T) {
@@ -114,6 +216,20 @@ func TestLogLevelSupported(t *testing.T) {
 		if err != nil {
 			t.Fatalf("expected log level %q to be supported: %v", level, err)
 		}
+	}
+}
+
+func TestLogLevelConfiguresDefaultLogger(t *testing.T) {
+	var stderr bytes.Buffer
+	cmd := newRootCommand(&bytes.Buffer{}, &stderr)
+	cmd.SetArgs([]string{"--log-level", "debug", "scan", "-d", t.TempDir()})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("expected command to execute: %v", err)
+	}
+
+	slog.Debug("debug message")
+	if !strings.Contains(stderr.String(), "debug message") {
+		t.Fatalf("expected default logger to write debug message to stderr, got %q", stderr.String())
 	}
 }
 
@@ -142,5 +258,11 @@ func TestScanReturnsOutputWriteError(t *testing.T) {
 func TestExitCodeConstants(t *testing.T) {
 	if exitCodeOK != 0 || exitCodeFailure != 1 || exitCodeDriftDetected != 2 {
 		t.Fatalf("unexpected exit code constants: ok=%d failure=%d drift=%d", exitCodeOK, exitCodeFailure, exitCodeDriftDetected)
+	}
+}
+
+func TestExitCodeForDriftDetected(t *testing.T) {
+	if got := exitCodeForError(errDriftDetected); got != exitCodeDriftDetected {
+		t.Fatalf("expected drift exit code %d, got %d", exitCodeDriftDetected, got)
 	}
 }

@@ -17,7 +17,7 @@ test-race: ## Run unit tests with the race detector
 	go test -race $(GO_PACKAGES)
 
 fmt: ## Format Go code
-	gofmt -w $$(find . -name '*.go' -not -path './vendor/*')
+	gofmt -w $$(rg --files -g '*.go' -g '!vendor/**')
 
 vet: ## Run go vet
 	go vet $(GO_PACKAGES)
