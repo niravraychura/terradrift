@@ -61,7 +61,7 @@ func largePlanFixture(resources int) []byte {
 		if i%10 == 0 {
 			action = "update"
 		}
-		builder.WriteString(fmt.Sprintf(`{"address":"aws_instance.example_%d","type":"aws_instance","name":"example_%d","change":{"actions":["%s"]}}`, i, i, action))
+		_, _ = fmt.Fprintf(&builder, `{"address":"aws_instance.example_%d","type":"aws_instance","name":"example_%d","change":{"actions":["%s"]}}`, i, i, action)
 	}
 	builder.WriteString(`]}`)
 	return []byte(builder.String())
