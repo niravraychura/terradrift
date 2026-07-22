@@ -13,6 +13,7 @@ import (
 
 	"github.com/niravraychura/terradrift/internal/config"
 	"github.com/niravraychura/terradrift/internal/dashboard"
+	"github.com/niravraychura/terradrift/internal/history"
 	"github.com/niravraychura/terradrift/internal/logger"
 	"github.com/niravraychura/terradrift/internal/notify"
 	"github.com/niravraychura/terradrift/internal/report"
@@ -116,6 +117,7 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 	var teamsWebhookURL string
 	var webhookURL string
 	var dashboardHTMLPath string
+	var historyDir string
 
 	cmd := &cobra.Command{
 		Use:   "scan",
@@ -166,6 +168,9 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 				if !cmd.Flags().Changed("dashboard-html") {
 					dashboardHTMLPath = cfg.DashboardHTML
 				}
+				if !cmd.Flags().Changed("history-dir") {
+					historyDir = cfg.HistoryDir
+				}
 			}
 
 			parsedFormat, err := parseOutputFormat(format)
@@ -194,8 +199,19 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 			if err := writeScanReport(stdout, scanReport, parsedFormat); err != nil {
 				return err
 			}
+			var historyEntries []history.Entry
+			if historyDir != "" {
+				if _, err := history.Write(historyDir, scanReport); err != nil {
+					return err
+				}
+				entries, err := history.LoadRecent(historyDir, 10)
+				if err != nil {
+					return err
+				}
+				historyEntries = entries
+			}
 			if dashboardHTMLPath != "" {
-				if err := writeDashboard(dashboardHTMLPath, scanReport); err != nil {
+				if err := writeDashboard(dashboardHTMLPath, scanReport, historyEntries); err != nil {
 					return err
 				}
 			}
@@ -222,15 +238,16 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 	cmd.Flags().StringVar(&teamsWebhookURL, "teams-webhook-url", "", "Microsoft Teams incoming webhook URL")
 	cmd.Flags().StringVar(&webhookURL, "webhook-url", "", "generic HTTPS webhook URL")
 	cmd.Flags().StringVar(&dashboardHTMLPath, "dashboard-html", "", "write a static HTML dashboard report to this path")
+	cmd.Flags().StringVar(&historyDir, "history-dir", "", "write JSON scan history to this directory and include recent history in dashboards")
 	return cmd
 }
 
-func writeDashboard(path string, scanReport report.DriftReport) error {
+func writeDashboard(path string, scanReport report.DriftReport, historyEntries []history.Entry) error {
 	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
 	if err != nil {
 		return fmt.Errorf("create dashboard HTML %s: %w", path, err)
 	}
-	if err := dashboard.Render(file, scanReport); err != nil {
+	if err := dashboard.RenderWithHistory(file, dashboard.Data{Current: scanReport, History: historyEntries}); err != nil {
 		_ = file.Close()
 		return err
 	}

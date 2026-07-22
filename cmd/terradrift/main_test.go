@@ -217,6 +217,44 @@ func TestScanWritesDashboardHTML(t *testing.T) {
 	}
 }
 
+func TestScanWritesHistory(t *testing.T) {
+	historyDir := filepath.Join(t.TempDir(), "history")
+	_, _, err := executeCommand("scan", "-d", t.TempDir(), "--redact-paths", "--history-dir", historyDir)
+	if err != nil {
+		t.Fatalf("expected history output to succeed: %v", err)
+	}
+	matches, err := filepath.Glob(filepath.Join(historyDir, "*.json"))
+	if err != nil {
+		t.Fatalf("glob history: %v", err)
+	}
+	if len(matches) != 1 {
+		t.Fatalf("expected one history report, got %d", len(matches))
+	}
+	data, err := os.ReadFile(matches[0])
+	if err != nil {
+		t.Fatalf("read history report: %v", err)
+	}
+	if !strings.Contains(string(data), "[REDACTED]") {
+		t.Fatalf("expected redacted history report, got %q", data)
+	}
+}
+
+func TestScanDashboardIncludesHistory(t *testing.T) {
+	historyDir := filepath.Join(t.TempDir(), "history")
+	dashboardPath := filepath.Join(t.TempDir(), "dashboard.html")
+	_, _, err := executeCommand("scan", "-d", t.TempDir(), "--history-dir", historyDir, "--dashboard-html", dashboardPath)
+	if err != nil {
+		t.Fatalf("expected dashboard with history to succeed: %v", err)
+	}
+	data, err := os.ReadFile(dashboardPath)
+	if err != nil {
+		t.Fatalf("read dashboard: %v", err)
+	}
+	if !strings.Contains(string(data), "Recent scan history") || !strings.Contains(string(data), "no_drift") {
+		t.Fatalf("expected dashboard history, got %q", data)
+	}
+}
+
 func TestScanRejectsUnsupportedNotificationTarget(t *testing.T) {
 	_, _, err := executeCommand("scan", "-d", t.TempDir(), "--notify", "email")
 	if err == nil || !strings.Contains(err.Error(), "unsupported notification target") {

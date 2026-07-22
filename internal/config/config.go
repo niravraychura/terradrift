@@ -21,6 +21,7 @@ type Config struct {
 	TeamsWebhookURL string `json:"teams_webhook_url"`
 	WebhookURL      string `json:"webhook_url"`
 	DashboardHTML   string `json:"dashboard_html"`
+	HistoryDir      string `json:"history_dir"`
 }
 
 // Default returns a safe bootstrap configuration.

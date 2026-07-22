@@ -52,7 +52,7 @@ This plan tracks security, performance, code quality, and feature work for Terra
 - [x] Add scheduled-run templates for GitHub Actions and cron/containerized runners with secret-safe defaults.
 - [x] Add Microsoft Teams notification target with redacted connector-card payloads.
 - [x] Add generic webhook notification target with SSRF-safe URL validation and payload controls.
-- [ ] Add historical report storage and dashboard trend views.
+- [x] Add historical report storage and dashboard trend views with restrictive local file permissions.
 - [ ] Add policy-as-code hooks for expected drift and security guardrails.
 - [ ] Add optional cost-impact enrichment for drifted resources.
 - [ ] Add human-reviewed remediation guidance for update-code, sync-state, and revert-infrastructure workflows.
