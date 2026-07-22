@@ -24,7 +24,7 @@ func TestWriteDefaultAndLoad(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load config: %v", err)
 	}
-	if cfg.Directory != "." || cfg.Output != "table" || cfg.Timeout != "5m" || cfg.RedactPaths {
+	if cfg.Directory != "." || cfg.Output != "table" || cfg.Timeout != "5m" || cfg.RedactPaths || cfg.TerraformExec || cfg.WorkspaceRoot != "" || cfg.Notify != "" || cfg.SlackWebhookURL != "" || cfg.TeamsWebhookURL != "" || cfg.DashboardHTML != "" {
 		t.Fatalf("unexpected config: %#v", cfg)
 	}
 }

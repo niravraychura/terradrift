@@ -66,7 +66,8 @@ func shouldRedactURL(parsed *url.URL) bool {
 }
 
 func isSensitiveHost(host string) bool {
-	return strings.Contains(strings.ToLower(host), "hooks.slack.com")
+	normalizedHost := strings.ToLower(host)
+	return strings.Contains(normalizedHost, "hooks.slack.com") || strings.Contains(normalizedHost, "webhook.office.com")
 }
 
 func isSensitiveKey(key string) bool {
