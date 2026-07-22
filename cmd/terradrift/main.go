@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -9,11 +10,15 @@ import (
 	"strings"
 	"time"
 
+	"github.com/niravraychura/terradrift/internal/config"
 	"github.com/niravraychura/terradrift/internal/logger"
 	"github.com/niravraychura/terradrift/internal/report"
 	"github.com/niravraychura/terradrift/internal/scanner"
+	"github.com/niravraychura/terradrift/internal/terraform"
 	"github.com/spf13/cobra"
 )
+
+var errDriftDetected = errors.New("drift detected")
 
 const (
 	exitCodeOK            = 0
@@ -30,10 +35,20 @@ const (
 
 func main() {
 	if err := newRootCommand(os.Stdout, os.Stderr).Execute(); err != nil {
-		fmt.Fprintln(os.Stderr, "Error:", err)
-		os.Exit(exitCodeFailure)
+		code := exitCodeForError(err)
+		if code != exitCodeDriftDetected {
+			fmt.Fprintln(os.Stderr, "Error:", err)
+		}
+		os.Exit(code)
 	}
 	os.Exit(exitCodeOK)
+}
+
+func exitCodeForError(err error) int {
+	if errors.Is(err, errDriftDetected) {
+		return exitCodeDriftDetected
+	}
+	return exitCodeFailure
 }
 
 func newRootCommand(stdout, stderr io.Writer) *cobra.Command {
@@ -57,7 +72,32 @@ func newRootCommand(stdout, stderr io.Writer) *cobra.Command {
 	cmd.SetErr(stderr)
 	cmd.PersistentFlags().StringVar(&logLevel, "log-level", "info", "log level: debug, info, warn, error")
 	cmd.AddCommand(newScanCommand(stdout))
+	cmd.AddCommand(newInitCommand(stdout))
 	return cmd
+}
+
+func newInitCommand(stdout io.Writer) *cobra.Command {
+	var path string
+	cmd := &cobra.Command{
+		Use:   "init",
+		Short: "Create a starter TerraDrift config file",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := config.WriteDefault(path); err != nil {
+				return err
+			}
+			_, err := fmt.Fprintf(stdout, "Created TerraDrift config: %s\n", configPath(path))
+			return err
+		},
+	}
+	cmd.Flags().StringVar(&path, "config", config.DefaultPath, "config file path to create")
+	return cmd
+}
+
+func configPath(path string) string {
+	if path == "" {
+		return config.DefaultPath
+	}
+	return path
 }
 
 func newScanCommand(stdout io.Writer) *cobra.Command {
@@ -65,6 +105,9 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 	var format string
 	var timeout time.Duration
 	var redactPaths bool
+	var terraformExec bool
+	var scanConfigPath string
+	var workspaceRoot string
 
 	cmd := &cobra.Command{
 		Use:   "scan",
@@ -73,15 +116,44 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
   terradrift scan --directory ./terraform/prod
   terradrift scan -d ./terraform/prod --output json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if scanConfigPath != "" {
+				cfg, err := config.Load(scanConfigPath)
+				if err != nil {
+					return err
+				}
+				if !cmd.Flags().Changed("directory") {
+					directory = cfg.Directory
+				}
+				if !cmd.Flags().Changed("output") {
+					format = cfg.Output
+				}
+				if !cmd.Flags().Changed("timeout") {
+					parsedTimeout, err := time.ParseDuration(cfg.Timeout)
+					if err != nil {
+						return fmt.Errorf("parse config timeout: %w", err)
+					}
+					timeout = parsedTimeout
+				}
+				if !cmd.Flags().Changed("redact-paths") {
+					redactPaths = cfg.RedactPaths
+				}
+			}
+
 			parsedFormat, err := parseOutputFormat(format)
 			if err != nil {
 				return err
 			}
 
-			result, err := scanner.Scan(cmd.Context(), scanner.Options{
-				Directory: directory,
-				Timeout:   timeout,
-			})
+			scanOptions := scanner.Options{
+				Directory:     directory,
+				Timeout:       timeout,
+				WorkspaceRoot: workspaceRoot,
+			}
+			if terraformExec {
+				scanOptions.Runner = terraform.NewCLIRunner("")
+			}
+
+			result, err := scanner.Scan(cmd.Context(), scanOptions)
 			if err != nil {
 				return err
 			}
@@ -90,13 +162,22 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 			if redactPaths {
 				scanReport.Directory = "[REDACTED]"
 			}
-			return writeScanReport(stdout, scanReport, parsedFormat)
+			if err := writeScanReport(stdout, scanReport, parsedFormat); err != nil {
+				return err
+			}
+			if result.Outcome == scanner.OutcomeDriftDetected {
+				return errDriftDetected
+			}
+			return nil
 		},
 	}
 	cmd.Flags().StringVarP(&directory, "directory", "d", ".", "Terraform directory to scan")
 	cmd.Flags().StringVarP(&format, "output", "o", string(outputFormatTable), "output format: table, json")
 	cmd.Flags().DurationVar(&timeout, "timeout", scanner.DefaultTimeout, "maximum scan duration")
 	cmd.Flags().BoolVar(&redactPaths, "redact-paths", false, "redact local filesystem paths from scan output")
+	cmd.Flags().BoolVar(&terraformExec, "terraform-exec", false, "run Terraform init, refresh-only plan, and show -json")
+	cmd.Flags().StringVar(&scanConfigPath, "config", "", "optional TerraDrift config file to load")
+	cmd.Flags().StringVar(&workspaceRoot, "workspace-root", "", "require the Terraform directory to resolve inside this workspace root")
 	return cmd
 }
 

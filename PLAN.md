@@ -14,19 +14,19 @@ This plan tracks security, performance, code quality, and feature work for Terra
 ## Security plan
 
 - [x] Add central redaction helpers for webhook URLs, common credential assignment patterns, and sensitive query parameters.
-- [ ] Route all future Terraform stdout/stderr, notification payloads, and diagnostic logs through redaction before display.
+- [x] Route all future Terraform stdout/stderr, notification payloads, and diagnostic logs through redaction before display.
 - [x] Add tests proving Slack webhook URLs, tokens, passwords, secrets, and authorization values are never printed in logs or errors.
-- [ ] Add secure temporary plan-file handling for Terraform execution, including restrictive permissions and cleanup.
+- [x] Add secure temporary plan-file handling for Terraform execution, including restrictive permissions and cleanup.
 - [x] Add optional path-redaction or relative-path output mode for CI logs.
-- [ ] Evaluate symlink behavior and add optional workspace-root enforcement for hosted or multi-tenant runner scenarios.
+- [x] Evaluate symlink behavior and add optional workspace-root enforcement for hosted or multi-tenant runner scenarios.
 - [x] Document Terraform execution trust boundaries, including provider/module download risks and credential exposure risks.
 
 ## Performance plan
 
 - [x] Add scan-level context timeouts and a `--timeout` CLI flag before Terraform execution is introduced.
-- [ ] Avoid buffering unbounded Terraform stdout/stderr in memory.
-- [ ] Keep plan parsing focused on the fields needed for drift reports.
-- [ ] Add large-plan parser fixtures or benchmarks once JSON parsing exists.
+- [x] Avoid buffering unbounded Terraform stdout/stderr in memory.
+- [x] Keep plan parsing focused on the fields needed for drift reports.
+- [x] Add large-plan parser fixtures or benchmarks once JSON parsing exists.
 - [x] Revisit Makefile formatting implementation if repository size grows significantly.
 
 ## Code quality plan
@@ -40,14 +40,14 @@ This plan tracks security, performance, code quality, and feature work for Terra
 
 ## Feature plan
 
-- [ ] Implement a Terraform CLI runner for `terraform init`, `terraform plan -refresh-only -detailed-exitcode`, and `terraform show -json`.
-- [ ] Parse Terraform plan JSON into TerraDrift report models.
-- [ ] Count checked resources and changed resources from real plan data.
-- [ ] Wire exit code `2` for confirmed drift detection.
-- [ ] Add configuration file support for repeated local and CI usage.
-- [ ] Add a guided `terradrift init` command.
+- [x] Implement a Terraform CLI runner for `terraform init`, `terraform plan -refresh-only -detailed-exitcode`, and `terraform show -json`.
+- [x] Parse Terraform plan JSON into TerraDrift report models.
+- [x] Count checked resources and changed resources from real plan data.
+- [x] Wire exit code `2` for confirmed drift detection.
+- [x] Add configuration file support for repeated local and CI usage.
+- [x] Add a guided `terradrift init` command.
 - [ ] Add Slack notifications only after redaction and secret-safe logging are fully tested.
-- [ ] Add Docker runtime guidance for Terraform execution, including whether Terraform is bundled or mounted.
+- [x] Add Docker runtime guidance for Terraform execution, including whether Terraform is bundled or mounted.
 - [ ] Consider a self-hosted dashboard only after the CLI workflow is stable.
 
 ## Ongoing quality gates

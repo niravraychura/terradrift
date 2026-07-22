@@ -26,7 +26,7 @@ The first version of TerraDrift is a project foundation. It includes:
 - Unit tests that do not require Terraform or cloud credentials
 - Docker, Makefile, GitHub Actions CI, Dependabot, and security policy scaffolding
 
-Actual Terraform execution is the next major implementation step.
+Terraform execution is available behind the explicit `--terraform-exec` flag while the broader workflow continues to mature.
 
 ## Do Terraform files need to be in this repository?
 
@@ -59,13 +59,23 @@ terradrift scan --directory ./terraform/prod
 terradrift scan -d ./terraform/prod
 terradrift scan -d ./terraform/prod --output json
 terradrift scan -d ./terraform/prod --timeout 2m --redact-paths
+terradrift scan -d ./terraform/prod --workspace-root "$PWD"
+terradrift scan -d ./terraform/prod --terraform-exec --output json
+terradrift scan --config .terradrift.json
+terradrift init
 ```
 
 If `--directory` is omitted, TerraDrift scans the current working directory.
 
-The current bootstrap scan accepts any existing local directory so teams can wire the CLI into local and CI workflows before real Terraform execution lands. Terraform file discovery and stricter `.tf` validation will be decided when the Terraform runner is implemented.
+TerraDrift accepts any existing local directory at the CLI validation layer. When `--terraform-exec` is enabled, Terraform performs its own configuration validation and returns a scan failure if the selected directory is not usable Terraform configuration.
 
-The `--timeout` flag reserves a scan-level deadline for the current and future scan pipeline. The `--redact-paths` flag replaces local filesystem paths in scan output with `[REDACTED]`, which is useful for CI logs.
+The `--timeout` flag applies a scan-level deadline to the current and future scan pipeline. The `--redact-paths` flag replaces local filesystem paths in scan output with `[REDACTED]`, which is useful for CI logs.
+
+The `--workspace-root` flag evaluates symlinks and requires the selected Terraform directory to resolve inside the provided root, which is useful for constrained CI or hosted runner scenarios.
+
+By default, TerraDrift still emits the bootstrap no-drift report. Use `--terraform-exec` to run the Terraform CLI flow: `terraform init`, `terraform plan -refresh-only -detailed-exitcode`, and `terraform show -json`. This requires Terraform to be installed and available on `PATH`.
+
+The `terradrift init` command writes a starter `.terradrift.json` file with safe local defaults for repeated local or CI usage.
 
 Default table output:
 
@@ -163,11 +173,11 @@ Build the image:
 make docker-build
 ```
 
-The current runtime image intentionally does not install Terraform yet. Terraform will be included, mounted, or otherwise discovered when command execution is implemented.
+The current runtime image intentionally does not install Terraform yet. To use `--terraform-exec` in Docker, build a derived image that installs Terraform or mount/provide a trusted Terraform binary on `PATH`. Pin Terraform, provider, and module versions in CI for repeatable drift results.
 
-## Planned real drift detection flow
+## Terraform execution flow
 
-The next implementation should make `terradrift scan` perform this flow:
+When `--terraform-exec` is provided, `terradrift scan` performs this flow:
 
 1. Validate the Terraform directory.
 2. Run `terraform init`.

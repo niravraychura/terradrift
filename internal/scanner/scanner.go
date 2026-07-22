@@ -6,9 +6,12 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
+	"github.com/niravraychura/terradrift/internal/parser"
 	"github.com/niravraychura/terradrift/internal/report"
+	"github.com/niravraychura/terradrift/internal/terraform"
 )
 
 const DefaultTimeout = 5 * time.Minute
@@ -24,8 +27,10 @@ const (
 
 // Options configures a scan run.
 type Options struct {
-	Directory string
-	Timeout   time.Duration
+	Directory     string
+	Timeout       time.Duration
+	Runner        terraform.Runner
+	WorkspaceRoot string
 }
 
 // Result captures both the user-facing report and the CLI-facing outcome.
@@ -53,9 +58,47 @@ func Scan(ctx context.Context, options Options) (Result, error) {
 	if err != nil {
 		return Result{Outcome: OutcomeFailed}, err
 	}
+	if options.WorkspaceRoot != "" {
+		if err := ValidateWorkspaceRoot(absDir, options.WorkspaceRoot); err != nil {
+			return Result{Outcome: OutcomeFailed}, err
+		}
+	}
 
-	scanReport := NewBootstrapReport(absDir)
+	if options.Runner == nil {
+		scanReport := NewBootstrapReport(absDir)
+		return Result{Outcome: OutcomeNoDrift, Report: scanReport}, nil
+	}
+
+	scanReport, err := runTerraformScan(ctx, options.Runner, absDir)
+	if err != nil {
+		return Result{Outcome: OutcomeFailed, Report: scanReport}, err
+	}
+	if scanReport.TotalChangedResources > 0 {
+		scanReport.Status = report.ScanStatusDriftDetected
+		return Result{Outcome: OutcomeDriftDetected, Report: scanReport}, nil
+	}
+	scanReport.Status = report.ScanStatusNoDrift
 	return Result{Outcome: OutcomeNoDrift, Report: scanReport}, nil
+}
+
+// ValidateWorkspaceRoot ensures directory resolves inside workspaceRoot after symlink evaluation.
+func ValidateWorkspaceRoot(directory string, workspaceRoot string) error {
+	resolvedDirectory, err := filepath.EvalSymlinks(directory)
+	if err != nil {
+		return fmt.Errorf("resolve terraform directory symlinks: %w", err)
+	}
+	resolvedRoot, err := filepath.EvalSymlinks(workspaceRoot)
+	if err != nil {
+		return fmt.Errorf("resolve workspace root symlinks: %w", err)
+	}
+	rel, err := filepath.Rel(resolvedRoot, resolvedDirectory)
+	if err != nil {
+		return fmt.Errorf("compare terraform directory to workspace root: %w", err)
+	}
+	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || filepath.IsAbs(rel) {
+		return fmt.Errorf("terraform directory %s is outside workspace root %s", resolvedDirectory, resolvedRoot)
+	}
+	return nil
 }
 
 // ValidateDirectory resolves and validates the local directory selected for scanning.
@@ -90,4 +133,85 @@ func NewBootstrapReport(directory string) report.DriftReport {
 		StartedAt:       now,
 		CompletedAt:     now,
 	}
+}
+
+func runTerraformScan(ctx context.Context, runner terraform.Runner, directory string) (report.DriftReport, error) {
+	startedAt := time.Now().UTC()
+	scanReport := report.DriftReport{
+		Status:          report.ScanStatusRunning,
+		Directory:       directory,
+		ResourceChanges: []report.ResourceChange{},
+		StartedAt:       startedAt,
+	}
+
+	if err := runner.Init(ctx, directory); err != nil {
+		scanReport.Status = report.ScanStatusFailed
+		scanReport.CompletedAt = time.Now().UTC()
+		scanReport.ErrorMessage = err.Error()
+		return scanReport, fmt.Errorf("terraform init: %w", err)
+	}
+
+	planFile, cleanup, err := securePlanFile(directory)
+	if err != nil {
+		scanReport.Status = report.ScanStatusFailed
+		scanReport.CompletedAt = time.Now().UTC()
+		scanReport.ErrorMessage = err.Error()
+		return scanReport, err
+	}
+	defer cleanup()
+
+	exitCode, err := runner.PlanRefreshOnly(ctx, directory, planFile)
+	if err != nil {
+		scanReport.Status = report.ScanStatusFailed
+		scanReport.CompletedAt = time.Now().UTC()
+		scanReport.ErrorMessage = err.Error()
+		return scanReport, fmt.Errorf("terraform refresh-only plan: %w", err)
+	}
+	if exitCode == 1 {
+		err := fmt.Errorf("terraform refresh-only plan failed with exit code %d", exitCode)
+		scanReport.Status = report.ScanStatusFailed
+		scanReport.CompletedAt = time.Now().UTC()
+		scanReport.ErrorMessage = err.Error()
+		return scanReport, err
+	}
+
+	planJSON, err := runner.ShowJSON(ctx, directory, planFile)
+	if err != nil {
+		scanReport.Status = report.ScanStatusFailed
+		scanReport.CompletedAt = time.Now().UTC()
+		scanReport.ErrorMessage = err.Error()
+		return scanReport, fmt.Errorf("terraform show JSON: %w", err)
+	}
+
+	resourceChanges, totalResources, err := parser.ParsePlan(planJSON)
+	if err != nil {
+		scanReport.Status = report.ScanStatusFailed
+		scanReport.CompletedAt = time.Now().UTC()
+		scanReport.ErrorMessage = err.Error()
+		return scanReport, err
+	}
+
+	scanReport.ResourceChanges = resourceChanges
+	scanReport.TotalResourcesChecked = totalResources
+	scanReport.TotalChangedResources = len(resourceChanges)
+	scanReport.CompletedAt = time.Now().UTC()
+	return scanReport, nil
+}
+
+func securePlanFile(directory string) (string, func(), error) {
+	file, err := os.CreateTemp(directory, ".terradrift-*.tfplan")
+	if err != nil {
+		return "", func() {}, fmt.Errorf("create secure terraform plan file: %w", err)
+	}
+	path := file.Name()
+	if err := file.Chmod(0o600); err != nil {
+		_ = file.Close()
+		_ = os.Remove(path)
+		return "", func() {}, fmt.Errorf("secure terraform plan file permissions: %w", err)
+	}
+	if err := file.Close(); err != nil {
+		_ = os.Remove(path)
+		return "", func() {}, fmt.Errorf("close terraform plan file: %w", err)
+	}
+	return path, func() { _ = os.Remove(path) }, nil
 }

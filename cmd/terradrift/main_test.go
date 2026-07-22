@@ -126,6 +126,50 @@ func TestScanAcceptsTimeoutFlag(t *testing.T) {
 	}
 }
 
+func TestInitCreatesDefaultConfig(t *testing.T) {
+	path := filepath.Join(t.TempDir(), ".terradrift.json")
+	stdout, _, err := executeCommand("init", "--config", path)
+	if err != nil {
+		t.Fatalf("expected init to create config: %v", err)
+	}
+	if !strings.Contains(stdout, "Created TerraDrift config: "+path) {
+		t.Fatalf("expected init output to include config path, got %q", stdout)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("expected config file to exist: %v", err)
+	}
+	if !strings.Contains(string(data), `"directory": "."`) {
+		t.Fatalf("expected default config content, got %q", data)
+	}
+}
+
+func TestScanLoadsConfigFile(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(t.TempDir(), ".terradrift.json")
+	configJSON := `{
+  "directory": "` + filepath.ToSlash(dir) + `",
+  "output": "json",
+  "timeout": "1s",
+  "redact_paths": true
+}`
+	if err := os.WriteFile(path, []byte(configJSON), 0o600); err != nil {
+		t.Fatalf("write config fixture: %v", err)
+	}
+
+	stdout, _, err := executeCommand("scan", "--config", path)
+	if err != nil {
+		t.Fatalf("expected scan config to load: %v", err)
+	}
+	var scanReport report.DriftReport
+	if err := json.Unmarshal([]byte(stdout), &scanReport); err != nil {
+		t.Fatalf("expected JSON output from config, got %v: %q", err, stdout)
+	}
+	if scanReport.Directory != "[REDACTED]" {
+		t.Fatalf("expected redacted directory from config, got %q", scanReport.Directory)
+	}
+}
+
 func TestScanAcceptsCaseInsensitiveTrimmedOutputFormat(t *testing.T) {
 	dir := t.TempDir()
 	stdout, _, err := executeCommand("scan", "-d", dir, "--output", " JSON ")
@@ -192,5 +236,11 @@ func TestScanReturnsOutputWriteError(t *testing.T) {
 func TestExitCodeConstants(t *testing.T) {
 	if exitCodeOK != 0 || exitCodeFailure != 1 || exitCodeDriftDetected != 2 {
 		t.Fatalf("unexpected exit code constants: ok=%d failure=%d drift=%d", exitCodeOK, exitCodeFailure, exitCodeDriftDetected)
+	}
+}
+
+func TestExitCodeForDriftDetected(t *testing.T) {
+	if got := exitCodeForError(errDriftDetected); got != exitCodeDriftDetected {
+		t.Fatalf("expected drift exit code %d, got %d", exitCodeDriftDetected, got)
 	}
 }
