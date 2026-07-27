@@ -19,8 +19,7 @@ type fakeRunner struct {
 	showJSON   []byte
 	showErr    error
 	planPath   string
-	showPath   string
-	cleanupDir string
+	showPath string
 }
 
 func (runner *fakeRunner) Init(ctx context.Context, directory string) error {
@@ -29,7 +28,6 @@ func (runner *fakeRunner) Init(ctx context.Context, directory string) error {
 
 func (runner *fakeRunner) PlanRefreshOnly(ctx context.Context, directory string, outputPath string) (int, error) {
 	runner.planPath = outputPath
-	runner.cleanupDir = directory
 	return runner.planExit, runner.planErr
 }
 

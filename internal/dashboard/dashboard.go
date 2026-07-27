@@ -45,11 +45,6 @@ var reportTemplate = template.Must(template.New("dashboard").Parse(`<!doctype ht
 </html>
 `))
 
-// Render writes a static, escaped HTML dashboard for a scan report.
-func Render(w io.Writer, scanReport report.DriftReport) error {
-	return RenderWithHistory(w, Data{Current: scanReport})
-}
-
 // RenderWithHistory writes a static, escaped HTML dashboard with optional history.
 func RenderWithHistory(w io.Writer, data Data) error {
 	if err := reportTemplate.Execute(w, data); err != nil {

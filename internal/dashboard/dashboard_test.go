@@ -10,7 +10,7 @@ import (
 
 func TestRenderEscapesResourceFields(t *testing.T) {
 	var output bytes.Buffer
-	err := Render(&output, report.DriftReport{
+	err := RenderWithHistory(&output, Data{Current: report.DriftReport{
 		Status:                report.ScanStatusDriftDetected,
 		TotalResourcesChecked: 1,
 		TotalChangedResources: 1,
@@ -20,7 +20,7 @@ func TestRenderEscapesResourceFields(t *testing.T) {
 			Name:    "web",
 			Actions: []string{"update"},
 		}},
-	})
+	}})
 	if err != nil {
 		t.Fatalf("expected dashboard render to succeed: %v", err)
 	}

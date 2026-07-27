@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log/slog"
 	"os"
 	"strings"
 	"time"
@@ -15,7 +14,6 @@ import (
 	"github.com/niravraychura/terradrift/internal/cost"
 	"github.com/niravraychura/terradrift/internal/dashboard"
 	"github.com/niravraychura/terradrift/internal/history"
-	"github.com/niravraychura/terradrift/internal/logger"
 	"github.com/niravraychura/terradrift/internal/notify"
 	"github.com/niravraychura/terradrift/internal/policy"
 	"github.com/niravraychura/terradrift/internal/report"
@@ -58,25 +56,14 @@ func exitCodeForError(err error) int {
 }
 
 func newRootCommand(stdout, stderr io.Writer) *cobra.Command {
-	var logLevel string
-
 	cmd := &cobra.Command{
 		Use:           "terradrift",
 		Short:         "Self-hosted Terraform drift detection",
 		SilenceUsage:  true,
 		SilenceErrors: true,
-		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-			level, err := logger.ParseLevel(logLevel)
-			if err != nil {
-				return err
-			}
-			slog.SetDefault(logger.New(stderr, level))
-			return nil
-		},
 	}
 	cmd.SetOut(stdout)
 	cmd.SetErr(stderr)
-	cmd.PersistentFlags().StringVar(&logLevel, "log-level", "info", "log level: debug, info, warn, error")
 	cmd.AddCommand(newScanCommand(stdout))
 	cmd.AddCommand(newInitCommand(stdout))
 	return cmd
@@ -91,19 +78,12 @@ func newInitCommand(stdout io.Writer) *cobra.Command {
 			if err := config.WriteDefault(path); err != nil {
 				return err
 			}
-			_, err := fmt.Fprintf(stdout, "Created TerraDrift config: %s\n", configPath(path))
+			_, err := fmt.Fprintf(stdout, "Created TerraDrift config: %s\n", path)
 			return err
 		},
 	}
 	cmd.Flags().StringVar(&path, "config", config.DefaultPath, "config file path to create")
 	return cmd
-}
-
-func configPath(path string) string {
-	if path == "" {
-		return config.DefaultPath
-	}
-	return path
 }
 
 func newScanCommand(stdout io.Writer) *cobra.Command {
