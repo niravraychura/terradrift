@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+
+	"github.com/niravraychura/terradrift/internal/report"
 )
 
 const DefaultPath = ".terradrift.json"
@@ -28,6 +30,7 @@ type Config struct {
 	CostCommand         string                     `json:"cost_command"`
 	CostArgs            []string                   `json:"cost_args"`
 	RemediationRunbooks map[string]string          `json:"remediation_runbooks"`
+	IgnoreRules         []report.IgnoreRule        `json:"ignore_rules"`
 	Profiles            map[string]json.RawMessage `json:"profiles,omitempty"`
 }
 

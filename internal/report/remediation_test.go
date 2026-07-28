@@ -3,6 +3,7 @@ package report
 import (
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestRemediationForActions(t *testing.T) {
@@ -44,5 +45,23 @@ func TestReconciliationHintForActions(t *testing.T) {
 		if hint := strings.ToLower(ReconciliationHintForActions(actions)); !strings.Contains(hint, "review only") {
 			t.Fatalf("expected review-only hint for %v, got %q", actions, hint)
 		}
+	}
+}
+
+func TestApplyIgnoreRules(t *testing.T) {
+	scanReport := DriftReport{Status: ScanStatusDriftDetected, TotalChangedResources: 1, ResourceChanges: []ResourceChange{{Address: "aws_instance.web"}}}
+	rules := []IgnoreRule{{Address: "aws_instance.web", Owner: "platform", Reason: "approved maintenance", ExpiresAt: time.Now().Add(time.Hour).UTC().Format(time.RFC3339)}}
+	if err := ApplyIgnoreRules(&scanReport, rules); err != nil {
+		t.Fatalf("apply ignore rules: %v", err)
+	}
+	if scanReport.Status != ScanStatusNoDrift || scanReport.TotalChangedResources != 0 || !scanReport.ResourceChanges[0].Ignored || scanReport.ResourceChanges[0].IgnoreOwner != "platform" {
+		t.Fatalf("unexpected ignored report: %#v", scanReport)
+	}
+}
+
+func TestApplyIgnoreRulesRejectsExpiredRule(t *testing.T) {
+	err := ApplyIgnoreRules(&DriftReport{}, []IgnoreRule{{Address: "aws_instance.web", Owner: "platform", Reason: "expired", ExpiresAt: "2020-01-01T00:00:00Z"}})
+	if err == nil {
+		t.Fatal("expected expired rule to be rejected")
 	}
 }

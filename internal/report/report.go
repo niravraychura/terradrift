@@ -23,6 +23,18 @@ type ResourceChange struct {
 	ReconciliationHint string   `json:"reconciliation_hint,omitempty"`
 	RunbookURL         string   `json:"runbook_url,omitempty"`
 	CostImpact         string   `json:"cost_impact,omitempty"`
+	Ignored            bool     `json:"ignored,omitempty"`
+	IgnoreOwner        string   `json:"ignore_owner,omitempty"`
+	IgnoreReason       string   `json:"ignore_reason,omitempty"`
+	IgnoreExpiresAt    string   `json:"ignore_expires_at,omitempty"`
+}
+
+// IgnoreRule records a temporary, auditable exception for one resource address.
+type IgnoreRule struct {
+	Address   string `json:"address"`
+	Owner     string `json:"owner"`
+	Reason    string `json:"reason"`
+	ExpiresAt string `json:"expires_at"`
 }
 
 // DriftReport captures the domain result of a Terraform drift scan.

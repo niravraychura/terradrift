@@ -294,6 +294,7 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 	var costCommand string
 	var costArgs []string
 	var remediationRunbooks map[string]string
+	var ignoreRules []report.IgnoreRule
 
 	cmd := &cobra.Command{
 		Use:   "scan",
@@ -363,6 +364,7 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 					costArgs = append([]string(nil), cfg.CostArgs...)
 				}
 				remediationRunbooks = cfg.RemediationRunbooks
+				ignoreRules = cfg.IgnoreRules
 			}
 
 			parsedFormat, err := parseOutputFormat(format)
@@ -385,6 +387,9 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 			}
 
 			scanReport := result.Report
+			if err := report.ApplyIgnoreRules(&scanReport, ignoreRules); err != nil {
+				return err
+			}
 			if costCommand != "" {
 				enrichedReport, err := cost.Enrich(cmd.Context(), cost.Options{Command: costCommand, Args: costArgs}, scanReport)
 				if err != nil {
@@ -427,7 +432,7 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 					return err
 				}
 			}
-			if result.Outcome == scanner.OutcomeDriftDetected {
+			if scanReport.Status == report.ScanStatusDriftDetected {
 				return errDriftDetected
 			}
 			return nil

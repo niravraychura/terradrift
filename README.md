@@ -269,6 +269,21 @@ Each changed resource includes conservative remediation guidance based on Terraf
 
 Reports also include review-only reconciliation hints for imports, moved blocks, and configuration updates. TerraDrift never runs state commands or applies infrastructure changes.
 
+Use exact-address `ignore_rules` for temporary, auditable exceptions. Each rule requires an owner, reason, and future RFC3339 expiry. Ignored findings stay visible in reports and dashboards but do not fail the scan.
+
+```json
+{
+  "ignore_rules": [
+    {
+      "address": "aws_instance.web",
+      "owner": "platform-team",
+      "reason": "approved maintenance window",
+      "expires_at": "2026-08-01T00:00:00Z"
+    }
+  ]
+}
+```
+
 Set `remediation_runbooks` in `.terradrift.json` to link resources to HTTPS runbooks. Type/action entries override type entries:
 
 ```json
