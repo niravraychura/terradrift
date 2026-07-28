@@ -231,6 +231,10 @@ make docker-build
 
 The current runtime image intentionally does not install Terraform. To use `--terraform-exec` in Docker, build a derived image that installs Terraform or mount/provide a trusted Terraform binary on `PATH`. Pin Terraform, provider, and module versions in CI for repeatable drift results.
 
+## Terraform caching
+
+For scheduled CI scans, set `TF_PLUGIN_CACHE_DIR` to a job cache directory and cache it using a key that includes the Terraform lockfile hash and platform. Keep `.terraform.lock.hcl` committed; invalidate the cache when it changes. Do not share plugin caches between trust boundaries.
+
 ## Terraform execution flow
 
 When `--terraform-exec` is provided, `terradrift scan` performs this flow:

@@ -105,7 +105,7 @@ This plan tracks security, performance, code quality, and feature work for Terra
 - [x] Sort resource changes by address for deterministic output.
 - [ ] Model complete, partial, and drift outcomes for multi-root scans.
 - [ ] Stream or bound large Terraform JSON input and fail fast when Terraform roots have no configuration.
-- [ ] Document Terraform provider/plugin caching with `TF_PLUGIN_CACHE_DIR` and CI cache keys.
+- [x] Document Terraform provider/plugin caching with `TF_PLUGIN_CACHE_DIR` and CI cache keys.
 - [ ] Parallelize independent post-scan enrichment and delivery work safely.
 - [ ] Add incremental scan manifests, history retention pruning, and optional compressed history artifacts.
 - [ ] Normalize workspace and output paths once through a validated execution context.
