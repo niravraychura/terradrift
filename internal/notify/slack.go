@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"strings"
 
 	"github.com/niravraychura/terradrift/internal/redact"
 	"github.com/niravraychura/terradrift/internal/report"
@@ -26,13 +25,13 @@ type SlackNotifier struct {
 
 // Notify sends a concise, redacted scan summary to Slack.
 func (notifier SlackNotifier) Notify(ctx context.Context, scanReport report.DriftReport) error {
-	webhookURL := strings.TrimSpace(notifier.WebhookURL)
-	if webhookURL == "" {
-		return fmt.Errorf("slack webhook URL is required")
+	webhookURL, err := validateGenericWebhookURL(notifier.WebhookURL)
+	if err != nil {
+		return err
 	}
 	client := notifier.Client
 	if client == nil {
-		client = http.DefaultClient
+		client = secureWebhookClient()
 	}
 
 	payload := slackPayload{Text: RedactedNotificationMessage(scanReport)}
@@ -52,10 +51,10 @@ func (notifier SlackNotifier) Notify(ctx context.Context, scanReport report.Drif
 		return fmt.Errorf("send Slack notification to %s: %w", redact.String(webhookURL), err)
 	}
 	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
-		_ = response.Body.Close()
+		_ = closeResponseBody(response.Body)
 		return fmt.Errorf("send Slack notification to %s: unexpected status %s", redact.String(webhookURL), response.Status)
 	}
-	if err := response.Body.Close(); err != nil {
+	if err := closeResponseBody(response.Body); err != nil {
 		return fmt.Errorf("close Slack notification response: %w", err)
 	}
 	return nil
@@ -63,7 +62,8 @@ func (notifier SlackNotifier) Notify(ctx context.Context, scanReport report.Drif
 
 // RedactedNotificationMessage formats a scan summary without leaking raw local paths.
 func RedactedNotificationMessage(scanReport report.DriftReport) string {
-	return fmt.Sprintf("Terraform drift scan completed\nStatus: %s\nResources checked: %d\nChanged resources: %d",
+	return fmt.Sprintf("Terraform drift scan completed\nScan ID: %s\nStatus: %s\nResources checked: %d\nChanged resources: %d",
+		scanReport.ScanID,
 		scanReport.Status,
 		scanReport.TotalResourcesChecked,
 		scanReport.TotalChangedResources,

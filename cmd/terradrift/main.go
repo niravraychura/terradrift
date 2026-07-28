@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/niravraychura/terradrift/internal/audit"
+	"github.com/niravraychura/terradrift/internal/auditlog"
 	"github.com/niravraychura/terradrift/internal/command"
 	"github.com/niravraychura/terradrift/internal/config"
 	"github.com/niravraychura/terradrift/internal/cost"
@@ -25,6 +26,7 @@ import (
 	"github.com/niravraychura/terradrift/internal/history"
 	"github.com/niravraychura/terradrift/internal/notify"
 	"github.com/niravraychura/terradrift/internal/policy"
+	"github.com/niravraychura/terradrift/internal/redact"
 	"github.com/niravraychura/terradrift/internal/report"
 	"github.com/niravraychura/terradrift/internal/scanner"
 	"github.com/niravraychura/terradrift/internal/terraform"
@@ -42,6 +44,13 @@ const (
 	exitCodeDriftDetected = 2
 )
 
+const (
+	maxApprovalBytes   = 64 * 1024
+	maxArtifactBytes   = 1 << 20
+	maxManifestBytes   = 1 << 20
+	maxDeliveryWorkers = 4
+)
+
 type outputFormat string
 
 const (
@@ -56,7 +65,7 @@ func main() {
 	if err := newRootCommand(os.Stdout, os.Stderr).Execute(); err != nil {
 		code := exitCodeForError(err)
 		if code != exitCodeDriftDetected && !errors.Is(err, errMultiScanFailed) {
-			fmt.Fprintln(os.Stderr, "Error:", err)
+			fmt.Fprintln(os.Stderr, "Error:", redact.String(err.Error()))
 		}
 		os.Exit(code)
 	}
@@ -68,6 +77,22 @@ func exitCodeForError(err error) int {
 		return exitCodeDriftDetected
 	}
 	return exitCodeFailure
+}
+
+func readLimitedFile(path string, maximum int) ([]byte, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = file.Close() }()
+	data, err := io.ReadAll(io.LimitReader(file, int64(maximum+1)))
+	if err != nil {
+		return nil, err
+	}
+	if len(data) > maximum {
+		return nil, fmt.Errorf("file exceeds %d bytes", maximum)
+	}
+	return data, nil
 }
 
 func newRootCommand(stdout, stderr io.Writer) *cobra.Command {
@@ -98,7 +123,7 @@ func newApproveCommand(stdout io.Writer) *cobra.Command {
 		Use:   "approve",
 		Short: "Create a review-only approval for a drift report",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			data, err := os.ReadFile(reportPath)
+			data, err := readLimitedFile(reportPath, maxArtifactBytes)
 			if err != nil {
 				return fmt.Errorf("read report %s: %w", reportPath, err)
 			}
@@ -112,6 +137,10 @@ func newApproveCommand(stdout io.Writer) *cobra.Command {
 			}
 			if output == "" {
 				output = reportPath + ".approval.json"
+			}
+			output, err = normalizeOutputPath(output)
+			if err != nil {
+				return err
 			}
 			data, err = json.MarshalIndent(approval, "", "  ")
 			if err != nil {
@@ -161,7 +190,8 @@ func newDashboardIndexCommand(stdout io.Writer) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if err := rejectSymlink(output); err != nil {
+			output, err = normalizeOutputPath(output)
+			if err != nil {
 				return err
 			}
 			file, err := os.OpenFile(output, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
@@ -297,6 +327,7 @@ func newScanAllCommand(stdout io.Writer) *cobra.Command {
 	var terraformBin string
 	var workspaceRoot string
 	var redactPaths bool
+	var incrementalState string
 
 	cmd := &cobra.Command{
 		Use:   "scan-all",
@@ -304,6 +335,13 @@ func newScanAllCommand(stdout io.Writer) *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if (manifest == "") == (discover == "") {
 				return fmt.Errorf("provide exactly one of --manifest or --discover")
+			}
+			if incrementalState != "" {
+				normalized, err := normalizeOutputPath(incrementalState)
+				if err != nil {
+					return err
+				}
+				incrementalState = normalized
 			}
 			var directories []string
 			var err error
@@ -314,6 +352,12 @@ func newScanAllCommand(stdout io.Writer) *cobra.Command {
 			}
 			if err != nil {
 				return err
+			}
+			if incrementalState != "" {
+				directories, err = incrementalRoots(incrementalState, directories)
+				if err != nil {
+					return err
+				}
 			}
 			parsedFormat, err := parseOutputFormat(format)
 			if err != nil {
@@ -327,12 +371,21 @@ func newScanAllCommand(stdout io.Writer) *cobra.Command {
 			}
 
 			options := scanner.Options{Timeout: timeout, WorkspaceRoot: workspaceRoot}
+			options, err = scanner.PrepareOptions(options)
+			if err != nil {
+				return err
+			}
 			if terraformExec {
 				options.Runner = terraform.NewCLIRunner(terraformBin)
 			}
 			aggregate := scanAll(cmd.Context(), directories, options, concurrency, redactPaths)
 			if err := writeMultiScanReport(stdout, aggregate, parsedFormat); err != nil {
 				return err
+			}
+			if incrementalState != "" {
+				if err := writeIncrementalState(incrementalState, aggregate); err != nil {
+					return err
+				}
 			}
 			if aggregate.FailedRoots > 0 {
 				return fmt.Errorf("%w: %d roots", errMultiScanFailed, aggregate.FailedRoots)
@@ -354,16 +407,26 @@ func newScanAllCommand(stdout io.Writer) *cobra.Command {
 	cmd.Flags().StringVar(&terraformBin, "terraform-bin", "", "Terraform-compatible executable to run (default: terraform)")
 	cmd.Flags().StringVar(&workspaceRoot, "workspace-root", "", "require roots to resolve inside this workspace root")
 	cmd.Flags().BoolVar(&redactPaths, "redact-paths", false, "redact local filesystem paths from scan output")
+	cmd.Flags().StringVar(&incrementalState, "incremental-state", "", "JSON state file; retry only roots previously drifted or failed")
 	return cmd
 }
 
 func newInitCommand(stdout io.Writer) *cobra.Command {
 	var path string
+	var directory string
+	var terraformExec bool
+	var redactPaths bool
+	var historyDir string
 	cmd := &cobra.Command{
 		Use:   "init",
-		Short: "Create a starter TerraDrift config file",
+		Short: "Create a tailored TerraDrift config file",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := config.WriteDefault(path); err != nil {
+			cfg := config.Default()
+			cfg.Directory = directory
+			cfg.TerraformExec = terraformExec
+			cfg.RedactPaths = redactPaths
+			cfg.HistoryDir = historyDir
+			if err := config.Write(path, cfg); err != nil {
 				return err
 			}
 			_, err := fmt.Fprintf(stdout, "Created TerraDrift config: %s\n", path)
@@ -371,6 +434,10 @@ func newInitCommand(stdout io.Writer) *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&path, "config", config.DefaultPath, "config file path to create")
+	cmd.Flags().StringVar(&directory, "directory", ".", "Terraform directory for the generated config")
+	cmd.Flags().BoolVar(&terraformExec, "terraform-exec", false, "enable Terraform execution in the generated config")
+	cmd.Flags().BoolVar(&redactPaths, "redact-paths", false, "redact paths in the generated config")
+	cmd.Flags().StringVar(&historyDir, "history-dir", "", "history directory for the generated config")
 	return cmd
 }
 
@@ -396,6 +463,7 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 	var costCommand string
 	var costArgs []string
 	var remediationRunbooks map[string]string
+	var baselineRules []report.IgnoreRule
 	var ignoreRules []report.IgnoreRule
 	var failureSeverity string
 	var resourceOwners map[string]string
@@ -410,6 +478,8 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 	var auditArgs []string
 	var allowedCommands []string
 	var trustedCommandDirs []string
+	var auditLogPath string
+	var historyCompressed bool
 
 	cmd := &cobra.Command{
 		Use:   "scan",
@@ -417,7 +487,21 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 		Example: `  terradrift scan
   terradrift scan --directory ./terraform/prod
   terradrift scan -d ./terraform/prod --output json`,
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, args []string) (runErr error) {
+			var auditReport report.DriftReport
+			defer func() {
+				if auditLogPath == "" {
+					return
+				}
+				event := auditlog.Event{Event: "scan_completed", ScanID: auditReport.ScanID, Status: string(auditReport.Status), Workspace: filepath.Base(auditReport.Directory), Config: filepath.Base(scanConfigPath), Profile: configProfile, TerraformVersion: auditReport.TerraformVersion, Commands: auditCommandNames(terraformExec, terraformBin, costCommand, policyCommand, auditCommand)}
+				if runErr != nil {
+					event.Event = "scan_failed"
+					event.Error = runErr.Error()
+				}
+				if err := auditlog.Append(auditLogPath, event); err != nil && runErr == nil {
+					runErr = err
+				}
+			}()
 			if scanConfigPath != "" || configProfile != "" {
 				cfg, err := config.LoadProfile(scanConfigPath, configProfile)
 				if err != nil {
@@ -469,6 +553,12 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 				if !cmd.Flags().Changed("history-retention") {
 					historyRetention = cfg.HistoryRetention
 				}
+				if !cmd.Flags().Changed("history-compressed") {
+					historyCompressed = cfg.HistoryCompressed
+				}
+				if !cmd.Flags().Changed("audit-log") {
+					auditLogPath = cfg.AuditLog
+				}
 				if !cmd.Flags().Changed("policy-command") {
 					policyCommand = cfg.PolicyCommand
 				}
@@ -482,6 +572,7 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 					costArgs = append([]string(nil), cfg.CostArgs...)
 				}
 				remediationRunbooks = cfg.RemediationRunbooks
+				baselineRules = cfg.BaselineRules
 				ignoreRules = cfg.IgnoreRules
 				resourceOwners = cfg.ResourceOwners
 				ownerWebhooks = cfg.OwnerWebhooks
@@ -528,46 +619,61 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 			if githubIssueAfter > 0 && (githubIssueAfter < 2 || githubRepository == "" || historyDir == "") {
 				return fmt.Errorf("github-issue-after requires github-repository, history-dir, and a value of at least 2")
 			}
+			pipelineTimeout := timeout
+			if pipelineTimeout <= 0 {
+				pipelineTimeout = scanner.DefaultTimeout
+			}
+			scanContext, cancel := context.WithTimeout(cmd.Context(), pipelineTimeout)
+			defer cancel()
+			for _, path := range []*string{&dashboardHTMLPath, &historyDir, &auditLogPath} {
+				if *path == "" {
+					continue
+				}
+				normalized, err := normalizeOutputPath(*path)
+				if err != nil {
+					return err
+				}
+				*path = normalized
+			}
 
 			scanOptions := scanner.Options{
 				Directory:     directory,
 				Timeout:       timeout,
 				WorkspaceRoot: workspaceRoot,
 			}
+			scanOptions, err = scanner.PrepareOptions(scanOptions)
+			if err != nil {
+				return err
+			}
 			if terraformExec {
 				scanOptions.Runner = terraform.NewCLIRunner(terraformBin)
 				scanOptions.RequireTerraformFiles = true
 			}
 
-			result, err := scanner.Scan(cmd.Context(), scanOptions)
+			result, err := scanner.Scan(scanContext, scanOptions)
 			if err != nil {
+				if redactPaths {
+					return errors.New("scan failed")
+				}
 				return err
 			}
+			auditReport = result.Report
 
 			scanReport := result.Report
-			if err := report.ApplyIgnoreRules(&scanReport, ignoreRules); err != nil {
+			if err := report.ApplyIgnoreRules(&scanReport, append(append([]report.IgnoreRule(nil), baselineRules...), ignoreRules...)); err != nil {
 				return err
 			}
 			report.ApplyOwners(&scanReport, resourceOwners)
-			if costCommand != "" {
-				enrichedReport, err := cost.Enrich(cmd.Context(), cost.Options{Command: costCommand, Args: costArgs}, scanReport)
-				if err != nil {
-					return err
-				}
-				scanReport = enrichedReport
+			enrichedReport, err := enrichReport(scanContext, scanReport, costCommand, costArgs, auditCommand, auditArgs)
+			if err != nil {
+				return err
 			}
+			scanReport = enrichedReport
 			if err := report.ApplyRunbooks(&scanReport, remediationRunbooks); err != nil {
 				return err
 			}
-			if auditCommand != "" {
-				enrichedReport, err := audit.Enrich(cmd.Context(), audit.Options{Command: auditCommand, Args: auditArgs}, scanReport)
-				if err != nil {
-					return err
-				}
-				scanReport = enrichedReport
-			}
 			if approvalFile != "" {
-				data, err := os.ReadFile(approvalFile)
+				data, err := readLimitedFile(approvalFile, maxApprovalBytes)
 				if err != nil {
 					return fmt.Errorf("read approval %s: %w", approvalFile, err)
 				}
@@ -591,7 +697,10 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 				if err != nil {
 					return fmt.Errorf("encode report artifact: %w", err)
 				}
-				if err := (notify.ArtifactUploader{URL: artifactURL}).Upload(cmd.Context(), artifact, "application/json"); err != nil {
+				if len(artifact) > maxArtifactBytes {
+					return fmt.Errorf("report artifact exceeds %d bytes", maxArtifactBytes)
+				}
+				if err := (notify.ArtifactUploader{URL: artifactURL}).Upload(scanContext, artifact, "application/json"); err != nil {
 					return err
 				}
 			}
@@ -602,14 +711,20 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 				if err != nil {
 					return err
 				}
-				previousReport = previousReportForDirectory(entries, scanReport.Directory)
+				previousReport = previousReportForRoot(entries, scanReport)
 				if shouldCreatePersistentIssue(scanReport, entries, githubIssueAfter) {
-					if err := (notify.GitHubIssueNotifier{Repository: githubRepository, Token: os.Getenv("GITHUB_TOKEN")}).Notify(cmd.Context(), scanReport); err != nil {
+					if err := (notify.GitHubIssueNotifier{Repository: githubRepository, Token: os.Getenv("GITHUB_TOKEN")}).Notify(scanContext, scanReport); err != nil {
 						return err
 					}
 				}
-				if _, err := history.Write(historyDir, scanReport); err != nil {
-					return err
+				var historyWriteErr error
+				if historyCompressed {
+					_, historyWriteErr = history.WriteCompressed(historyDir, scanReport)
+				} else {
+					_, historyWriteErr = history.Write(historyDir, scanReport)
+				}
+				if historyWriteErr != nil {
+					return historyWriteErr
 				}
 				if historyRetention > 0 {
 					if err := history.Prune(historyDir, historyRetention); err != nil {
@@ -628,49 +743,13 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 				}
 			}
 			if policyCommand != "" {
-				if err := policy.Run(cmd.Context(), policy.Options{Command: policyCommand, Args: policyArgs}, scanReport); err != nil {
+				if err := policy.Run(scanContext, policy.Options{Command: policyCommand, Args: policyArgs}, scanReport); err != nil {
 					return err
 				}
 			}
 			shouldNotify := !notificationThrottle || report.ShouldNotify(scanReport, previousReport)
-			if notifyTarget != "" && shouldNotify {
-				if err := sendNotification(cmd.Context(), notifyTarget, slackWebhookURL, teamsWebhookURL, webhookURL, scanReport); err != nil {
-					return err
-				}
-			}
-			if githubRepository != "" && githubPR > 0 && shouldNotify {
-				if err := (notify.GitHubPRNotifier{Repository: githubRepository, Number: githubPR, Token: os.Getenv("GITHUB_TOKEN")}).Notify(cmd.Context(), scanReport); err != nil {
-					return err
-				}
-			}
-			for owner, webhookURL := range ownerWebhooks {
-				ownerReport := scanReport
-				ownerReport.ResourceChanges = nil
-				for _, change := range scanReport.ResourceChanges {
-					if change.Owner == owner && !change.Ignored {
-						ownerReport.ResourceChanges = append(ownerReport.ResourceChanges, change)
-					}
-				}
-				if len(ownerReport.ResourceChanges) == 0 {
-					continue
-				}
-				ownerReport.TotalChangedResources = len(ownerReport.ResourceChanges)
-				if notificationThrottle {
-					previousOwnerReport := previousReport
-					previousOwnerReport.ResourceChanges = nil
-					for _, change := range previousReport.ResourceChanges {
-						if change.Owner == owner && !change.Ignored {
-							previousOwnerReport.ResourceChanges = append(previousOwnerReport.ResourceChanges, change)
-						}
-					}
-					previousOwnerReport.TotalChangedResources = len(previousOwnerReport.ResourceChanges)
-					if !report.ShouldNotify(ownerReport, previousOwnerReport) {
-						continue
-					}
-				}
-				if err := (notify.WebhookNotifier{WebhookURL: webhookURL}).Notify(cmd.Context(), ownerReport); err != nil {
-					return err
-				}
+			if err := deliverNotifications(scanContext, notifyTarget, slackWebhookURL, teamsWebhookURL, webhookURL, githubRepository, githubPR, ownerWebhooks, notificationThrottle, scanReport, previousReport, shouldNotify); err != nil {
+				return err
 			}
 			if scanReport.Status == report.ScanStatusDriftDetected {
 				if failureSeverity != "" {
@@ -711,6 +790,8 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 	cmd.Flags().StringVar(&dashboardHTMLPath, "dashboard-html", "", "write a static HTML dashboard report to this path")
 	cmd.Flags().StringVar(&historyDir, "history-dir", "", "write JSON scan history to this directory and include recent history in dashboards")
 	cmd.Flags().IntVar(&historyRetention, "history-retention", 0, "maximum history reports to retain (0 keeps all)")
+	cmd.Flags().BoolVar(&historyCompressed, "history-compressed", false, "store history reports as gzip-compressed JSON")
+	cmd.Flags().StringVar(&auditLogPath, "audit-log", "", "append secret-safe JSON audit events to this path")
 	cmd.Flags().StringVar(&policyCommand, "policy-command", "", "policy command to run with the scan report JSON on stdin")
 	cmd.Flags().StringArrayVar(&policyArgs, "policy-arg", nil, "policy command argument; repeat for multiple arguments")
 	cmd.Flags().StringVar(&costCommand, "cost-command", "", "cost command to enrich the scan report from JSON stdin/stdout")
@@ -747,9 +828,33 @@ func rejectSymlink(path string) error {
 	return nil
 }
 
-func previousReportForDirectory(entries []history.Entry, directory string) report.DriftReport {
+func normalizeOutputPath(path string) (string, error) {
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return "", fmt.Errorf("resolve output path %s: %w", path, err)
+	}
+	if err := rejectSymlink(absPath); err != nil {
+		return "", err
+	}
+	for directory := filepath.Dir(absPath); ; directory = filepath.Dir(directory) {
+		info, err := os.Lstat(directory)
+		if err == nil && info.Mode()&os.ModeSymlink != 0 {
+			return "", fmt.Errorf("output parent must not be a symlink: %s", directory)
+		}
+		if err != nil && !os.IsNotExist(err) {
+			return "", fmt.Errorf("inspect output parent %s: %w", directory, err)
+		}
+		parent := filepath.Dir(directory)
+		if parent == directory {
+			break
+		}
+	}
+	return absPath, nil
+}
+
+func previousReportForRoot(entries []history.Entry, current report.DriftReport) report.DriftReport {
 	for _, entry := range entries {
-		if entry.Report.Directory == directory {
+		if sameRoot(entry.Report, current) {
 			return entry.Report
 		}
 	}
@@ -763,7 +868,7 @@ func shouldCreatePersistentIssue(current report.DriftReport, entries []history.E
 	consecutive := 0
 	for _, entry := range entries {
 		previous := entry.Report
-		if previous.Directory != current.Directory {
+		if !sameRoot(previous, current) {
 			continue
 		}
 		if previous.Status != report.ScanStatusDriftDetected || report.DriftFingerprint(previous) != report.DriftFingerprint(current) {
@@ -772,6 +877,13 @@ func shouldCreatePersistentIssue(current report.DriftReport, entries []history.E
 		consecutive++
 	}
 	return consecutive == threshold-1
+}
+
+func sameRoot(left, right report.DriftReport) bool {
+	if left.RootID != "" && right.RootID != "" {
+		return left.RootID == right.RootID
+	}
+	return left.Directory == right.Directory
 }
 
 func sendNotification(ctx context.Context, target string, slackWebhookURL string, teamsWebhookURL string, webhookURL string, scanReport report.DriftReport) error {
@@ -785,6 +897,141 @@ func sendNotification(ctx context.Context, target string, slackWebhookURL string
 	default:
 		return fmt.Errorf("unsupported notification target %q; supported values: slack, teams, webhook", target)
 	}
+}
+
+func auditCommandNames(terraformExec bool, terraformBin, costCommand, policyCommand, auditCommand string) []string {
+	commands := make([]string, 0, 4)
+	if terraformExec {
+		if terraformBin == "" {
+			terraformBin = "terraform"
+		}
+		commands = append(commands, filepath.Base(terraformBin))
+	}
+	for _, command := range []string{costCommand, policyCommand, auditCommand} {
+		if command != "" {
+			commands = append(commands, filepath.Base(command))
+		}
+	}
+	return commands
+}
+
+func enrichReport(ctx context.Context, scanReport report.DriftReport, costCommand string, costArgs []string, auditCommand string, auditArgs []string) (report.DriftReport, error) {
+	if costCommand == "" && auditCommand == "" {
+		return scanReport, nil
+	}
+	if costCommand == "" {
+		return audit.Enrich(ctx, audit.Options{Command: auditCommand, Args: auditArgs}, scanReport)
+	}
+	if auditCommand == "" {
+		return cost.Enrich(ctx, cost.Options{Command: costCommand, Args: costArgs}, scanReport)
+	}
+
+	var costReport, auditReport report.DriftReport
+	var costErr, auditErr error
+	costInput := scanReport
+	costInput.ResourceChanges = append([]report.ResourceChange(nil), scanReport.ResourceChanges...)
+	auditInput := scanReport
+	auditInput.ResourceChanges = append([]report.ResourceChange(nil), scanReport.ResourceChanges...)
+	var workers sync.WaitGroup
+	workers.Add(2)
+	go func() {
+		defer workers.Done()
+		costReport, costErr = cost.Enrich(ctx, cost.Options{Command: costCommand, Args: costArgs}, costInput)
+	}()
+	go func() {
+		defer workers.Done()
+		auditReport, auditErr = audit.Enrich(ctx, audit.Options{Command: auditCommand, Args: auditArgs}, auditInput)
+	}()
+	workers.Wait()
+	if err := errors.Join(costErr, auditErr); err != nil {
+		return scanReport, err
+	}
+	for i := range scanReport.ResourceChanges {
+		scanReport.ResourceChanges[i].CostImpact = costReport.ResourceChanges[i].CostImpact
+		scanReport.ResourceChanges[i].AuditEvents = auditReport.ResourceChanges[i].AuditEvents
+	}
+	return scanReport, nil
+}
+
+type deliveryTask struct {
+	name string
+	run  func() error
+}
+
+func deliverNotifications(ctx context.Context, target, slackWebhookURL, teamsWebhookURL, webhookURL, githubRepository string, githubPR int, ownerWebhooks map[string]string, throttle bool, scanReport, previousReport report.DriftReport, shouldNotify bool) error {
+	if !shouldNotify {
+		return nil
+	}
+	tasks := make([]deliveryTask, 0, len(ownerWebhooks)+2)
+	if target != "" {
+		tasks = append(tasks, deliveryTask{name: "notification", run: func() error {
+			return sendNotification(ctx, target, slackWebhookURL, teamsWebhookURL, webhookURL, scanReport)
+		}})
+	}
+	if githubRepository != "" && githubPR > 0 {
+		tasks = append(tasks, deliveryTask{name: "github pull request", run: func() error {
+			return (notify.GitHubPRNotifier{Repository: githubRepository, Number: githubPR, Token: os.Getenv("GITHUB_TOKEN")}).Notify(ctx, scanReport)
+		}})
+	}
+	owners := make([]string, 0, len(ownerWebhooks))
+	for owner := range ownerWebhooks {
+		owners = append(owners, owner)
+	}
+	sort.Strings(owners)
+	for _, owner := range owners {
+		ownerReport := reportForOwner(scanReport, owner)
+		if len(ownerReport.ResourceChanges) == 0 || (throttle && !report.ShouldNotify(ownerReport, reportForOwner(previousReport, owner))) {
+			continue
+		}
+		webhook := ownerWebhooks[owner]
+		tasks = append(tasks, deliveryTask{name: "owner " + owner, run: func() error {
+			return (notify.WebhookNotifier{WebhookURL: webhook}).Notify(ctx, ownerReport)
+		}})
+	}
+	return runDeliveries(tasks)
+}
+
+func reportForOwner(scanReport report.DriftReport, owner string) report.DriftReport {
+	ownerReport := scanReport
+	ownerReport.ResourceChanges = nil
+	for _, change := range scanReport.ResourceChanges {
+		if change.Owner == owner && !change.Ignored {
+			ownerReport.ResourceChanges = append(ownerReport.ResourceChanges, change)
+		}
+	}
+	ownerReport.TotalChangedResources = len(ownerReport.ResourceChanges)
+	return ownerReport
+}
+
+func runDeliveries(tasks []deliveryTask) error {
+	if len(tasks) == 0 {
+		return nil
+	}
+	jobs := make(chan deliveryTask)
+	errs := make(chan error, len(tasks))
+	var workers sync.WaitGroup
+	for range min(maxDeliveryWorkers, len(tasks)) {
+		workers.Add(1)
+		go func() {
+			defer workers.Done()
+			for task := range jobs {
+				if err := task.run(); err != nil {
+					errs <- fmt.Errorf("%s delivery: %w", task.name, err)
+				}
+			}
+		}()
+	}
+	for _, task := range tasks {
+		jobs <- task
+	}
+	close(jobs)
+	workers.Wait()
+	close(errs)
+	var all []error
+	for err := range errs {
+		all = append(all, err)
+	}
+	return errors.Join(all...)
 }
 
 func parseOutputFormat(format string) (outputFormat, error) {
@@ -822,6 +1069,9 @@ func writeScanReport(stdout io.Writer, scanReport report.DriftReport, format out
 	case outputFormatSARIF:
 		results := make([]sarifResult, 0, len(scanReport.ResourceChanges))
 		for _, change := range scanReport.ResourceChanges {
+			if change.Ignored {
+				continue
+			}
 			results = append(results, sarifResult{RuleID: "terradrift.drift", Level: "error", Message: sarifMessage{Text: fmt.Sprintf("Terraform drift: %s", change.Address)}})
 		}
 		encoder := json.NewEncoder(stdout)
@@ -872,6 +1122,9 @@ func writeScanReport(stdout io.Writer, scanReport report.DriftReport, format out
 		if _, err := fmt.Fprintf(stdout, "Status: %s\n", scanReport.Status); err != nil {
 			return fmt.Errorf("write scan output: %w", err)
 		}
+		if _, err := fmt.Fprintf(stdout, "Scan ID: %s\n", scanReport.ScanID); err != nil {
+			return fmt.Errorf("write scan output: %w", err)
+		}
 		if _, err := fmt.Fprintf(stdout, "Terraform directory: %s\n", scanReport.Directory); err != nil {
 			return fmt.Errorf("write scan output: %w", err)
 		}
@@ -888,6 +1141,7 @@ func writeScanReport(stdout io.Writer, scanReport report.DriftReport, format out
 }
 
 type multiScanReport struct {
+	Status                multiScanStatus `json:"status"`
 	Roots                 []multiScanRoot `json:"roots"`
 	TotalRoots            int             `json:"total_roots"`
 	DriftedRoots          int             `json:"drifted_roots"`
@@ -896,14 +1150,116 @@ type multiScanReport struct {
 	TotalChangedResources int             `json:"total_changed_resources"`
 }
 
+type multiScanStatus string
+
+const (
+	multiScanStatusComplete      multiScanStatus = "complete"
+	multiScanStatusDriftDetected multiScanStatus = "drift_detected"
+	multiScanStatusPartial       multiScanStatus = "partial"
+	multiScanStatusFailed        multiScanStatus = "failed"
+)
+
 type multiScanRoot struct {
 	Directory string             `json:"directory"`
 	Report    report.DriftReport `json:"report,omitempty"`
 	Error     string             `json:"error,omitempty"`
 }
 
+type incrementalState struct {
+	Version int                         `json:"version"`
+	Roots   map[string]incrementalEntry `json:"roots"`
+}
+
+type incrementalEntry struct {
+	Status    multiScanStatus `json:"status"`
+	ScanID    string          `json:"scan_id,omitempty"`
+	Completed time.Time       `json:"completed_at,omitempty"`
+}
+
+func incrementalRoots(path string, directories []string) ([]string, error) {
+	data, err := readLimitedFile(path, maxManifestBytes)
+	if os.IsNotExist(err) {
+		return directories, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("read incremental state %s: %w", path, err)
+	}
+	var state incrementalState
+	if err := json.Unmarshal(data, &state); err != nil {
+		return nil, fmt.Errorf("parse incremental state %s: %w", path, err)
+	}
+	if state.Version != 1 {
+		return nil, fmt.Errorf("unsupported incremental state version %d", state.Version)
+	}
+	roots := make([]string, 0, len(directories))
+	for _, directory := range directories {
+		entry, found := state.Roots[directory]
+		if !found || entry.Status != multiScanStatusComplete {
+			roots = append(roots, directory)
+		}
+	}
+	return roots, nil
+}
+
+func writeIncrementalState(path string, aggregate multiScanReport) error {
+	if err := rejectSymlink(path); err != nil {
+		return err
+	}
+	state := incrementalState{Version: 1, Roots: make(map[string]incrementalEntry, len(aggregate.Roots))}
+	if data, err := readLimitedFile(path, maxManifestBytes); err == nil {
+		if err := json.Unmarshal(data, &state); err != nil || state.Version != 1 {
+			return fmt.Errorf("parse incremental state %s", path)
+		}
+		if state.Roots == nil {
+			state.Roots = make(map[string]incrementalEntry)
+		}
+	} else if !os.IsNotExist(err) {
+		return fmt.Errorf("read incremental state %s: %w", path, err)
+	}
+	for _, root := range aggregate.Roots {
+		entry := incrementalEntry{Status: multiScanStatusComplete}
+		if root.Error != "" {
+			entry.Status = multiScanStatusFailed
+		} else if root.Report.Status == report.ScanStatusDriftDetected {
+			entry.Status = multiScanStatusDriftDetected
+		}
+		entry.ScanID = root.Report.ScanID
+		entry.Completed = root.Report.CompletedAt
+		state.Roots[root.Directory] = entry
+	}
+	data, err := json.MarshalIndent(state, "", "  ")
+	if err != nil {
+		return fmt.Errorf("encode incremental state: %w", err)
+	}
+	data = append(data, '\n')
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return fmt.Errorf("create incremental state directory: %w", err)
+	}
+	file, err := os.CreateTemp(filepath.Dir(path), ".terradrift-state-*")
+	if err != nil {
+		return fmt.Errorf("create incremental state: %w", err)
+	}
+	temporary := file.Name()
+	defer func() { _ = os.Remove(temporary) }()
+	if err := file.Chmod(0o600); err != nil {
+		_ = file.Close()
+		return fmt.Errorf("secure incremental state: %w", err)
+	}
+	if _, err := file.Write(data); err != nil {
+		_ = file.Close()
+		return fmt.Errorf("write incremental state: %w", err)
+	}
+	if err := file.Close(); err != nil {
+		return fmt.Errorf("close incremental state: %w", err)
+	}
+	if err := os.Rename(temporary, path); err != nil {
+		return fmt.Errorf("replace incremental state: %w", err)
+	}
+	return nil
+}
+
 func loadScanManifest(path string) ([]string, error) {
-	data, err := os.ReadFile(path)
+	data, err := readLimitedFile(path, maxManifestBytes)
 	if err != nil {
 		return nil, fmt.Errorf("read scan manifest %s: %w", path, err)
 	}
@@ -1040,7 +1396,21 @@ func scanAll(ctx context.Context, directories []string, options scanner.Options,
 			aggregate.DriftedRoots++
 		}
 	}
+	aggregate.Status = multiScanStatusFor(aggregate.TotalRoots, aggregate.DriftedRoots, aggregate.FailedRoots)
 	return aggregate
+}
+
+func multiScanStatusFor(totalRoots, driftedRoots, failedRoots int) multiScanStatus {
+	if failedRoots == totalRoots {
+		return multiScanStatusFailed
+	}
+	if failedRoots > 0 {
+		return multiScanStatusPartial
+	}
+	if driftedRoots > 0 {
+		return multiScanStatusDriftDetected
+	}
+	return multiScanStatusComplete
 }
 
 func writeMultiScanReport(stdout io.Writer, aggregate multiScanReport, format outputFormat) error {
@@ -1054,6 +1424,7 @@ func writeMultiScanReport(stdout io.Writer, aggregate multiScanReport, format ou
 	}
 	for _, line := range []string{
 		"TerraDrift multi-root scan complete",
+		fmt.Sprintf("Status: %s", aggregate.Status),
 		fmt.Sprintf("Roots scanned: %d", aggregate.TotalRoots),
 		fmt.Sprintf("Drifted roots: %d", aggregate.DriftedRoots),
 		fmt.Sprintf("Failed roots: %d", aggregate.FailedRoots),

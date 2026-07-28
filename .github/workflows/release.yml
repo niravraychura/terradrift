@@ -1,0 +1,94 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      IMAGE: ghcr.io/${{ github.repository }}:${{ github.ref_name }}
+    permissions:
+      contents: write
+      packages: write
+      attestations: write
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          check-latest: true
+      - name: Build release archives
+        run: |
+          for target in linux_amd64 darwin_arm64; do
+            os="${target%_*}"
+            arch="${target#*_}"
+            directory="dist/terradrift_${os}_${arch}"
+            mkdir -p "$directory"
+            GOOS="$os" GOARCH="$arch" CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o "$directory/terradrift" ./cmd/terradrift
+            tar -C "$directory" -czf "dist/terradrift_${os}_${arch}.tar.gz" terradrift
+          done
+          sha256sum dist/*.tar.gz > dist/checksums.txt
+      - name: Build runtime image
+        run: docker build -t "$IMAGE" .
+      - name: Generate image SBOM
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+        with:
+          image: ${{ env.IMAGE }}
+          format: spdx-json
+          output-file: dist/image.spdx.json
+          upload-artifact: false
+          upload-release-assets: false
+      - name: Enforce license policy
+        run: jq -e 'all(.packages[]?.licenseConcluded; (. | test("AGPL|GPL-3")) | not)' dist/image.spdx.json
+      - name: Scan runtime image
+        uses: docker/scout-action@2688993af7bafd6ba8c6a74ec652442be91dd82b # v1.23.1
+        with:
+          command: cves
+          image: ${{ env.IMAGE }}
+          only-severities: critical,high
+          exit-code: true
+      - name: Publish runtime image
+        id: image
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          echo "$GH_TOKEN" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+          docker push "$IMAGE"
+          digest="$(docker inspect --format='{{index .RepoDigests 0}}' "$IMAGE" | cut -d@ -f2)"
+          echo "name=${IMAGE%:*}" >> "$GITHUB_OUTPUT"
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+      - name: Attest release artifacts
+        uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4.1.1
+        with:
+          subject-path: dist/*.tar.gz
+      - name: Attest runtime image provenance
+        uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4.1.1
+        with:
+          subject-name: ${{ steps.image.outputs.name }}
+          subject-digest: ${{ steps.image.outputs.digest }}
+          push-to-registry: true
+      - name: Attest runtime image SBOM
+        uses: actions/attest@a1948c3f048ba23858d222213b7c278aabede763 # v4.1.1
+        with:
+          subject-name: ${{ steps.image.outputs.name }}
+          subject-digest: ${{ steps.image.outputs.digest }}
+          sbom-path: dist/image.spdx.json
+          push-to-registry: true
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+      - name: Sign runtime image with GitHub OIDC
+        run: cosign sign --yes "${{ steps.image.outputs.name }}@${{ steps.image.outputs.digest }}"
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" dist/*.tar.gz dist/checksums.txt dist/image.spdx.json --generate-notes --verify-tag

@@ -80,6 +80,8 @@ func TestCloudProviderFor(t *testing.T) {
 	for _, test := range []struct{ provider, resourceType, want string }{
 		{"registry.terraform.io/hashicorp/aws", "aws_instance", "aws"},
 		{"registry.terraform.io/hashicorp/azurerm", "azurerm_linux_vm", "azure"},
+		{"registry.terraform.io/hashicorp/azuread", "azuread_user", "azure"},
+		{"registry.terraform.io/azure/azapi", "azapi_resource", "azure"},
 		{"registry.terraform.io/hashicorp/google", "google_compute_instance", "gcp"},
 	} {
 		if got := CloudProviderFor(test.provider, test.resourceType); got != test.want {

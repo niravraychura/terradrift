@@ -3,6 +3,10 @@ package scanner
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/hex"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -10,10 +14,13 @@ import (
 	"time"
 
 	"github.com/niravraychura/terradrift/internal/parser"
+	"github.com/niravraychura/terradrift/internal/redact"
 	"github.com/niravraychura/terradrift/internal/report"
 	"github.com/niravraychura/terradrift/internal/terraform"
+	"github.com/niravraychura/terradrift/internal/validation"
 )
 
+// DefaultTimeout bounds a scan when no explicit timeout is configured.
 const DefaultTimeout = 5 * time.Minute
 
 const scanLockFilename = ".terradrift-scan.lock"
@@ -22,9 +29,12 @@ const scanLockFilename = ".terradrift-scan.lock"
 type Outcome string
 
 const (
-	OutcomeNoDrift       Outcome = "no_drift"
+	// OutcomeNoDrift indicates a completed scan without active drift.
+	OutcomeNoDrift Outcome = "no_drift"
+	// OutcomeDriftDetected indicates a completed scan with active drift.
 	OutcomeDriftDetected Outcome = "drift_detected"
-	OutcomeFailed        Outcome = "failed"
+	// OutcomeFailed indicates that scanning could not complete.
+	OutcomeFailed Outcome = "failed"
 )
 
 // Options configures a scan run.
@@ -34,6 +44,32 @@ type Options struct {
 	Runner                terraform.Runner
 	WorkspaceRoot         string
 	RequireTerraformFiles bool
+	workspaceRootResolved bool
+}
+
+// Validate rejects invalid scan options before work starts.
+func (options Options) Validate() error {
+	if options.Timeout < 0 {
+		return validation.New("scan timeout", errors.New("must not be negative"))
+	}
+	return nil
+}
+
+// PrepareOptions validates invariant options and resolves the workspace root once.
+func PrepareOptions(options Options) (Options, error) {
+	if err := options.Validate(); err != nil {
+		return Options{}, err
+	}
+	if options.WorkspaceRoot == "" || options.workspaceRootResolved {
+		return options, nil
+	}
+	root, err := ValidateDirectory(options.WorkspaceRoot)
+	if err != nil {
+		return Options{}, fmt.Errorf("validate workspace root: %w", err)
+	}
+	options.WorkspaceRoot = root
+	options.workspaceRootResolved = true
+	return options, nil
 }
 
 // Result captures both the user-facing report and the CLI-facing outcome.
@@ -44,6 +80,11 @@ type Result struct {
 
 // Scan validates the requested Terraform directory and optionally runs Terraform.
 func Scan(ctx context.Context, options Options) (Result, error) {
+	preparedOptions, err := PrepareOptions(options)
+	if err != nil {
+		return Result{Outcome: OutcomeFailed}, err
+	}
+	options = preparedOptions
 	if options.Timeout <= 0 {
 		options.Timeout = DefaultTimeout
 	}
@@ -62,7 +103,7 @@ func Scan(ctx context.Context, options Options) (Result, error) {
 		return Result{Outcome: OutcomeFailed}, err
 	}
 	if options.WorkspaceRoot != "" {
-		if err := ValidateWorkspaceRoot(absDir, options.WorkspaceRoot); err != nil {
+		if err := validateResolvedWorkspaceRoot(absDir, options.WorkspaceRoot); err != nil {
 			return Result{Outcome: OutcomeFailed}, err
 		}
 	}
@@ -79,10 +120,16 @@ func Scan(ctx context.Context, options Options) (Result, error) {
 			return Result{Outcome: OutcomeFailed}, fmt.Errorf("terraform directory has no .tf or .tf.json files: %s", absDir)
 		}
 	}
+	scanID, err := newScanID()
+	if err != nil {
+		return Result{Outcome: OutcomeFailed}, fmt.Errorf("create scan ID: %w", err)
+	}
 
 	if options.Runner == nil {
 		now := time.Now().UTC()
 		return Result{Outcome: OutcomeNoDrift, Report: report.DriftReport{
+			ScanID:          scanID,
+			RootID:          rootID(absDir),
 			Status:          report.ScanStatusNoDrift,
 			Directory:       absDir,
 			ResourceChanges: []report.ResourceChange{},
@@ -97,7 +144,7 @@ func Scan(ctx context.Context, options Options) (Result, error) {
 	}
 	defer unlock()
 
-	scanReport, err := runTerraformScan(ctx, options.Runner, absDir)
+	scanReport, err := runTerraformScan(ctx, options.Runner, absDir, scanID)
 	if err != nil {
 		return Result{Outcome: OutcomeFailed, Report: scanReport}, err
 	}
@@ -141,12 +188,16 @@ func ValidateWorkspaceRoot(directory string, workspaceRoot string) error {
 	if err != nil {
 		return fmt.Errorf("resolve workspace root symlinks: %w", err)
 	}
-	rel, err := filepath.Rel(resolvedRoot, resolvedDirectory)
+	return validateResolvedWorkspaceRoot(resolvedDirectory, resolvedRoot)
+}
+
+func validateResolvedWorkspaceRoot(directory string, workspaceRoot string) error {
+	rel, err := filepath.Rel(workspaceRoot, directory)
 	if err != nil {
 		return fmt.Errorf("compare terraform directory to workspace root: %w", err)
 	}
 	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || filepath.IsAbs(rel) {
-		return fmt.Errorf("terraform directory %s is outside workspace root %s", resolvedDirectory, resolvedRoot)
+		return fmt.Errorf("terraform directory %s is outside workspace root %s", directory, workspaceRoot)
 	}
 	return nil
 }
@@ -170,12 +221,18 @@ func ValidateDirectory(directory string) (string, error) {
 	if !info.IsDir() {
 		return "", fmt.Errorf("terraform path is not a directory: %s", absDir)
 	}
-	return absDir, nil
+	resolved, err := filepath.EvalSymlinks(absDir)
+	if err != nil {
+		return "", fmt.Errorf("resolve terraform directory symlinks: %w", err)
+	}
+	return resolved, nil
 }
 
-func runTerraformScan(ctx context.Context, runner terraform.Runner, directory string) (report.DriftReport, error) {
+func runTerraformScan(ctx context.Context, runner terraform.Runner, directory string, scanID string) (scanReport report.DriftReport, returnErr error) {
 	startedAt := time.Now().UTC()
-	scanReport := report.DriftReport{
+	scanReport = report.DriftReport{
+		ScanID:          scanID,
+		RootID:          rootID(directory),
 		Status:          report.ScanStatusRunning,
 		Directory:       directory,
 		ResourceChanges: []report.ResourceChange{},
@@ -183,20 +240,16 @@ func runTerraformScan(ctx context.Context, runner terraform.Runner, directory st
 	}
 
 	if err := runner.Init(ctx, directory); err != nil {
-		scanReport.Status = report.ScanStatusFailed
-		scanReport.CompletedAt = time.Now().UTC()
-		scanReport.ErrorMessage = err.Error()
-		return scanReport, fmt.Errorf("terraform init: %w", err)
+		failReport(&scanReport, err)
+		return scanReport, fmt.Errorf("terraform init: %s", scanReport.ErrorMessage)
 	}
 	if inventoryRunner, ok := runner.(interface {
 		Inventory(context.Context, string) (terraform.Inventory, error)
 	}); ok {
 		inventory, err := inventoryRunner.Inventory(ctx, directory)
 		if err != nil {
-			scanReport.Status = report.ScanStatusFailed
-			scanReport.CompletedAt = time.Now().UTC()
-			scanReport.ErrorMessage = err.Error()
-			return scanReport, fmt.Errorf("terraform inventory: %w", err)
+			failReport(&scanReport, err)
+			return scanReport, fmt.Errorf("terraform inventory: %s", scanReport.ErrorMessage)
 		}
 		scanReport.TerraformVersion = inventory.TerraformVersion
 		scanReport.ProviderVersions = inventory.ProviderVersions
@@ -208,65 +261,87 @@ func runTerraformScan(ctx context.Context, runner terraform.Runner, directory st
 
 	planFile, cleanup, err := securePlanFile(directory)
 	if err != nil {
-		scanReport.Status = report.ScanStatusFailed
-		scanReport.CompletedAt = time.Now().UTC()
-		scanReport.ErrorMessage = err.Error()
-		return scanReport, err
+		failReport(&scanReport, err)
+		return scanReport, errors.New(scanReport.ErrorMessage)
 	}
-	defer cleanup()
+	defer func() {
+		if err := cleanup(); err != nil && returnErr == nil {
+			failReport(&scanReport, err)
+			returnErr = fmt.Errorf("remove secure terraform plan file: %s", scanReport.ErrorMessage)
+		}
+	}()
 
 	exitCode, err := runner.PlanRefreshOnly(ctx, directory, planFile)
 	if err != nil {
-		scanReport.Status = report.ScanStatusFailed
-		scanReport.CompletedAt = time.Now().UTC()
-		scanReport.ErrorMessage = err.Error()
-		return scanReport, fmt.Errorf("terraform refresh-only plan: %w", err)
+		failReport(&scanReport, err)
+		return scanReport, fmt.Errorf("terraform refresh-only plan: %s", scanReport.ErrorMessage)
 	}
 	if exitCode != 0 && exitCode != 2 {
 		err := fmt.Errorf("terraform refresh-only plan failed with exit code %d", exitCode)
-		scanReport.Status = report.ScanStatusFailed
-		scanReport.CompletedAt = time.Now().UTC()
-		scanReport.ErrorMessage = err.Error()
+		failReport(&scanReport, err)
 		return scanReport, err
 	}
 
 	planJSON, err := runner.ShowJSON(ctx, directory, planFile)
 	if err != nil {
-		scanReport.Status = report.ScanStatusFailed
-		scanReport.CompletedAt = time.Now().UTC()
-		scanReport.ErrorMessage = err.Error()
-		return scanReport, fmt.Errorf("terraform show JSON: %w", err)
+		failReport(&scanReport, err)
+		return scanReport, fmt.Errorf("terraform show JSON: %s", scanReport.ErrorMessage)
 	}
 
-	resourceChanges, totalResources, err := parser.ParsePlan(planJSON)
+	resourceChanges, outputChanges, totalResources, err := parser.ParsePlan(planJSON)
 	if err != nil {
-		scanReport.Status = report.ScanStatusFailed
-		scanReport.CompletedAt = time.Now().UTC()
-		scanReport.ErrorMessage = err.Error()
-		return scanReport, err
+		failReport(&scanReport, err)
+		return scanReport, errors.New(scanReport.ErrorMessage)
 	}
 
 	scanReport.ResourceChanges = resourceChanges
+	scanReport.OutputChanges = outputChanges
 	scanReport.TotalResourcesChecked = totalResources
 	scanReport.TotalChangedResources = len(resourceChanges)
 	scanReport.CompletedAt = time.Now().UTC()
 	return scanReport, nil
 }
 
-func securePlanFile(directory string) (string, func(), error) {
+func rootID(directory string) string {
+	sum := sha256.Sum256([]byte(directory))
+	return hex.EncodeToString(sum[:])
+}
+
+func newScanID() (string, error) {
+	bytes := make([]byte, 16)
+	if _, err := rand.Read(bytes); err != nil {
+		return "", err
+	}
+	bytes[6] = bytes[6]&0x0f | 0x40
+	bytes[8] = bytes[8]&0x3f | 0x80
+	return hex.EncodeToString(bytes[0:4]) + "-" + hex.EncodeToString(bytes[4:6]) + "-" + hex.EncodeToString(bytes[6:8]) + "-" + hex.EncodeToString(bytes[8:10]) + "-" + hex.EncodeToString(bytes[10:]), nil
+}
+
+func failReport(scanReport *report.DriftReport, err error) {
+	scanReport.Status = report.ScanStatusFailed
+	scanReport.CompletedAt = time.Now().UTC()
+	scanReport.ErrorMessage = redact.String(err.Error())
+}
+
+func securePlanFile(directory string) (string, func() error, error) {
 	file, err := os.CreateTemp(directory, ".terradrift-*.tfplan")
 	if err != nil {
-		return "", func() {}, fmt.Errorf("create secure terraform plan file: %w", err)
+		return "", func() error { return nil }, fmt.Errorf("create secure terraform plan file: %w", err)
 	}
 	path := file.Name()
 	if err := file.Chmod(0o600); err != nil {
 		_ = file.Close()
 		_ = os.Remove(path)
-		return "", func() {}, fmt.Errorf("secure terraform plan file permissions: %w", err)
+		return "", func() error { return nil }, fmt.Errorf("secure terraform plan file permissions: %w", err)
 	}
 	if err := file.Close(); err != nil {
 		_ = os.Remove(path)
-		return "", func() {}, fmt.Errorf("close terraform plan file: %w", err)
+		return "", func() error { return nil }, fmt.Errorf("close terraform plan file: %w", err)
 	}
-	return path, func() { _ = os.Remove(path) }, nil
+	return path, func() error {
+		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+			return err
+		}
+		return nil
+	}, nil
 }

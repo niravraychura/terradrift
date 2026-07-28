@@ -34,3 +34,10 @@ func TestRunRedactsPolicyFailures(t *testing.T) {
 		t.Fatalf("expected policy error to be redacted, got %v", err)
 	}
 }
+
+func TestRunRejectsOversizedInput(t *testing.T) {
+	err := Run(context.Background(), Options{Command: "false"}, report.DriftReport{ErrorMessage: strings.Repeat("x", maxPolicyInputBytes)})
+	if err == nil || !strings.Contains(err.Error(), "policy input exceeds") {
+		t.Fatalf("expected oversized input error, got %v", err)
+	}
+}

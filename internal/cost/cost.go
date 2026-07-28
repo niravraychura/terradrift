@@ -11,9 +11,13 @@ import (
 
 	"github.com/niravraychura/terradrift/internal/redact"
 	"github.com/niravraychura/terradrift/internal/report"
+	"github.com/niravraychura/terradrift/internal/validation"
 )
 
-const maxCostOutputBytes = 256 * 1024
+const (
+	maxCostInputBytes  = 1 << 20
+	maxCostOutputBytes = 256 * 1024
+)
 
 // Options configures a cost command invocation.
 type Options struct {
@@ -21,15 +25,26 @@ type Options struct {
 	Args    []string
 }
 
+// Validate rejects an incomplete cost command configuration.
+func (options Options) Validate() error {
+	if strings.TrimSpace(options.Command) == "" {
+		return validation.New("cost command", fmt.Errorf("is required"))
+	}
+	return nil
+}
+
 // Enrich runs an external cost command and merges returned cost impacts by resource address.
 func Enrich(ctx context.Context, options Options, scanReport report.DriftReport) (report.DriftReport, error) {
-	command := strings.TrimSpace(options.Command)
-	if command == "" {
-		return scanReport, fmt.Errorf("cost command is required")
+	if err := options.Validate(); err != nil {
+		return scanReport, err
 	}
+	command := strings.TrimSpace(options.Command)
 	payload, err := json.Marshal(scanReport)
 	if err != nil {
 		return scanReport, fmt.Errorf("encode cost input: %w", err)
+	}
+	if len(payload) > maxCostInputBytes {
+		return scanReport, fmt.Errorf("cost input exceeds %d bytes", maxCostInputBytes)
 	}
 	cmd := exec.CommandContext(ctx, command, options.Args...)
 	cmd.Stdin = bytes.NewReader(payload)

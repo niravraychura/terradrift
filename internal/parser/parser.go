@@ -9,7 +9,8 @@ import (
 )
 
 type terraformPlan struct {
-	ResourceChanges []terraformResourceChange `json:"resource_changes"`
+	ResourceChanges []terraformResourceChange  `json:"resource_changes"`
+	OutputChanges   map[string]terraformChange `json:"output_changes"`
 }
 
 type terraformResourceChange struct {
@@ -17,18 +18,20 @@ type terraformResourceChange struct {
 	Type         string          `json:"type"`
 	Name         string          `json:"name"`
 	ProviderName string          `json:"provider_name"`
+	ActionReason string          `json:"action_reason"`
 	Change       terraformChange `json:"change"`
 }
 
 type terraformChange struct {
+	// Keep the decoded shape intentionally narrow: Terraform values and sensitive marks never enter reports.
 	Actions []string `json:"actions"`
 }
 
 // ParsePlan converts the subset of Terraform plan JSON needed for drift reports.
-func ParsePlan(data []byte) ([]report.ResourceChange, int, error) {
+func ParsePlan(data []byte) ([]report.ResourceChange, []report.OutputChange, int, error) {
 	var plan terraformPlan
 	if err := json.Unmarshal(data, &plan); err != nil {
-		return nil, 0, fmt.Errorf("parse terraform plan JSON: %w", err)
+		return nil, nil, 0, fmt.Errorf("parse terraform plan JSON: %w", err)
 	}
 
 	changes := make([]report.ResourceChange, 0, len(plan.ResourceChanges))
@@ -41,6 +44,7 @@ func ParsePlan(data []byte) ([]report.ResourceChange, int, error) {
 			Type:               resourceChange.Type,
 			Name:               resourceChange.Name,
 			Actions:            append([]string(nil), resourceChange.Change.Actions...),
+			ActionReason:       resourceChange.ActionReason,
 			Remediation:        report.RemediationForActions(resourceChange.Change.Actions),
 			ReconciliationHint: report.ReconciliationHintForActions(resourceChange.Change.Actions),
 			RiskLevel:          report.RiskLevelForActions(resourceChange.Change.Actions),
@@ -50,7 +54,16 @@ func ParsePlan(data []byte) ([]report.ResourceChange, int, error) {
 	}
 	sort.Slice(changes, func(i, j int) bool { return changes[i].Address < changes[j].Address })
 
-	return changes, len(plan.ResourceChanges), nil
+	outputChanges := make([]report.OutputChange, 0, len(plan.OutputChanges))
+	for name, outputChange := range plan.OutputChanges {
+		if isNoOp(outputChange.Actions) {
+			continue
+		}
+		outputChanges = append(outputChanges, report.OutputChange{Name: name, Actions: append([]string(nil), outputChange.Actions...)})
+	}
+	sort.Slice(outputChanges, func(i, j int) bool { return outputChanges[i].Name < outputChanges[j].Name })
+
+	return changes, outputChanges, len(plan.ResourceChanges), nil
 }
 
 func isNoOp(actions []string) bool {

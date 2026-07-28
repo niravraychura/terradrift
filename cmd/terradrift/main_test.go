@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -13,8 +14,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/niravraychura/terradrift/internal/config"
 	"github.com/niravraychura/terradrift/internal/history"
 	"github.com/niravraychura/terradrift/internal/report"
+	"github.com/niravraychura/terradrift/internal/scanner"
 )
 
 func executeCommand(args ...string) (string, string, error) {
@@ -40,6 +43,16 @@ func TestScanDefaultsToCurrentDirectory(t *testing.T) {
 	}
 }
 
+func TestReadLimitedFileRejectsOversizedInput(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "report.json")
+	if err := os.WriteFile(path, make([]byte, 2), 0o600); err != nil {
+		t.Fatalf("write report fixture: %v", err)
+	}
+	if _, err := readLimitedFile(path, 1); err == nil {
+		t.Fatal("expected oversized file to fail")
+	}
+}
+
 func TestScanAllLoadsRelativeManifestRoots(t *testing.T) {
 	root := t.TempDir()
 	for _, directory := range []string{"development", "production"} {
@@ -60,8 +73,82 @@ func TestScanAllLoadsRelativeManifestRoots(t *testing.T) {
 	if err := json.Unmarshal([]byte(stdout), &aggregate); err != nil {
 		t.Fatalf("expected aggregate JSON: %v", err)
 	}
-	if aggregate.TotalRoots != 2 || aggregate.FailedRoots != 0 || len(aggregate.Roots) != 2 {
+	if aggregate.Status != multiScanStatusComplete || aggregate.TotalRoots != 2 || aggregate.FailedRoots != 0 || len(aggregate.Roots) != 2 {
 		t.Fatalf("unexpected aggregate: %#v", aggregate)
+	}
+}
+
+func TestMultiScanStatus(t *testing.T) {
+	for _, test := range []struct {
+		total, drifted, failed int
+		want                   multiScanStatus
+	}{
+		{total: 2, want: multiScanStatusComplete},
+		{total: 2, drifted: 1, want: multiScanStatusDriftDetected},
+		{total: 2, failed: 1, want: multiScanStatusPartial},
+		{total: 2, failed: 2, want: multiScanStatusFailed},
+	} {
+		if got := multiScanStatusFor(test.total, test.drifted, test.failed); got != test.want {
+			t.Fatalf("status(%d, %d, %d) = %q, want %q", test.total, test.drifted, test.failed, got, test.want)
+		}
+	}
+}
+
+func TestScanAllReportsPartialOutcome(t *testing.T) {
+	valid := t.TempDir()
+	missing := filepath.Join(t.TempDir(), "missing")
+	aggregate := scanAll(context.Background(), []string{valid, missing}, scanner.Options{}, 1, false)
+	if aggregate.Status != multiScanStatusPartial || aggregate.FailedRoots != 1 {
+		t.Fatalf("expected partial aggregate, got %#v", aggregate)
+	}
+}
+
+func TestIncrementalRootsRetriesOnlyUnhealthyRoots(t *testing.T) {
+	statePath := filepath.Join(t.TempDir(), "state.json")
+	state := multiScanReport{Roots: []multiScanRoot{
+		{Directory: "healthy", Report: report.DriftReport{Status: report.ScanStatusNoDrift}},
+		{Directory: "drifted", Report: report.DriftReport{Status: report.ScanStatusDriftDetected}},
+		{Directory: "failed", Error: "scan failed"},
+	}}
+	if err := writeIncrementalState(statePath, state); err != nil {
+		t.Fatalf("write state: %v", err)
+	}
+	roots, err := incrementalRoots(statePath, []string{"healthy", "drifted", "failed", "new"})
+	if err != nil {
+		t.Fatalf("read state: %v", err)
+	}
+	if got, want := strings.Join(roots, ","), "drifted,failed,new"; got != want {
+		t.Fatalf("incremental roots = %q, want %q", got, want)
+	}
+}
+
+func TestRunDeliveriesReturnsEveryFailure(t *testing.T) {
+	err := runDeliveries([]deliveryTask{
+		{name: "one", run: func() error { return errors.New("first") }},
+		{name: "two", run: func() error { return errors.New("second") }},
+	})
+	if err == nil || !strings.Contains(err.Error(), "one delivery") || !strings.Contains(err.Error(), "two delivery") {
+		t.Fatalf("expected labelled delivery errors, got %v", err)
+	}
+}
+
+func TestEnrichReportRunsIndependentAdaptersConcurrently(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell fixtures require POSIX")
+	}
+	directory := t.TempDir()
+	costCommand := filepath.Join(directory, "cost")
+	auditCommand := filepath.Join(directory, "audit")
+	if err := os.WriteFile(costCommand, []byte("#!/bin/sh\nsleep 0.2\nprintf '{\"resource_costs\":[{\"address\":\"aws_instance.web\",\"monthly_delta\":\"$1\"}]}'\n"), 0o700); err != nil {
+		t.Fatalf("write cost fixture: %v", err)
+	}
+	if err := os.WriteFile(auditCommand, []byte("#!/bin/sh\nsleep 0.2\nprintf '{\"resource_events\":[{\"address\":\"aws_instance.web\",\"events\":[{\"provider\":\"aws\",\"actor\":\"operator\",\"occurred_at\":\"2026-01-01T00:00:00Z\",\"summary\":\"changed\"}]}]}'\n"), 0o700); err != nil {
+		t.Fatalf("write audit fixture: %v", err)
+	}
+	started := time.Now()
+	enriched, err := enrichReport(context.Background(), report.DriftReport{ResourceChanges: []report.ResourceChange{{Address: "aws_instance.web"}}}, costCommand, nil, auditCommand, nil)
+	if err != nil || time.Since(started) >= 350*time.Millisecond || enriched.ResourceChanges[0].CostImpact != "$1" || len(enriched.ResourceChanges[0].AuditEvents) != 1 {
+		t.Fatalf("unexpected concurrent enrichment: %#v, %v", enriched, err)
 	}
 }
 
@@ -171,6 +258,19 @@ func TestWriteDashboardRejectsSymlink(t *testing.T) {
 	}
 }
 
+func TestNormalizeOutputPathRejectsSymlinkParent(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink fixture requires POSIX permissions")
+	}
+	parent := filepath.Join(t.TempDir(), "parent")
+	if err := os.Symlink(t.TempDir(), parent); err != nil {
+		t.Fatalf("create symlink: %v", err)
+	}
+	if _, err := normalizeOutputPath(filepath.Join(parent, "output.json")); err == nil {
+		t.Fatal("expected symlink parent to fail")
+	}
+}
+
 func TestShouldCreatePersistentIssue(t *testing.T) {
 	current := report.DriftReport{Directory: "terraform/prod", Status: report.ScanStatusDriftDetected, ResourceChanges: []report.ResourceChange{{Address: "aws_instance.web", Actions: []string{"update"}, RiskLevel: "medium"}}}
 	entries := []history.Entry{{Report: current}, {Report: current}}
@@ -180,6 +280,17 @@ func TestShouldCreatePersistentIssue(t *testing.T) {
 	entries = append(entries, history.Entry{Report: current})
 	if shouldCreatePersistentIssue(current, entries, 3) {
 		t.Fatal("expected issue creation to occur only once per persistent sequence")
+	}
+}
+
+func TestRedactedHistoryKeepsRootIdentity(t *testing.T) {
+	current := report.DriftReport{RootID: "root-a", Directory: "[REDACTED]", Status: report.ScanStatusDriftDetected, ResourceChanges: []report.ResourceChange{{Address: "aws_instance.web", Actions: []string{"update"}}}}
+	other := report.DriftReport{RootID: "root-b", Directory: "[REDACTED]", Status: report.ScanStatusDriftDetected, ResourceChanges: current.ResourceChanges}
+	if previous := previousReportForRoot([]history.Entry{{Report: other}}, current); previous.RootID != "" {
+		t.Fatalf("expected no cross-root history match, got %#v", previous)
+	}
+	if shouldCreatePersistentIssue(current, []history.Entry{{Report: other}}, 2) {
+		t.Fatal("expected different redacted roots to remain independent")
 	}
 }
 
@@ -294,6 +405,17 @@ func TestWriteScanReportSARIF(t *testing.T) {
 	}
 }
 
+func TestWriteScanReportSARIFSkipsIgnoredChanges(t *testing.T) {
+	var output bytes.Buffer
+	err := writeScanReport(&output, report.DriftReport{ResourceChanges: []report.ResourceChange{{Address: "aws_instance.ignored", Ignored: true}, {Address: "aws_instance.active"}}}, outputFormatSARIF)
+	if err != nil {
+		t.Fatalf("expected SARIF output to succeed: %v", err)
+	}
+	if strings.Contains(output.String(), "ignored") || !strings.Contains(output.String(), "active") {
+		t.Fatalf("expected only active SARIF finding, got %q", output.String())
+	}
+}
+
 func TestWriteScanReportPrometheus(t *testing.T) {
 	var output bytes.Buffer
 	err := writeScanReport(&output, report.DriftReport{Status: report.ScanStatusDriftDetected, TotalResourcesChecked: 4, TotalChangedResources: 2}, outputFormatPrometheus)
@@ -356,6 +478,18 @@ func TestInitCreatesDefaultConfig(t *testing.T) {
 	}
 	if !strings.Contains(string(data), `"directory": "."`) {
 		t.Fatalf("expected default config content, got %q", data)
+	}
+}
+
+func TestInitCreatesGuidedConfig(t *testing.T) {
+	path := filepath.Join(t.TempDir(), ".terradrift.json")
+	_, _, err := executeCommand("init", "--config", path, "--directory", "terraform/prod", "--terraform-exec", "--redact-paths", "--history-dir", ".history")
+	if err != nil {
+		t.Fatalf("create guided config: %v", err)
+	}
+	cfg, err := config.Load(path)
+	if err != nil || cfg.Directory != "terraform/prod" || !cfg.TerraformExec || !cfg.RedactPaths || cfg.HistoryDir != ".history" {
+		t.Fatalf("unexpected guided config: %#v, %v", cfg, err)
 	}
 }
 

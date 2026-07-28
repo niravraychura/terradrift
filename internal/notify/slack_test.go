@@ -31,6 +31,7 @@ func TestSlackNotifierSendsRedactedSummary(t *testing.T) {
 	}
 
 	err := notifier.Notify(context.Background(), report.DriftReport{
+		ScanID:                "19b75bcf-7c7a-4338-a774-2ef76528fde0",
 		Status:                report.ScanStatusDriftDetected,
 		Directory:             "/secret/local/path",
 		TotalResourcesChecked: 10,
@@ -42,7 +43,7 @@ func TestSlackNotifierSendsRedactedSummary(t *testing.T) {
 	if strings.Contains(body, "/secret/local/path") || strings.Contains(body, "secret-value") {
 		t.Fatalf("expected Slack body to avoid path and webhook secrets, got %q", body)
 	}
-	if !strings.Contains(body, "drift_detected") || !strings.Contains(body, "Changed resources: 2") {
+	if !strings.Contains(body, "19b75bcf-7c7a-4338-a774-2ef76528fde0") || !strings.Contains(body, "drift_detected") || !strings.Contains(body, "Changed resources: 2") {
 		t.Fatalf("expected useful summary, got %q", body)
 	}
 }

@@ -4,12 +4,14 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
 
 	"github.com/niravraychura/terradrift/internal/redact"
 	"github.com/niravraychura/terradrift/internal/report"
+	"github.com/niravraychura/terradrift/internal/validation"
 )
 
 const githubAPIURL = "https://api.github.com"
@@ -25,16 +27,12 @@ type GitHubPRNotifier struct {
 
 // Notify posts a concise, redacted drift summary to the configured pull request.
 func (notifier GitHubPRNotifier) Notify(ctx context.Context, scanReport report.DriftReport) error {
-	repository := strings.Trim(strings.TrimSpace(notifier.Repository), "/")
-	if len(strings.Split(repository, "/")) != 2 || strings.Contains(repository, " ") {
-		return fmt.Errorf("GitHub repository must be owner/repo")
+	repository, token, err := validateGitHubNotifier(notifier.Repository, notifier.Token)
+	if err != nil {
+		return err
 	}
 	if notifier.Number <= 0 {
-		return fmt.Errorf("GitHub pull request number must be greater than zero")
-	}
-	token := strings.TrimSpace(notifier.Token)
-	if token == "" {
-		return fmt.Errorf("GITHUB_TOKEN is required for GitHub pull request summaries")
+		return validation.New("GitHub pull request number", errors.New("must be greater than zero"))
 	}
 	apiURL := strings.TrimRight(notifier.APIURL, "/")
 	if apiURL == "" {
@@ -63,7 +61,7 @@ func (notifier GitHubPRNotifier) Notify(ctx context.Context, scanReport report.D
 	if err != nil {
 		return fmt.Errorf("send GitHub pull request summary to %s: %w", redact.String(repository), err)
 	}
-	defer func() { _ = response.Body.Close() }()
+	defer func() { _ = closeResponseBody(response.Body) }()
 	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
 		return fmt.Errorf("send GitHub pull request summary to %s: unexpected status %s", redact.String(repository), response.Status)
 	}
@@ -80,13 +78,9 @@ type GitHubIssueNotifier struct {
 
 // Notify creates a concise persistent-drift issue.
 func (notifier GitHubIssueNotifier) Notify(ctx context.Context, scanReport report.DriftReport) error {
-	repository := strings.Trim(strings.TrimSpace(notifier.Repository), "/")
-	if len(strings.Split(repository, "/")) != 2 || strings.Contains(repository, " ") {
-		return fmt.Errorf("GitHub repository must be owner/repo")
-	}
-	token := strings.TrimSpace(notifier.Token)
-	if token == "" {
-		return fmt.Errorf("GITHUB_TOKEN is required for GitHub drift issues")
+	repository, token, err := validateGitHubNotifier(notifier.Repository, notifier.Token)
+	if err != nil {
+		return err
 	}
 	apiURL := strings.TrimRight(notifier.APIURL, "/")
 	if apiURL == "" {
@@ -116,9 +110,21 @@ func (notifier GitHubIssueNotifier) Notify(ctx context.Context, scanReport repor
 	if err != nil {
 		return fmt.Errorf("create GitHub drift issue in %s: %w", redact.String(repository), err)
 	}
-	defer func() { _ = response.Body.Close() }()
+	defer func() { _ = closeResponseBody(response.Body) }()
 	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
 		return fmt.Errorf("create GitHub drift issue in %s: unexpected status %s", redact.String(repository), response.Status)
 	}
 	return nil
+}
+
+func validateGitHubNotifier(rawRepository string, rawToken string) (string, string, error) {
+	repository := strings.Trim(strings.TrimSpace(rawRepository), "/")
+	if len(strings.Split(repository, "/")) != 2 || strings.Contains(repository, " ") {
+		return "", "", validation.New("GitHub repository", errors.New("must be owner/repo"))
+	}
+	token := strings.TrimSpace(rawToken)
+	if token == "" {
+		return "", "", validation.New("GITHUB_TOKEN", errors.New("is required"))
+	}
+	return repository, token, nil
 }

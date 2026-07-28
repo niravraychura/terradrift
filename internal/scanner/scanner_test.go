@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/niravraychura/terradrift/internal/report"
+	"github.com/niravraychura/terradrift/internal/validation"
 )
 
 type fakeRunner struct {
@@ -59,6 +60,9 @@ func TestScanReturnsNoDriftBootstrapResult(t *testing.T) {
 	if result.Report.ResourceChanges == nil {
 		t.Fatal("expected empty resource changes, got nil")
 	}
+	if len(result.Report.ScanID) != 36 {
+		t.Fatalf("expected UUID scan ID, got %q", result.Report.ScanID)
+	}
 }
 
 func TestScanReturnsFailedOutcomeForInvalidDirectory(t *testing.T) {
@@ -82,6 +86,14 @@ func TestScanHonorsCancelledContext(t *testing.T) {
 	}
 	if result.Outcome != OutcomeFailed {
 		t.Fatalf("expected failed outcome, got %q", result.Outcome)
+	}
+}
+
+func TestScanRejectsNegativeTimeoutWithTypedError(t *testing.T) {
+	_, err := Scan(context.Background(), Options{Directory: t.TempDir(), Timeout: -time.Second})
+	var validationErr *validation.Error
+	if !errors.As(err, &validationErr) || validationErr.Field != "scan timeout" {
+		t.Fatalf("expected typed timeout validation error, got %v", err)
 	}
 }
 
@@ -148,6 +160,23 @@ func TestScanWithRunnerReturnsDriftDetected(t *testing.T) {
 	}
 }
 
+func TestSecurePlanFileUsesRestrictedPermissionsAndCleansUp(t *testing.T) {
+	path, cleanup, err := securePlanFile(t.TempDir())
+	if err != nil {
+		t.Fatalf("create plan file: %v", err)
+	}
+	info, err := os.Stat(path)
+	if err != nil || info.Mode().Perm() != 0o600 {
+		t.Fatalf("expected 0600 plan file, info=%v err=%v", info, err)
+	}
+	if err := cleanup(); err != nil {
+		t.Fatalf("cleanup plan file: %v", err)
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("expected plan file to be removed, err=%v", err)
+	}
+}
+
 func TestScanWithRunnerRejectsExistingLock(t *testing.T) {
 	directory := t.TempDir()
 	if err := os.WriteFile(filepath.Join(directory, scanLockFilename), []byte("123"), 0o600); err != nil {
@@ -175,6 +204,23 @@ func TestScanWithRunnerReturnsFailedOutcomeForPlanError(t *testing.T) {
 	}
 	if result.Report.ErrorMessage == "" {
 		t.Fatal("expected error message to be recorded")
+	}
+}
+
+func TestScanRedactsFailedRunnerErrors(t *testing.T) {
+	secret := "super-secret-token"
+	result, err := Scan(context.Background(), Options{
+		Directory: t.TempDir(),
+		Runner:    &fakeRunner{initErr: errors.New("token=" + secret)},
+	})
+	if err == nil {
+		t.Fatal("expected init failure")
+	}
+	if strings.Contains(result.Report.ErrorMessage, secret) || strings.Contains(err.Error(), secret) {
+		t.Fatalf("expected errors to be redacted, report=%q error=%q", result.Report.ErrorMessage, err)
+	}
+	if !strings.Contains(result.Report.ErrorMessage, "[REDACTED]") {
+		t.Fatalf("expected a redacted report error, got %q", result.Report.ErrorMessage)
 	}
 }
 

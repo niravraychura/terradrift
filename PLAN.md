@@ -86,39 +86,46 @@ This plan tracks security, performance, code quality, and feature work for Terra
 ## Review Follow-ups
 
 - [x] Add external-command allowlists and trusted-path validation; use profiles for CI-safe presets.
-- [ ] Bound notification response bodies and complete output/input size budgets.
-- [ ] Redact `ErrorMessage` before JSON, history, dashboards, policy input, and notification delivery.
-- [ ] Redact Terraform plan sensitive fields and marks before any future value expansion.
+- [x] Bound notification response bodies.
+- [x] Bound config and history report reads and history writes.
+- [x] Bound report input sent to external policy, cost, and audit adapters.
+- [x] Bound uploaded JSON report artifacts.
+- [x] Bound report and approval artifact file inputs.
+- [x] Complete report output/input size budgets with bounded storage, adapter, approval, notification, and artifact boundaries; stream user-facing output.
+- [x] Redact `ErrorMessage` before JSON, history, dashboards, policy input, and notification delivery.
+- [x] Exclude Terraform plan values and sensitive marks from report parsing, with regression coverage.
 - [x] Reject direct symlink targets for dashboard and history output paths.
 - [x] Document backend/state safety and secret-managed integration credentials.
 - [x] Document repository secret scanning and least-privilege AWS, Azure, and GCP IAM guidance.
-- [ ] Add release supply-chain controls: checksums, SBOM, provenance, SHA-pinned Actions examples, image signing, Docker scanning, and license policy checks.
-- [ ] Add secret-safe structured audit logging with scan, config, workspace, version, and command metadata.
+- [x] Pin third-party GitHub Actions to immutable SHAs in CI and user-facing examples.
+- [x] Automate tag releases with SHA-256 checksums and generated GitHub release notes.
+- [x] Add SBOM, provenance, image signing/scanning, and license policy checks.
+- [x] Add secret-safe structured audit logging with scan, config, workspace, version, and command metadata.
 - [x] Test and reject unexpected Terraform detailed-exit codes; context cancellation is covered.
-- [ ] Parse Terraform output-value changes, action reasons, replacement reasons, and deleted-resource context.
-- [ ] Add safe Terraform initialization controls for lockfiles, upgrades, backends, and plugin caching.
-- [ ] Add stable scan IDs to reports, history, notifications, and dashboards.
-- [ ] Skip malformed history files with warnings instead of failing dashboard rendering.
+- [x] Parse Terraform output-change actions and resource action reasons without retaining Terraform values or sensitive marks.
+- [x] Use read-only Terraform lockfiles, disable implicit upgrades, retain backend initialization, and document isolated plugin caching.
+- [x] Add stable scan IDs to reports, history, notifications, and dashboards.
+- [x] Skip malformed history files with warnings instead of failing dashboard rendering.
 - [x] Reject unknown config fields during loading.
 - [x] Validate core config values early during loading.
 - [x] Publish a `.terradrift.json` JSON Schema.
-- [ ] Add credential-free Terraform integration tests and golden plan-JSON fixtures.
+- [x] Add credential-free Terraform integration tests and golden plan-JSON fixtures.
 - [x] Sort resource changes by address for deterministic output.
-- [ ] Model complete, partial, and drift outcomes for multi-root scans.
+- [x] Model complete, partial, failed, and drift outcomes for multi-root scans.
 - [x] Bound Terraform command output and fail explicitly on truncation.
 - [x] Fail fast when Terraform-backed roots have no configuration.
 - [x] Document Terraform provider/plugin caching with `TF_PLUGIN_CACHE_DIR` and CI cache keys.
-- [ ] Parallelize independent post-scan enrichment and delivery work safely.
+- [x] Parallelize independent post-scan enrichment and delivery work safely.
 - [x] Add local history retention pruning.
-- [ ] Add incremental scan manifests and optional compressed history artifacts.
-- [ ] Normalize workspace and output paths once through a validated execution context.
-- [ ] Add typed option validation and typed errors across config, scan, notification, policy, and cost boundaries.
+- [x] Add incremental scan manifests and optional compressed history artifacts.
+- [x] Normalize workspace and output paths once through a validated execution context.
+- [x] Add typed option validation and typed errors across config, scan, notification, policy, and cost boundaries.
 - [x] Refresh stale package documentation for implemented behavior.
-- [ ] Add complete comments for exported APIs.
+- [x] Add complete comments for exported package APIs.
 - [x] Add a non-mutating `make ci` target for local quality checks.
 - [x] Add CLI help safety-flag coverage.
 - [x] Produce CI coverage output and function summaries.
-- [ ] Add changelog automation and release automation.
+- [x] Add generated changelog notes and tag-driven release automation.
 - [x] Add supported local and CI configuration examples.
 - [x] Document stable JSON report guarantees and package architecture/scan-sequence design.
 

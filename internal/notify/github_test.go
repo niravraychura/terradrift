@@ -2,12 +2,14 @@ package notify
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"strings"
 	"testing"
 
 	"github.com/niravraychura/terradrift/internal/report"
+	"github.com/niravraychura/terradrift/internal/validation"
 )
 
 func TestGitHubPRNotifierPostsSummary(t *testing.T) {
@@ -32,6 +34,14 @@ func TestGitHubPRNotifierPostsSummary(t *testing.T) {
 	}
 	if err := notifier.Notify(context.Background(), report.DriftReport{TotalChangedResources: 2}); err != nil {
 		t.Fatalf("post pull request summary: %v", err)
+	}
+}
+
+func TestGitHubNotifierReturnsTypedValidationErrors(t *testing.T) {
+	err := GitHubPRNotifier{Repository: "invalid", Number: 1, Token: "token"}.Notify(context.Background(), report.DriftReport{})
+	var validationErr *validation.Error
+	if !errors.As(err, &validationErr) || validationErr.Field != "GitHub repository" {
+		t.Fatalf("expected typed repository validation error, got %v", err)
 	}
 }
 

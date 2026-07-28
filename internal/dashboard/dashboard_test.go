@@ -12,6 +12,7 @@ import (
 func TestRenderEscapesResourceFields(t *testing.T) {
 	var output bytes.Buffer
 	err := RenderWithHistory(&output, Data{Current: report.DriftReport{
+		ScanID:                "scan-123",
 		Status:                report.ScanStatusDriftDetected,
 		TotalResourcesChecked: 1,
 		TotalChangedResources: 1,
@@ -28,7 +29,7 @@ func TestRenderEscapesResourceFields(t *testing.T) {
 	if strings.Contains(output.String(), "<script>") {
 		t.Fatalf("expected HTML output to escape script tags, got %q", output.String())
 	}
-	if !strings.Contains(output.String(), "drift_detected") {
+	if !strings.Contains(output.String(), "scan-123") || !strings.Contains(output.String(), "drift_detected") {
 		t.Fatalf("expected status in dashboard, got %q", output.String())
 	}
 }
@@ -41,5 +42,16 @@ func TestRenderIndexEscapesDirectories(t *testing.T) {
 	}
 	if strings.Contains(output.String(), "<script>") {
 		t.Fatalf("expected index output to escape script tags, got %q", output.String())
+	}
+}
+
+func TestRenderWithHistoryIncludesTrend(t *testing.T) {
+	var output bytes.Buffer
+	err := RenderWithHistory(&output, Data{History: []history.Entry{{Report: report.DriftReport{Status: report.ScanStatusDriftDetected}}, {Report: report.DriftReport{Status: report.ScanStatusFailed}}}})
+	if err != nil {
+		t.Fatalf("render dashboard: %v", err)
+	}
+	if !strings.Contains(output.String(), "1 drifted and 1 failed scans across 2 recent scans") {
+		t.Fatalf("expected trend summary, got %q", output.String())
 	}
 }

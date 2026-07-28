@@ -62,6 +62,7 @@ terradrift scan -d ./terraform/prod --output junit
 terradrift scan -d ./terraform/prod --output sarif
 terradrift scan -d ./terraform/prod --output prometheus
 terradrift scan-all --manifest terraform-roots.txt --concurrency 4 --output json
+terradrift scan-all --manifest terraform-roots.txt --incremental-state .terradrift-scan-state.json
 terradrift scan -d ./terraform/prod --timeout 2m --redact-paths
 terradrift scan -d ./terraform/prod --workspace-root "$PWD"
 terradrift scan -d ./terraform/prod --terraform-exec --output json
@@ -71,14 +72,16 @@ terradrift scan --config .terradrift.json --profile production
 terradrift scan -d ./terraform/prod --notify slack --slack-webhook-url "$SLACK_WEBHOOK_URL"
 terradrift scan -d ./terraform/prod --dashboard-html terradrift-report.html
 terradrift scan -d ./terraform/prod --history-dir .terradrift-history --dashboard-html terradrift-report.html
+terradrift scan -d ./terraform/prod --history-dir .terradrift-history --history-compressed --audit-log .terradrift-audit.jsonl
 terradrift scan -d ./terraform/prod --policy-command conftest --policy-arg test --policy-arg -
 terradrift scan -d ./terraform/prod --cost-command infracost --cost-arg breakdown --cost-arg --format=json
 terradrift init
+terradrift init --directory ./terraform/prod --terraform-exec --redact-paths --history-dir .terradrift-history
 ```
 
 If `--directory` is omitted, TerraDrift scans the current working directory.
 
-`scan-all` reads one Terraform root per line from a manifest. Blank lines and `#` comments are ignored, and relative roots resolve from the manifest's directory. It runs roots with bounded concurrency and emits aggregate table or JSON output. The first multi-root pass intentionally excludes notifications, history, dashboards, policies, and cost enrichment.
+`scan-all` reads one Terraform root per line from a manifest. Blank lines and `#` comments are ignored, and relative roots resolve from the manifest's directory. It runs roots with bounded concurrency and emits aggregate table or JSON output. `--incremental-state` is opt-in and retries only roots that previously drifted or failed; omit it for full coverage. The first multi-root pass intentionally excludes notifications, history, dashboards, policies, and cost enrichment.
 
 Build a static cross-root dashboard index from recent history:
 
@@ -98,13 +101,15 @@ TerraDrift accepts any existing local directory at the CLI validation layer. Whe
 
 The `--timeout` flag applies a scan-level deadline to the current and future scan pipeline. The `--redact-paths` flag replaces local filesystem paths in scan output with `[REDACTED]`, which is useful for CI logs.
 
+Terraform command output, configuration files, persisted history, approvals, external-adapter input, notification responses, and uploaded report artifacts have explicit size limits. CLI JSON and dashboard output stream directly instead of buffering a second copy of the report.
+
 The `--workspace-root` flag evaluates symlinks and requires the selected Terraform directory to resolve inside the provided root, which is useful for constrained CI or hosted runner scenarios.
 
 By default, TerraDrift still emits the bootstrap no-drift report. Use `--terraform-exec` to run the Terraform-compatible CLI flow: `init`, `plan -refresh-only -detailed-exitcode`, and `show -json`. `--terraform-bin` selects the executable, defaulting to `terraform`; set it to `tofu` for OpenTofu. The executable must be available on `PATH`.
 
 Terraform-backed scans create `.terradrift-scan.lock` in the selected root to prevent overlap. The lock is removed when the scan exits; after a crash, remove it only after confirming no scan is still active.
 
-The `terradrift init` command writes a starter `.terradrift.json` file with safe local defaults for repeated local or CI usage. Config files can also define optional scan settings such as `terraform_exec`, `terraform_bin`, `workspace_root`, `notify`, `slack_webhook_url`, `teams_webhook_url`, `webhook_url`, `dashboard_html`, `history_dir`, `policy_command`, `policy_args`, `cost_command`, `cost_args`, and `remediation_runbooks`; explicit CLI flags always take precedence.
+The `terradrift init` command writes a tailored `.terradrift.json` file with safe local defaults. Use its `--directory`, `--terraform-exec`, `--redact-paths`, and `--history-dir` flags to guide the initial configuration. Config files can also define optional scan settings such as `terraform_exec`, `terraform_bin`, `workspace_root`, `notify`, `slack_webhook_url`, `teams_webhook_url`, `webhook_url`, `dashboard_html`, `history_dir`, `history_compressed`, `audit_log`, `policy_command`, `policy_args`, `cost_command`, `cost_args`, `baseline_rules`, and `remediation_runbooks`; explicit CLI flags always take precedence. Audit logs are JSON Lines with allowlisted metadata and redacted errors.
 
 Use [`docs/terradrift.schema.json`](docs/terradrift.schema.json) as the JSON Schema reference for editor and CI validation.
 
@@ -235,6 +240,10 @@ make docker-build
 
 The current runtime image intentionally does not install Terraform. To use `--terraform-exec` in Docker, build a derived image that installs Terraform or mount/provide a trusted Terraform binary on `PATH`. Pin Terraform, provider, and module versions in CI for repeatable drift results.
 
+## Releases
+
+Pushing an existing `v*` tag builds Linux amd64 and macOS arm64 archives, publishes SHA-256 checksums, an image SBOM, provenance attestations, and a keyless-signed GHCR runtime image. CI scans the final runtime image and rejects AGPL or GPL-3 licenses.
+
 ## Terraform caching
 
 For scheduled CI scans, set `TF_PLUGIN_CACHE_DIR` to a job cache directory and cache it using a key that includes the Terraform lockfile hash and platform. Keep `.terraform.lock.hcl` committed; invalidate the cache when it changes. Do not share plugin caches between trust boundaries.
@@ -244,7 +253,7 @@ For scheduled CI scans, set `TF_PLUGIN_CACHE_DIR` to a job cache directory and c
 When `--terraform-exec` is provided, `terradrift scan` performs this flow:
 
 1. Validate the Terraform directory.
-2. Run `terraform init`.
+2. Run `terraform init -input=false -backend=true -lockfile=readonly`. A committed `.terraform.lock.hcl` is required; TerraDrift never upgrades providers or rewrites the lockfile.
 3. Run `terraform plan -refresh-only -detailed-exitcode -out <planfile>`.
 4. Run `terraform show -json <planfile>`.
 5. Parse the JSON plan.
@@ -293,7 +302,7 @@ Terraform-backed reports include the CLI version, selected provider versions, an
 
 Each Terraform resource change is classified as `aws`, `azure`, or `gcp` from its provider metadata or resource type. Terraform value data, including account IDs, regions, tags, and potential secrets, is intentionally not parsed.
 
-Use exact-address `ignore_rules` for temporary, auditable exceptions. Each rule requires an owner, reason, and future RFC3339 expiry. Ignored findings stay visible in reports and dashboards but do not fail the scan.
+Use exact-address `baseline_rules` for accepted known drift and `ignore_rules` for temporary exceptions. Both require an owner, reason, and future RFC3339 expiry; explicit ignore rules take precedence when both match. Their metadata remains in reports and history as an audit trail. Ignored findings stay visible in reports and dashboards but do not fail the scan.
 
 Route active findings by owner with `resource_owners` and `owner_webhooks`. Exact resource addresses override resource types; each owner webhook uses the same HTTPS-only webhook protections as normal notifications.
 
@@ -319,7 +328,7 @@ terradrift scan --approval-file report.json.approval.json
 
 Correlate drift with CloudTrail, Azure Activity Log, or GCP Audit Log through `--audit-command`; see [audit adapter guidance](docs/AUDIT_ADAPTERS.md).
 
-For CI, set `allowed_commands` and `trusted_command_dirs` in a profile. Bare commands must resolve on `PATH`; absolute commands must be under a trusted directory. Commands containing shell syntax are rejected.
+For CI, set absolute `allowed_commands` and `trusted_command_dirs` in a profile. Resolved commands, including bare names, must be under a trusted directory; commands containing shell syntax are rejected.
 
 ```json
 {
@@ -437,13 +446,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout infrastructure
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up Terraform
-        uses: hashicorp/setup-terraform@v3
+        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
 
       - name: Run TerraDrift
-        run: terradrift scan --directory ./terraform/prod --output json
+        run: terradrift scan --directory ./terraform/prod --terraform-exec --output json
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
 ```

@@ -39,6 +39,21 @@ func TestWriteAndLoadRecent(t *testing.T) {
 	}
 }
 
+func TestWriteCompressedAndLoadRecent(t *testing.T) {
+	dir := t.TempDir()
+	path, err := WriteCompressed(dir, report.DriftReport{Status: report.ScanStatusNoDrift, Directory: "terraform/prod"})
+	if err != nil {
+		t.Fatalf("write compressed history: %v", err)
+	}
+	if !strings.HasSuffix(path, ".json.gz") {
+		t.Fatalf("expected gzip suffix, got %q", path)
+	}
+	entries, err := LoadRecent(dir, 1)
+	if err != nil || len(entries) != 1 || entries[0].Report.Directory != "terraform/prod" {
+		t.Fatalf("unexpected compressed history: %#v, %v", entries, err)
+	}
+}
+
 func TestWriteRejectsSymlinkDirectory(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("symlink fixture requires POSIX permissions")
@@ -80,5 +95,41 @@ func TestWriteStoresRedactedReportAsProvided(t *testing.T) {
 	}
 	if !strings.Contains(string(data), "[REDACTED]") {
 		t.Fatalf("expected redacted directory to be persisted, got %q", data)
+	}
+}
+
+func TestLoadRecentSkipsMalformedReports(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "2.json"), []byte("not JSON"), 0o600); err != nil {
+		t.Fatalf("write malformed report: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "1.json"), []byte(`{"status":"no_drift"}`), 0o600); err != nil {
+		t.Fatalf("write valid report: %v", err)
+	}
+
+	entries, err := LoadRecent(dir, 1)
+	if err != nil {
+		t.Fatalf("load recent: %v", err)
+	}
+	if len(entries) != 1 || entries[0].Report.Status != report.ScanStatusNoDrift {
+		t.Fatalf("expected valid report after malformed entry, got %#v", entries)
+	}
+}
+
+func TestLoadRecentSkipsOversizedReports(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "2.json"), make([]byte, maxReportBytes+1), 0o600); err != nil {
+		t.Fatalf("write oversized report: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "1.json"), []byte(`{"status":"no_drift"}`), 0o600); err != nil {
+		t.Fatalf("write valid report: %v", err)
+	}
+
+	entries, err := LoadRecent(dir, 1)
+	if err != nil {
+		t.Fatalf("load recent: %v", err)
+	}
+	if len(entries) != 1 || entries[0].Report.Status != report.ScanStatusNoDrift {
+		t.Fatalf("expected valid report after oversized entry, got %#v", entries)
 	}
 }

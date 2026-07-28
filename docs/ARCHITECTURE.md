@@ -19,4 +19,4 @@ External policy, cost, and audit adapters receive report JSON on standard input.
 
 # Report Stability
 
-The JSON report fields `status`, `directory`, `total_resources_checked`, `total_changed_resources`, `resource_changes`, `started_at`, and `completed_at` are stable for automation. New optional fields may be added. Consumers must ignore unknown fields and should not depend on text, dashboard, notification, SARIF, JUnit, or Prometheus wording as a stable API.
+The JSON report fields `status`, `directory`, `total_resources_checked`, `total_changed_resources`, `resource_changes`, `started_at`, and `completed_at` are stable for automation. `root_id` is an optional stable opaque root identity, intended for history correlation when `directory` is path-redacted. New optional fields may be added. Consumers must ignore unknown fields and should not depend on text, dashboard, notification, SARIF, JUnit, or Prometheus wording as a stable API.

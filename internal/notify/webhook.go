@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/niravraychura/terradrift/internal/redact"
 	"github.com/niravraychura/terradrift/internal/report"
+	"github.com/niravraychura/terradrift/internal/validation"
 )
 
 // WebhookNotifier sends drift summaries to a generic HTTPS webhook endpoint.
@@ -32,6 +34,7 @@ func (notifier WebhookNotifier) Notify(ctx context.Context, scanReport report.Dr
 	}
 
 	payload := webhookPayload{
+		ScanID:                scanReport.ScanID,
 		Status:                scanReport.Status,
 		TotalResourcesChecked: scanReport.TotalResourcesChecked,
 		TotalChangedResources: scanReport.TotalChangedResources,
@@ -54,10 +57,10 @@ func (notifier WebhookNotifier) Notify(ctx context.Context, scanReport report.Dr
 		return fmt.Errorf("send webhook notification to %s: %w", redact.String(webhookURL), err)
 	}
 	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
-		_ = response.Body.Close()
+		_ = closeResponseBody(response.Body)
 		return fmt.Errorf("send webhook notification to %s: unexpected status %s", redact.String(webhookURL), response.Status)
 	}
-	if err := response.Body.Close(); err != nil {
+	if err := closeResponseBody(response.Body); err != nil {
 		return fmt.Errorf("close webhook notification response: %w", err)
 	}
 	return nil
@@ -66,24 +69,24 @@ func (notifier WebhookNotifier) Notify(ctx context.Context, scanReport report.Dr
 func validateGenericWebhookURL(rawURL string) (string, error) {
 	webhookURL := strings.TrimSpace(rawURL)
 	if webhookURL == "" {
-		return "", fmt.Errorf("webhook URL is required")
+		return "", validation.New("webhook URL", errors.New("is required"))
 	}
 	parsed, err := url.Parse(webhookURL)
 	if err != nil {
-		return "", fmt.Errorf("parse webhook URL: %w", err)
+		return "", validation.New("webhook URL", errors.New("is malformed"))
 	}
 	if parsed.Scheme != "https" {
-		return "", fmt.Errorf("webhook URL must use https")
+		return "", validation.New("webhook URL", errors.New("must use https"))
 	}
 	if parsed.User != nil {
-		return "", fmt.Errorf("webhook URL must not include user info")
+		return "", validation.New("webhook URL", errors.New("must not include user info"))
 	}
 	host := parsed.Hostname()
 	if host == "" {
-		return "", fmt.Errorf("webhook URL host is required")
+		return "", validation.New("webhook URL", errors.New("host is required"))
 	}
 	if isBlockedWebhookHost(host) {
-		return "", fmt.Errorf("webhook URL host is not allowed")
+		return "", validation.New("webhook URL", errors.New("host is not allowed"))
 	}
 	return parsed.String(), nil
 }
@@ -107,7 +110,10 @@ func isBlockedWebhookIP(ip net.IP) bool {
 	if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsMulticast() || ip.IsUnspecified() {
 		return true
 	}
-	return len(ip) == net.IPv4len && ip[0] == 100 && ip[1]&0xc0 == 0x40
+	if len(ip) == net.IPv4len {
+		return ip[0] == 100 && ip[1]&0xc0 == 0x40 || ip[0] == 198 && ip[1]&0xfe == 18
+	}
+	return ip.IsInterfaceLocalMulticast()
 }
 
 func secureWebhookClient() *http.Client {
@@ -151,6 +157,7 @@ func secureWebhookDialContext(ctx context.Context, network string, address strin
 }
 
 type webhookPayload struct {
+	ScanID                string            `json:"scan_id"`
 	Status                report.ScanStatus `json:"status"`
 	TotalResourcesChecked int               `json:"total_resources_checked"`
 	TotalChangedResources int               `json:"total_changed_resources"`

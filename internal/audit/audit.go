@@ -11,23 +11,39 @@ import (
 
 	"github.com/niravraychura/terradrift/internal/redact"
 	"github.com/niravraychura/terradrift/internal/report"
+	"github.com/niravraychura/terradrift/internal/validation"
 )
 
-const maxOutputBytes = 256 * 1024
+const (
+	maxInputBytes  = 1 << 20
+	maxOutputBytes = 256 * 1024
+)
 
+// Options configures an external cloud audit adapter.
 type Options struct {
 	Command string
 	Args    []string
 }
 
+// Validate rejects an incomplete audit adapter configuration.
+func (options Options) Validate() error {
+	if strings.TrimSpace(options.Command) == "" {
+		return validation.New("audit command", fmt.Errorf("is required"))
+	}
+	return nil
+}
+
 // Enrich runs an explicit audit adapter and attaches events by Terraform address.
 func Enrich(ctx context.Context, options Options, scanReport report.DriftReport) (report.DriftReport, error) {
-	if strings.TrimSpace(options.Command) == "" {
-		return scanReport, fmt.Errorf("audit command is required")
+	if err := options.Validate(); err != nil {
+		return scanReport, err
 	}
 	payload, err := json.Marshal(scanReport)
 	if err != nil {
 		return scanReport, fmt.Errorf("encode audit input: %w", err)
+	}
+	if len(payload) > maxInputBytes {
+		return scanReport, fmt.Errorf("audit input exceeds %d bytes", maxInputBytes)
 	}
 	cmd := exec.CommandContext(ctx, options.Command, options.Args...)
 	cmd.Stdin = bytes.NewReader(payload)

@@ -3,7 +3,7 @@ name: CI
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: [main, dev]
 
 permissions:
   contents: read
@@ -13,16 +13,20 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - name: Set up Go
-        uses: actions/setup-go@v7
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
           check-latest: true
           cache: true
           cache-dependency-path: go.sum
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
+        with:
+          terraform_version: 1.10.0
       - name: Download dependencies
         run: go mod download
       - name: Check formatting
@@ -40,6 +44,26 @@ jobs:
       - name: Build
         run: go build -o bin/terradrift ./cmd/terradrift
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v9
+        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.0.0
         with:
           version: v2.12.2
+      - name: Build runtime image
+        run: docker build -t terradrift:ci .
+      - name: Generate image SBOM
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+        with:
+          image: terradrift:ci
+          format: spdx-json
+          output-file: sbom.spdx.json
+          upload-artifact: false
+          upload-release-assets: false
+      - name: Enforce license policy
+        run: jq -e 'all(.packages[]?.licenseConcluded; (. | test("AGPL|GPL-3")) | not)' sbom.spdx.json
+      - name: Scan runtime image
+        uses: docker/scout-action@2688993af7bafd6ba8c6a74ec652442be91dd82b # v1.23.1
+        with:
+          command: cves
+          image: local://terradrift:ci
+          only-severities: critical,high
+          exit-code: true
+          write-comment: false

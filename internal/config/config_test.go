@@ -65,6 +65,22 @@ func TestLoadRejectsUnknownField(t *testing.T) {
 	}
 }
 
+func TestLoadRejectsInvalidUnselectedProfileAndTrailingJSON(t *testing.T) {
+	path := filepath.Join(t.TempDir(), DefaultPath)
+	if err := os.WriteFile(path, []byte(`{"profiles":{"unused":{"typo":true}}}`), 0o600); err != nil {
+		t.Fatalf("write config fixture: %v", err)
+	}
+	if _, err := Load(path); err == nil {
+		t.Fatal("expected invalid unselected profile to fail")
+	}
+	if err := os.WriteFile(path, []byte(`{} {}`), 0o600); err != nil {
+		t.Fatalf("write config fixture: %v", err)
+	}
+	if _, err := Load(path); err == nil {
+		t.Fatal("expected trailing JSON to fail")
+	}
+}
+
 func TestLoadRejectsInvalidValues(t *testing.T) {
 	path := filepath.Join(t.TempDir(), DefaultPath)
 	if err := os.WriteFile(path, []byte(`{"output":"xml"}`), 0o600); err != nil {
@@ -72,5 +88,37 @@ func TestLoadRejectsInvalidValues(t *testing.T) {
 	}
 	if _, err := Load(path); err == nil {
 		t.Fatal("expected invalid config value to fail")
+	}
+}
+
+func TestLoadRejectsUnsafeConfiguredURL(t *testing.T) {
+	path := filepath.Join(t.TempDir(), DefaultPath)
+	if err := os.WriteFile(path, []byte(`{"webhook_url":"http://example.com"}`), 0o600); err != nil {
+		t.Fatalf("write config fixture: %v", err)
+	}
+	if _, err := Load(path); err == nil {
+		t.Fatal("expected unsafe URL to fail")
+	}
+}
+
+func TestLoadBaselineRules(t *testing.T) {
+	path := filepath.Join(t.TempDir(), DefaultPath)
+	data := []byte(`{"baseline_rules":[{"address":"aws_instance.web","owner":"platform","reason":"accepted","expires_at":"2030-01-01T00:00:00Z"}]}`)
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatalf("write config fixture: %v", err)
+	}
+	cfg, err := Load(path)
+	if err != nil || len(cfg.BaselineRules) != 1 || cfg.BaselineRules[0].Address != "aws_instance.web" {
+		t.Fatalf("unexpected baseline config: %#v, %v", cfg, err)
+	}
+}
+
+func TestLoadRejectsOversizedConfig(t *testing.T) {
+	path := filepath.Join(t.TempDir(), DefaultPath)
+	if err := os.WriteFile(path, make([]byte, maxConfigBytes+1), 0o600); err != nil {
+		t.Fatalf("write oversized config: %v", err)
+	}
+	if _, err := Load(path); err == nil {
+		t.Fatal("expected oversized config to fail")
 	}
 }

@@ -11,6 +11,7 @@ import (
 const replacement = "[REDACTED]"
 
 var sensitiveAssignmentPattern = regexp.MustCompile(`(?i)(authorization|api[_-]?key|access[_-]?token|auth[_-]?token|client[_-]?secret|password|secret|token)(\s*[=:]\s*)([^\s,;&]+)`)
+var quotedSensitiveAssignmentPattern = regexp.MustCompile(`(?i)((?:"|')(?:authorization|api[_-]?key|access[_-]?token|auth[_-]?token|client[_-]?secret|password|secret|token)(?:"|')\s*[=:]\s*["']?)([^\s,;&"'}\]]+)`)
 var authorizationHeaderPattern = regexp.MustCompile(`(?i)(authorization\s*:\s*)[^\r\n]+`)
 
 // String removes common secret patterns from a string while preserving enough
@@ -23,6 +24,7 @@ func String(value string) string {
 
 func redactSensitiveAssignments(value string) string {
 	value = authorizationHeaderPattern.ReplaceAllString(value, `${1}`+replacement)
+	value = quotedSensitiveAssignmentPattern.ReplaceAllString(value, `${1}`+replacement)
 	return sensitiveAssignmentPattern.ReplaceAllString(value, `${1}${2}`+replacement)
 }
 
@@ -74,5 +76,5 @@ func isSensitiveHost(host string) bool {
 
 func isSensitiveKey(key string) bool {
 	key = strings.ToLower(key)
-	return strings.Contains(key, "token") || strings.Contains(key, "secret") || strings.Contains(key, "password") || strings.Contains(key, "key")
+	return strings.Contains(key, "token") || strings.Contains(key, "secret") || strings.Contains(key, "password") || strings.Contains(key, "key") || strings.Contains(key, "signature") || strings.Contains(key, "credential")
 }

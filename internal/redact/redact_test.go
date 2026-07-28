@@ -6,10 +6,10 @@ import (
 )
 
 func TestStringRedactsSensitiveAssignments(t *testing.T) {
-	input := "token=abc123 password:super-secret api_key=key123 authorization=BearerValue client_secret=client-secret harmless=value\nAuthorization: Bearer bearer-secret\nAuthorization: Basic basic-secret"
+	input := "token=abc123 password:super-secret api_key=key123 authorization=BearerValue client_secret=client-secret \"token\":\"json-secret\" 'password' = 'hcl-secret' harmless=value\nAuthorization: Bearer bearer-secret\nAuthorization: Basic basic-secret"
 	got := String(input)
 
-	for _, leaked := range []string{"abc123", "super-secret", "key123", "BearerValue", "bearer-secret", "basic-secret", "client-secret"} {
+	for _, leaked := range []string{"abc123", "super-secret", "key123", "BearerValue", "bearer-secret", "basic-secret", "client-secret", "json-secret", "hcl-secret"} {
 		if strings.Contains(got, leaked) {
 			t.Fatalf("expected %q to be redacted from %q", leaked, got)
 		}
@@ -44,10 +44,10 @@ func TestStringRedactsTeamsWebhookURL(t *testing.T) {
 }
 
 func TestStringRedactsSensitiveURLQueryValues(t *testing.T) {
-	input := "fetch https://example.com/callback?token=abc123&name=prod"
+	input := "fetch https://example.com/callback?token=abc123&X-Amz-Signature=aws-signature&name=prod"
 	got := String(input)
 
-	if strings.Contains(got, "abc123") {
+	if strings.Contains(got, "abc123") || strings.Contains(got, "aws-signature") {
 		t.Fatalf("expected token value to be redacted, got %q", got)
 	}
 	if !strings.Contains(got, "name=prod") {
