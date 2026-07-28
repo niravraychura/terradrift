@@ -95,7 +95,8 @@ This plan tracks security, performance, code quality, and feature work for Terra
 - [x] Document backend/state safety and secret-managed integration credentials.
 - [x] Document repository secret scanning and least-privilege AWS, Azure, and GCP IAM guidance.
 - [x] Pin third-party GitHub Actions to immutable SHAs in CI and user-facing examples.
-- [ ] Add release checksums, SBOM, provenance, image signing/scanning, and license policy checks.
+- [x] Automate tag releases with SHA-256 checksums and generated GitHub release notes.
+- [ ] Add SBOM, provenance, image signing/scanning, and license policy checks.
 - [ ] Add secret-safe structured audit logging with scan, config, workspace, version, and command metadata.
 - [x] Test and reject unexpected Terraform detailed-exit codes; context cancellation is covered.
 - [x] Parse Terraform output-change actions and resource action reasons without retaining Terraform values or sensitive marks.
@@ -121,7 +122,7 @@ This plan tracks security, performance, code quality, and feature work for Terra
 - [x] Add a non-mutating `make ci` target for local quality checks.
 - [x] Add CLI help safety-flag coverage.
 - [x] Produce CI coverage output and function summaries.
-- [ ] Add changelog automation and release automation.
+- [x] Add generated changelog notes and tag-driven release automation.
 - [x] Add supported local and CI configuration examples.
 - [x] Document stable JSON report guarantees and package architecture/scan-sequence design.
 

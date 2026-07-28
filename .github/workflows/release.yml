@@ -1,0 +1,39 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          check-latest: true
+      - name: Build release archives
+        run: |
+          for target in linux_amd64 darwin_arm64; do
+            os="${target%_*}"
+            arch="${target#*_}"
+            directory="dist/terradrift_${os}_${arch}"
+            mkdir -p "$directory"
+            GOOS="$os" GOARCH="$arch" CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o "$directory/terradrift" ./cmd/terradrift
+            tar -C "$directory" -czf "dist/terradrift_${os}_${arch}.tar.gz" terradrift
+          done
+          sha256sum dist/*.tar.gz > dist/checksums.txt
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" dist/*.tar.gz dist/checksums.txt --generate-notes --verify-tag
