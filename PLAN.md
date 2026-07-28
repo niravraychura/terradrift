@@ -83,6 +83,34 @@ This plan tracks security, performance, code quality, and feature work for Terra
 - [x] Add Terraform, provider, and module version inventory reporting.
 - [x] Add an optional read-only local API for serving report history.
 
+## Review Follow-ups
+
+- [ ] Add external-command allowlists, trusted-path validation, and CI-safe presets.
+- [ ] Bound notification response bodies and complete output/input size budgets.
+- [ ] Redact `ErrorMessage` before JSON, history, dashboards, policy input, and notification delivery.
+- [ ] Redact Terraform plan sensitive fields and marks before any future value expansion.
+- [ ] Protect dashboard and history output paths from symlink writes.
+- [ ] Document backend/state safety, secret scanning, and least-privilege AWS, Azure, and GCP IAM examples.
+- [ ] Add release supply-chain controls: checksums, SBOM, provenance, SHA-pinned Actions examples, image signing, Docker scanning, and license policy checks.
+- [ ] Add secret-safe structured audit logging with scan, config, workspace, version, and command metadata.
+- [ ] Test unexpected Terraform detailed-exit codes and context cancellation.
+- [ ] Parse Terraform output-value changes, action reasons, replacement reasons, and deleted-resource context.
+- [ ] Add safe Terraform initialization controls for lockfiles, upgrades, backends, and plugin caching.
+- [ ] Add stable scan IDs to reports, history, notifications, and dashboards.
+- [ ] Skip malformed history files with warnings instead of failing dashboard rendering.
+- [ ] Validate config fields early and publish a `.terradrift.json` JSON Schema.
+- [ ] Add credential-free Terraform integration tests and golden plan-JSON fixtures.
+- [ ] Sort resource changes by address and model complete, partial, and drift outcomes for multi-root scans.
+- [ ] Stream or bound large Terraform JSON input and fail fast when Terraform roots have no configuration.
+- [ ] Document Terraform provider/plugin caching with `TF_PLUGIN_CACHE_DIR` and CI cache keys.
+- [ ] Parallelize independent post-scan enrichment and delivery work safely.
+- [ ] Add incremental scan manifests, history retention pruning, and optional compressed history artifacts.
+- [ ] Normalize workspace and output paths once through a validated execution context.
+- [ ] Add typed option validation and typed errors across config, scan, notification, policy, and cost boundaries.
+- [ ] Refresh stale package documentation and add complete comments for exported APIs.
+- [ ] Add CLI help snapshots, a `make ci` target, coverage reports, changelog automation, and release automation.
+- [ ] Add configuration examples, stable JSON schema guarantees, and package architecture/scan-sequence documentation.
+
 ## Ongoing quality gates
 
 Before marking a feature complete, run the relevant checks and update this file:
