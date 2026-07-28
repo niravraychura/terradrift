@@ -32,6 +32,7 @@ func (notifier WebhookNotifier) Notify(ctx context.Context, scanReport report.Dr
 	}
 
 	payload := webhookPayload{
+		ScanID:                scanReport.ScanID,
 		Status:                scanReport.Status,
 		TotalResourcesChecked: scanReport.TotalResourcesChecked,
 		TotalChangedResources: scanReport.TotalChangedResources,
@@ -151,6 +152,7 @@ func secureWebhookDialContext(ctx context.Context, network string, address strin
 }
 
 type webhookPayload struct {
+	ScanID                string            `json:"scan_id"`
 	Status                report.ScanStatus `json:"status"`
 	TotalResourcesChecked int               `json:"total_resources_checked"`
 	TotalChangedResources int               `json:"total_changed_resources"`

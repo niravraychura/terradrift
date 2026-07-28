@@ -26,6 +26,7 @@ var reportTemplate = template.Must(template.New("dashboard").Parse(`<!doctype ht
   <main>
     <h1>TerraDrift Report</h1>
     <dl>
+      <dt>Scan ID</dt><dd>{{.Current.ScanID}}</dd>
       <dt>Status</dt><dd>{{.Current.Status}}</dd>
       <dt>Resources checked</dt><dd>{{.Current.TotalResourcesChecked}}</dd>
       <dt>Changed resources</dt><dd>{{.Current.TotalChangedResources}}</dd>
@@ -37,8 +38,8 @@ var reportTemplate = template.Must(template.New("dashboard").Parse(`<!doctype ht
     </table>
     <h2>Recent scan history</h2>
     <table>
-      <thead><tr><th>Completed at</th><th>Status</th><th>Resources checked</th><th>Changed resources</th></tr></thead>
-      <tbody>{{range .History}}<tr><td>{{.Report.CompletedAt}}</td><td>{{.Report.Status}}</td><td>{{.Report.TotalResourcesChecked}}</td><td>{{.Report.TotalChangedResources}}</td></tr>{{else}}<tr><td colspan="4">No history available</td></tr>{{end}}</tbody>
+      <thead><tr><th>Scan ID</th><th>Completed at</th><th>Status</th><th>Resources checked</th><th>Changed resources</th></tr></thead>
+      <tbody>{{range .History}}<tr><td>{{.Report.ScanID}}</td><td>{{.Report.CompletedAt}}</td><td>{{.Report.Status}}</td><td>{{.Report.TotalResourcesChecked}}</td><td>{{.Report.TotalChangedResources}}</td></tr>{{else}}<tr><td colspan="5">No history available</td></tr>{{end}}</tbody>
     </table>
   </main>
 </body>
@@ -52,8 +53,8 @@ var indexTemplate = template.Must(template.New("dashboard-index").Parse(`<!docty
   <main>
     <h1>TerraDrift Dashboard Index</h1>
     <table>
-      <thead><tr><th>Directory</th><th>Completed at</th><th>Status</th><th>Resources checked</th><th>Changed resources</th></tr></thead>
-      <tbody>{{range .}}<tr><td>{{.Report.Directory}}</td><td>{{.Report.CompletedAt}}</td><td>{{.Report.Status}}</td><td>{{.Report.TotalResourcesChecked}}</td><td>{{.Report.TotalChangedResources}}</td></tr>{{else}}<tr><td colspan="5">No history available</td></tr>{{end}}</tbody>
+      <thead><tr><th>Scan ID</th><th>Directory</th><th>Completed at</th><th>Status</th><th>Resources checked</th><th>Changed resources</th></tr></thead>
+      <tbody>{{range .}}<tr><td>{{.Report.ScanID}}</td><td>{{.Report.Directory}}</td><td>{{.Report.CompletedAt}}</td><td>{{.Report.Status}}</td><td>{{.Report.TotalResourcesChecked}}</td><td>{{.Report.TotalChangedResources}}</td></tr>{{else}}<tr><td colspan="6">No history available</td></tr>{{end}}</tbody>
     </table>
   </main>
 </body>

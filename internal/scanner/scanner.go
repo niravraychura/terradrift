@@ -3,6 +3,8 @@ package scanner
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"os"
@@ -81,10 +83,15 @@ func Scan(ctx context.Context, options Options) (Result, error) {
 			return Result{Outcome: OutcomeFailed}, fmt.Errorf("terraform directory has no .tf or .tf.json files: %s", absDir)
 		}
 	}
+	scanID, err := newScanID()
+	if err != nil {
+		return Result{Outcome: OutcomeFailed}, fmt.Errorf("create scan ID: %w", err)
+	}
 
 	if options.Runner == nil {
 		now := time.Now().UTC()
 		return Result{Outcome: OutcomeNoDrift, Report: report.DriftReport{
+			ScanID:          scanID,
 			Status:          report.ScanStatusNoDrift,
 			Directory:       absDir,
 			ResourceChanges: []report.ResourceChange{},
@@ -99,7 +106,7 @@ func Scan(ctx context.Context, options Options) (Result, error) {
 	}
 	defer unlock()
 
-	scanReport, err := runTerraformScan(ctx, options.Runner, absDir)
+	scanReport, err := runTerraformScan(ctx, options.Runner, absDir, scanID)
 	if err != nil {
 		return Result{Outcome: OutcomeFailed, Report: scanReport}, err
 	}
@@ -175,9 +182,10 @@ func ValidateDirectory(directory string) (string, error) {
 	return absDir, nil
 }
 
-func runTerraformScan(ctx context.Context, runner terraform.Runner, directory string) (report.DriftReport, error) {
+func runTerraformScan(ctx context.Context, runner terraform.Runner, directory string, scanID string) (report.DriftReport, error) {
 	startedAt := time.Now().UTC()
 	scanReport := report.DriftReport{
+		ScanID:          scanID,
 		Status:          report.ScanStatusRunning,
 		Directory:       directory,
 		ResourceChanges: []report.ResourceChange{},
@@ -240,6 +248,16 @@ func runTerraformScan(ctx context.Context, runner terraform.Runner, directory st
 	scanReport.TotalChangedResources = len(resourceChanges)
 	scanReport.CompletedAt = time.Now().UTC()
 	return scanReport, nil
+}
+
+func newScanID() (string, error) {
+	bytes := make([]byte, 16)
+	if _, err := rand.Read(bytes); err != nil {
+		return "", err
+	}
+	bytes[6] = bytes[6]&0x0f | 0x40
+	bytes[8] = bytes[8]&0x3f | 0x80
+	return hex.EncodeToString(bytes[0:4]) + "-" + hex.EncodeToString(bytes[4:6]) + "-" + hex.EncodeToString(bytes[6:8]) + "-" + hex.EncodeToString(bytes[8:10]) + "-" + hex.EncodeToString(bytes[10:]), nil
 }
 
 func failReport(scanReport *report.DriftReport, err error) {

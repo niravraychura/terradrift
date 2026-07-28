@@ -59,6 +59,9 @@ func TestScanReturnsNoDriftBootstrapResult(t *testing.T) {
 	if result.Report.ResourceChanges == nil {
 		t.Fatal("expected empty resource changes, got nil")
 	}
+	if len(result.Report.ScanID) != 36 {
+		t.Fatalf("expected UUID scan ID, got %q", result.Report.ScanID)
+	}
 }
 
 func TestScanReturnsFailedOutcomeForInvalidDirectory(t *testing.T) {

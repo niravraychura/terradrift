@@ -872,6 +872,9 @@ func writeScanReport(stdout io.Writer, scanReport report.DriftReport, format out
 		if _, err := fmt.Fprintf(stdout, "Status: %s\n", scanReport.Status); err != nil {
 			return fmt.Errorf("write scan output: %w", err)
 		}
+		if _, err := fmt.Fprintf(stdout, "Scan ID: %s\n", scanReport.ScanID); err != nil {
+			return fmt.Errorf("write scan output: %w", err)
+		}
 		if _, err := fmt.Fprintf(stdout, "Terraform directory: %s\n", scanReport.Directory); err != nil {
 			return fmt.Errorf("write scan output: %w", err)
 		}
