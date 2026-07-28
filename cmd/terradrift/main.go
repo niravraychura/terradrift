@@ -1424,9 +1424,10 @@ func scanAll(ctx context.Context, directories []string, options scanner.Options,
 		}
 		aggregate.TotalResourcesChecked += root.Report.TotalResourcesChecked
 		aggregate.TotalChangedResources += root.Report.TotalChangedResources
-		if root.Report.Status == report.ScanStatusDriftDetected {
+		switch root.Report.Status {
+		case report.ScanStatusDriftDetected:
 			aggregate.DriftedRoots++
-		} else if root.Report.Status == report.ScanStatusChangesDetected {
+		case report.ScanStatusChangesDetected:
 			aggregate.ChangedRoots++
 		}
 	}
