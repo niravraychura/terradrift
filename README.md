@@ -60,6 +60,7 @@ terradrift scan -d ./terraform/prod
 terradrift scan -d ./terraform/prod --output json
 terradrift scan -d ./terraform/prod --output junit
 terradrift scan -d ./terraform/prod --output sarif
+terradrift scan-all --manifest terraform-roots.txt --concurrency 4 --output json
 terradrift scan -d ./terraform/prod --timeout 2m --redact-paths
 terradrift scan -d ./terraform/prod --workspace-root "$PWD"
 terradrift scan -d ./terraform/prod --terraform-exec --output json
@@ -75,6 +76,14 @@ terradrift init
 ```
 
 If `--directory` is omitted, TerraDrift scans the current working directory.
+
+`scan-all` reads one Terraform root per line from a manifest. Blank lines and `#` comments are ignored, and relative roots resolve from the manifest's directory. It runs roots with bounded concurrency and emits aggregate table or JSON output. The first multi-root pass intentionally excludes notifications, history, dashboards, policies, and cost enrichment.
+
+```text
+# terraform-roots.txt
+environments/development
+environments/production
+```
 
 TerraDrift accepts any existing local directory at the CLI validation layer. When `--terraform-exec` is enabled, Terraform performs its own configuration validation and returns a scan failure if the selected directory is not usable Terraform configuration.
 

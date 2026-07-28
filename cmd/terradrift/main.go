@@ -8,7 +8,9 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/niravraychura/terradrift/internal/config"
@@ -23,7 +25,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var errDriftDetected = errors.New("drift detected")
+var (
+	errDriftDetected   = errors.New("drift detected")
+	errMultiScanFailed = errors.New("one or more scans failed")
+)
 
 const (
 	exitCodeOK            = 0
@@ -43,7 +48,7 @@ const (
 func main() {
 	if err := newRootCommand(os.Stdout, os.Stderr).Execute(); err != nil {
 		code := exitCodeForError(err)
-		if code != exitCodeDriftDetected {
+		if code != exitCodeDriftDetected && !errors.Is(err, errMultiScanFailed) {
 			fmt.Fprintln(os.Stderr, "Error:", err)
 		}
 		os.Exit(code)
@@ -68,7 +73,68 @@ func newRootCommand(stdout, stderr io.Writer) *cobra.Command {
 	cmd.SetOut(stdout)
 	cmd.SetErr(stderr)
 	cmd.AddCommand(newScanCommand(stdout))
+	cmd.AddCommand(newScanAllCommand(stdout))
 	cmd.AddCommand(newInitCommand(stdout))
+	return cmd
+}
+
+func newScanAllCommand(stdout io.Writer) *cobra.Command {
+	var manifest string
+	var format string
+	var timeout time.Duration
+	var concurrency int
+	var terraformExec bool
+	var terraformBin string
+	var workspaceRoot string
+	var redactPaths bool
+
+	cmd := &cobra.Command{
+		Use:   "scan-all",
+		Short: "Scan Terraform roots from a manifest",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			directories, err := loadScanManifest(manifest)
+			if err != nil {
+				return err
+			}
+			parsedFormat, err := parseOutputFormat(format)
+			if err != nil {
+				return err
+			}
+			if parsedFormat != outputFormatTable && parsedFormat != outputFormatJSON {
+				return fmt.Errorf("scan-all supports table and json output")
+			}
+			if concurrency <= 0 {
+				return fmt.Errorf("concurrency must be greater than zero")
+			}
+
+			options := scanner.Options{Timeout: timeout, WorkspaceRoot: workspaceRoot}
+			if terraformExec {
+				options.Runner = terraform.NewCLIRunner(terraformBin)
+			}
+			aggregate := scanAll(cmd.Context(), directories, options, concurrency, redactPaths)
+			if err := writeMultiScanReport(stdout, aggregate, parsedFormat); err != nil {
+				return err
+			}
+			if aggregate.FailedRoots > 0 {
+				return fmt.Errorf("%w: %d roots", errMultiScanFailed, aggregate.FailedRoots)
+			}
+			if aggregate.DriftedRoots > 0 {
+				return errDriftDetected
+			}
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&manifest, "manifest", "", "newline-delimited Terraform root manifest")
+	cmd.Flags().StringVarP(&format, "output", "o", string(outputFormatTable), "output format: table, json")
+	cmd.Flags().DurationVar(&timeout, "timeout", scanner.DefaultTimeout, "maximum scan duration per root")
+	cmd.Flags().IntVar(&concurrency, "concurrency", 4, "maximum concurrent scans")
+	cmd.Flags().BoolVar(&terraformExec, "terraform-exec", false, "run Terraform-compatible scans")
+	cmd.Flags().StringVar(&terraformBin, "terraform-bin", "", "Terraform-compatible executable to run (default: terraform)")
+	cmd.Flags().StringVar(&workspaceRoot, "workspace-root", "", "require roots to resolve inside this workspace root")
+	cmd.Flags().BoolVar(&redactPaths, "redact-paths", false, "redact local filesystem paths from scan output")
+	if err := cmd.MarkFlagRequired("manifest"); err != nil {
+		panic(err)
+	}
 	return cmd
 }
 
@@ -369,6 +435,120 @@ func writeScanReport(stdout io.Writer, scanReport report.DriftReport, format out
 	default:
 		return fmt.Errorf("unsupported output format %q; supported values: table, json, junit, sarif", format)
 	}
+}
+
+type multiScanReport struct {
+	Roots                 []multiScanRoot `json:"roots"`
+	TotalRoots            int             `json:"total_roots"`
+	DriftedRoots          int             `json:"drifted_roots"`
+	FailedRoots           int             `json:"failed_roots"`
+	TotalResourcesChecked int             `json:"total_resources_checked"`
+	TotalChangedResources int             `json:"total_changed_resources"`
+}
+
+type multiScanRoot struct {
+	Directory string             `json:"directory"`
+	Report    report.DriftReport `json:"report,omitempty"`
+	Error     string             `json:"error,omitempty"`
+}
+
+func loadScanManifest(path string) ([]string, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("read scan manifest %s: %w", path, err)
+	}
+	base := filepath.Dir(path)
+	directories := make([]string, 0)
+	for _, line := range strings.Split(string(data), "\n") {
+		directory := strings.TrimSpace(line)
+		if directory == "" || strings.HasPrefix(directory, "#") {
+			continue
+		}
+		if !filepath.IsAbs(directory) {
+			directory = filepath.Join(base, directory)
+		}
+		directories = append(directories, directory)
+	}
+	if len(directories) == 0 {
+		return nil, fmt.Errorf("scan manifest %s has no Terraform roots", path)
+	}
+	return directories, nil
+}
+
+func scanAll(ctx context.Context, directories []string, options scanner.Options, concurrency int, redactPaths bool) multiScanReport {
+	roots := make([]multiScanRoot, len(directories))
+	jobs := make(chan int)
+	var workers sync.WaitGroup
+	for range min(concurrency, len(directories)) {
+		workers.Add(1)
+		go func() {
+			defer workers.Done()
+			for index := range jobs {
+				root := multiScanRoot{Directory: directories[index]}
+				rootOptions := options
+				rootOptions.Directory = directories[index]
+				result, err := scanner.Scan(ctx, rootOptions)
+				if err != nil {
+					if redactPaths {
+						root.Directory = "[REDACTED]"
+						root.Error = "scan failed"
+					} else {
+						root.Error = err.Error()
+					}
+				} else {
+					root.Report = result.Report
+					if redactPaths {
+						root.Directory = "[REDACTED]"
+						root.Report.Directory = "[REDACTED]"
+					}
+				}
+				roots[index] = root
+			}
+		}()
+	}
+	for index := range directories {
+		jobs <- index
+	}
+	close(jobs)
+	workers.Wait()
+
+	aggregate := multiScanReport{Roots: roots, TotalRoots: len(roots)}
+	for _, root := range roots {
+		if root.Error != "" {
+			aggregate.FailedRoots++
+			continue
+		}
+		aggregate.TotalResourcesChecked += root.Report.TotalResourcesChecked
+		aggregate.TotalChangedResources += root.Report.TotalChangedResources
+		if root.Report.Status == report.ScanStatusDriftDetected {
+			aggregate.DriftedRoots++
+		}
+	}
+	return aggregate
+}
+
+func writeMultiScanReport(stdout io.Writer, aggregate multiScanReport, format outputFormat) error {
+	if format == outputFormatJSON {
+		encoder := json.NewEncoder(stdout)
+		encoder.SetIndent("", "  ")
+		if err := encoder.Encode(aggregate); err != nil {
+			return fmt.Errorf("write scan output: %w", err)
+		}
+		return nil
+	}
+	for _, line := range []string{
+		"TerraDrift multi-root scan complete",
+		fmt.Sprintf("Roots scanned: %d", aggregate.TotalRoots),
+		fmt.Sprintf("Drifted roots: %d", aggregate.DriftedRoots),
+		fmt.Sprintf("Failed roots: %d", aggregate.FailedRoots),
+		fmt.Sprintf("Resources checked: %d", aggregate.TotalResourcesChecked),
+		fmt.Sprintf("Changed resources: %d", aggregate.TotalChangedResources),
+	} {
+		if _, err := fmt.Fprintln(stdout, line); err != nil {
+			return fmt.Errorf("write scan output: %w", err)
+		}
+	}
+	return nil
 }
 
 type junitTestSuites struct {

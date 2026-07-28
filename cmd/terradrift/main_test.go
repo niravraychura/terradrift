@@ -35,6 +35,31 @@ func TestScanDefaultsToCurrentDirectory(t *testing.T) {
 	}
 }
 
+func TestScanAllLoadsRelativeManifestRoots(t *testing.T) {
+	root := t.TempDir()
+	for _, directory := range []string{"development", "production"} {
+		if err := os.Mkdir(filepath.Join(root, directory), 0o700); err != nil {
+			t.Fatalf("create root fixture: %v", err)
+		}
+	}
+	manifest := filepath.Join(root, "roots.txt")
+	if err := os.WriteFile(manifest, []byte("# Terraform roots\ndevelopment\nproduction\n"), 0o600); err != nil {
+		t.Fatalf("write manifest fixture: %v", err)
+	}
+
+	stdout, _, err := executeCommand("scan-all", "--manifest", manifest, "--output", "json", "--concurrency", "1")
+	if err != nil {
+		t.Fatalf("expected multi-root scan to succeed: %v", err)
+	}
+	var aggregate multiScanReport
+	if err := json.Unmarshal([]byte(stdout), &aggregate); err != nil {
+		t.Fatalf("expected aggregate JSON: %v", err)
+	}
+	if aggregate.TotalRoots != 2 || aggregate.FailedRoots != 0 || len(aggregate.Roots) != 2 {
+		t.Fatalf("unexpected aggregate: %#v", aggregate)
+	}
+}
+
 func TestScanRejectsNonexistentDirectory(t *testing.T) {
 	missing := filepath.Join(t.TempDir(), "missing")
 	_, _, err := executeCommand("scan", "--directory", missing)
