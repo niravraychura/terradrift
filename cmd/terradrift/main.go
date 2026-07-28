@@ -532,6 +532,7 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 			}
 			if terraformExec {
 				scanOptions.Runner = terraform.NewCLIRunner(terraformBin)
+				scanOptions.RequireTerraformFiles = true
 			}
 
 			result, err := scanner.Scan(cmd.Context(), scanOptions)

@@ -315,15 +315,23 @@ func TestScanAcceptsTimeoutFlag(t *testing.T) {
 }
 
 func TestScanUsesConfiguredTerraformBinary(t *testing.T) {
-	_, _, err := executeCommand("scan", "-d", t.TempDir(), "--terraform-exec", "--terraform-bin", "tofu-not-installed")
+	directory := t.TempDir()
+	if err := os.WriteFile(filepath.Join(directory, "main.tf"), []byte("terraform {}"), 0o600); err != nil {
+		t.Fatalf("write Terraform fixture: %v", err)
+	}
+	_, _, err := executeCommand("scan", "-d", directory, "--terraform-exec", "--terraform-bin", "tofu-not-installed")
 	if err == nil || !strings.Contains(err.Error(), "tofu-not-installed") {
 		t.Fatalf("expected configured Terraform binary error, got %v", err)
 	}
 }
 
 func TestScanUsesTerraformBinaryFromConfig(t *testing.T) {
+	directory := t.TempDir()
+	if err := os.WriteFile(filepath.Join(directory, "main.tf"), []byte("terraform {}"), 0o600); err != nil {
+		t.Fatalf("write Terraform fixture: %v", err)
+	}
 	path := filepath.Join(t.TempDir(), ".terradrift.json")
-	if err := os.WriteFile(path, []byte(`{"directory":".","terraform_exec":true,"terraform_bin":"tofu-from-config"}`), 0o600); err != nil {
+	if err := os.WriteFile(path, []byte(`{"directory":"`+filepath.ToSlash(directory)+`","terraform_exec":true,"terraform_bin":"tofu-from-config"}`), 0o600); err != nil {
 		t.Fatalf("write config fixture: %v", err)
 	}
 

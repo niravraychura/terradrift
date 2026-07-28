@@ -29,10 +29,11 @@ const (
 
 // Options configures a scan run.
 type Options struct {
-	Directory     string
-	Timeout       time.Duration
-	Runner        terraform.Runner
-	WorkspaceRoot string
+	Directory             string
+	Timeout               time.Duration
+	Runner                terraform.Runner
+	WorkspaceRoot         string
+	RequireTerraformFiles bool
 }
 
 // Result captures both the user-facing report and the CLI-facing outcome.
@@ -63,6 +64,19 @@ func Scan(ctx context.Context, options Options) (Result, error) {
 	if options.WorkspaceRoot != "" {
 		if err := ValidateWorkspaceRoot(absDir, options.WorkspaceRoot); err != nil {
 			return Result{Outcome: OutcomeFailed}, err
+		}
+	}
+	if options.RequireTerraformFiles {
+		matches, err := filepath.Glob(filepath.Join(absDir, "*.tf"))
+		if err != nil {
+			return Result{Outcome: OutcomeFailed}, fmt.Errorf("list Terraform files: %w", err)
+		}
+		jsonMatches, err := filepath.Glob(filepath.Join(absDir, "*.tf.json"))
+		if err != nil {
+			return Result{Outcome: OutcomeFailed}, fmt.Errorf("list Terraform JSON files: %w", err)
+		}
+		if len(matches)+len(jsonMatches) == 0 {
+			return Result{Outcome: OutcomeFailed}, fmt.Errorf("terraform directory has no .tf or .tf.json files: %s", absDir)
 		}
 	}
 

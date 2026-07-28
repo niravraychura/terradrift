@@ -184,3 +184,10 @@ func TestScanWithRunnerRejectsUnexpectedPlanExitCode(t *testing.T) {
 		t.Fatalf("expected unexpected exit code failure, got %#v, %v", result, err)
 	}
 }
+
+func TestScanRequiresTerraformFilesWhenRequested(t *testing.T) {
+	result, err := Scan(context.Background(), Options{Directory: t.TempDir(), RequireTerraformFiles: true})
+	if err == nil || result.Outcome != OutcomeFailed {
+		t.Fatalf("expected missing Terraform file failure, got %#v, %v", result, err)
+	}
+}
