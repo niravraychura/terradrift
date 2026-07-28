@@ -7,8 +7,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -80,6 +82,9 @@ func newRootCommand(stdout, stderr io.Writer) *cobra.Command {
 
 func newScanAllCommand(stdout io.Writer) *cobra.Command {
 	var manifest string
+	var discover string
+	var includes []string
+	var excludes []string
 	var format string
 	var timeout time.Duration
 	var concurrency int
@@ -92,7 +97,16 @@ func newScanAllCommand(stdout io.Writer) *cobra.Command {
 		Use:   "scan-all",
 		Short: "Scan Terraform roots from a manifest",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			directories, err := loadScanManifest(manifest)
+			if (manifest == "") == (discover == "") {
+				return fmt.Errorf("provide exactly one of --manifest or --discover")
+			}
+			var directories []string
+			var err error
+			if manifest != "" {
+				directories, err = loadScanManifest(manifest)
+			} else {
+				directories, err = discoverTerraformRoots(discover, includes, excludes)
+			}
 			if err != nil {
 				return err
 			}
@@ -125,6 +139,9 @@ func newScanAllCommand(stdout io.Writer) *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&manifest, "manifest", "", "newline-delimited Terraform root manifest")
+	cmd.Flags().StringVar(&discover, "discover", "", "workspace root to discover Terraform roots")
+	cmd.Flags().StringArrayVar(&includes, "include", nil, "root-relative include pattern; repeatable")
+	cmd.Flags().StringArrayVar(&excludes, "exclude", nil, "root-relative exclude pattern; repeatable")
 	cmd.Flags().StringVarP(&format, "output", "o", string(outputFormatTable), "output format: table, json")
 	cmd.Flags().DurationVar(&timeout, "timeout", scanner.DefaultTimeout, "maximum scan duration per root")
 	cmd.Flags().IntVar(&concurrency, "concurrency", 4, "maximum concurrent scans")
@@ -132,9 +149,6 @@ func newScanAllCommand(stdout io.Writer) *cobra.Command {
 	cmd.Flags().StringVar(&terraformBin, "terraform-bin", "", "Terraform-compatible executable to run (default: terraform)")
 	cmd.Flags().StringVar(&workspaceRoot, "workspace-root", "", "require roots to resolve inside this workspace root")
 	cmd.Flags().BoolVar(&redactPaths, "redact-paths", false, "redact local filesystem paths from scan output")
-	if err := cmd.MarkFlagRequired("manifest"); err != nil {
-		panic(err)
-	}
 	return cmd
 }
 
@@ -473,6 +487,72 @@ func loadScanManifest(path string) ([]string, error) {
 		return nil, fmt.Errorf("scan manifest %s has no Terraform roots", path)
 	}
 	return directories, nil
+}
+
+func discoverTerraformRoots(root string, includes []string, excludes []string) ([]string, error) {
+	for _, pattern := range append(append([]string{}, includes...), excludes...) {
+		if _, err := filepath.Match(filepath.Clean(pattern), ""); err != nil {
+			return nil, fmt.Errorf("invalid discovery pattern %q: %w", pattern, err)
+		}
+	}
+	root, err := filepath.Abs(root)
+	if err != nil {
+		return nil, fmt.Errorf("resolve discovery root: %w", err)
+	}
+	roots := map[string]bool{}
+	err = filepath.WalkDir(root, func(path string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		relative, err := filepath.Rel(root, path)
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() {
+			if entry.Name() == ".terraform" || (relative != "." && matchesPath(relative, excludes)) {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if filepath.Ext(path) != ".tf" {
+			return nil
+		}
+		directory := filepath.Dir(path)
+		relative, err = filepath.Rel(root, directory)
+		if err != nil {
+			return err
+		}
+		if matchesPath(relative, excludes) || (len(includes) > 0 && !matchesPath(relative, includes)) {
+			return nil
+		}
+		roots[directory] = true
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("discover Terraform roots: %w", err)
+	}
+	directories := make([]string, 0, len(roots))
+	for directory := range roots {
+		directories = append(directories, directory)
+	}
+	sort.Strings(directories)
+	if len(directories) == 0 {
+		return nil, fmt.Errorf("no Terraform roots found under %s", root)
+	}
+	return directories, nil
+}
+
+func matchesPath(path string, patterns []string) bool {
+	for _, pattern := range patterns {
+		pattern = filepath.Clean(pattern)
+		if path == pattern || strings.HasPrefix(path, pattern+string(filepath.Separator)) {
+			return true
+		}
+		if matched, err := filepath.Match(pattern, path); err == nil && matched {
+			return true
+		}
+	}
+	return false
 }
 
 func scanAll(ctx context.Context, directories []string, options scanner.Options, concurrency int, redactPaths bool) multiScanReport {

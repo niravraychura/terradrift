@@ -60,6 +60,26 @@ func TestScanAllLoadsRelativeManifestRoots(t *testing.T) {
 	}
 }
 
+func TestDiscoverTerraformRootsHonorsPatterns(t *testing.T) {
+	root := t.TempDir()
+	for _, directory := range []string{"included", "excluded", ".terraform/cache"} {
+		if err := os.MkdirAll(filepath.Join(root, directory), 0o700); err != nil {
+			t.Fatalf("create root fixture: %v", err)
+		}
+		if err := os.WriteFile(filepath.Join(root, directory, "main.tf"), []byte("terraform {}"), 0o600); err != nil {
+			t.Fatalf("write Terraform fixture: %v", err)
+		}
+	}
+
+	directories, err := discoverTerraformRoots(root, []string{"included"}, []string{"excluded"})
+	if err != nil {
+		t.Fatalf("discover roots: %v", err)
+	}
+	if len(directories) != 1 || directories[0] != filepath.Join(root, "included") {
+		t.Fatalf("unexpected discovered roots: %#v", directories)
+	}
+}
+
 func TestScanRejectsNonexistentDirectory(t *testing.T) {
 	missing := filepath.Join(t.TempDir(), "missing")
 	_, _, err := executeCommand("scan", "--directory", missing)

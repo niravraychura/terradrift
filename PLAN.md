@@ -57,7 +57,7 @@ This plan tracks security, performance, code quality, and feature work for Terra
 ## Future feature backlog
 
 - [x] Add manifest-based multi-root scans with bounded concurrency and aggregate reports.
-- [ ] Add automatic multi-root workspace discovery with include and exclude paths.
+- [x] Add automatic multi-root workspace discovery with include and exclude paths.
 - [x] Add first-class OpenTofu binary selection, documentation, and tests.
 - [x] Ship OPA and Conftest policy-pack examples for high-risk drift.
 - [ ] Document adapters for Infracost and custom cost APIs.
