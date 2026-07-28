@@ -1164,6 +1164,48 @@ func writeScanReport(stdout io.Writer, scanReport report.DriftReport, format out
 		if _, err := fmt.Fprintf(stdout, "Changed resources: %d\n", scanReport.TotalChangedResources); err != nil {
 			return fmt.Errorf("write scan output: %w", err)
 		}
+		if len(scanReport.ResourceChanges) == 0 {
+			return nil
+		}
+		if _, err := fmt.Fprintln(stdout); err != nil {
+			return fmt.Errorf("write scan output: %w", err)
+		}
+		for _, change := range scanReport.ResourceChanges {
+			if change.Ignored {
+				continue
+			}
+			actions := strings.Join(change.Actions, ",")
+			risk := strings.ToUpper(change.RiskLevel)
+			if risk == "" {
+				risk = "UNKNOWN"
+			}
+			if _, err := fmt.Fprintf(stdout, "%s  %s  %s\n", risk, actions, change.Address); err != nil {
+				return fmt.Errorf("write scan output: %w", err)
+			}
+			if change.ActionReason != "" {
+				if _, err := fmt.Fprintf(stdout, "  reason: %s\n", change.ActionReason); err != nil {
+					return fmt.Errorf("write scan output: %w", err)
+				}
+			}
+			for _, attr := range change.AttributeChanges {
+				if _, err := fmt.Fprintf(stdout, "  %s: %s -> %s\n", attr.Path, attr.Before, attr.After); err != nil {
+					return fmt.Errorf("write scan output: %w", err)
+				}
+			}
+		}
+		if len(scanReport.OutputChanges) > 0 {
+			if _, err := fmt.Fprintln(stdout); err != nil {
+				return fmt.Errorf("write scan output: %w", err)
+			}
+			if _, err := fmt.Fprintln(stdout, "Output changes:"); err != nil {
+				return fmt.Errorf("write scan output: %w", err)
+			}
+			for _, outputChange := range scanReport.OutputChanges {
+				if _, err := fmt.Fprintf(stdout, "  %s: %s\n", outputChange.Name, strings.Join(outputChange.Actions, ",")); err != nil {
+					return fmt.Errorf("write scan output: %w", err)
+				}
+			}
+		}
 		return nil
 	default:
 		return fmt.Errorf("unsupported output format %q; supported values: table, json, junit, sarif, prometheus", format)

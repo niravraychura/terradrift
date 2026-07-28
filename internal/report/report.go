@@ -15,26 +15,34 @@ const (
 	ScanStatusFailed          ScanStatus = "failed"
 )
 
+// AttributeChange describes one attribute path that differs between before and after.
+type AttributeChange struct {
+	Path   string `json:"path"`
+	Before string `json:"before"`
+	After  string `json:"after"`
+}
+
 // ResourceChange describes a Terraform resource with a relevant plan change.
 type ResourceChange struct {
-	Address            string       `json:"address"`
-	Type               string       `json:"type"`
-	Name               string       `json:"name"`
-	Actions            []string     `json:"actions"`
-	ActionReason       string       `json:"action_reason,omitempty"`
-	Remediation        string       `json:"remediation,omitempty"`
-	ReconciliationHint string       `json:"reconciliation_hint,omitempty"`
-	RunbookURL         string       `json:"runbook_url,omitempty"`
-	CostImpact         string       `json:"cost_impact,omitempty"`
-	RiskLevel          string       `json:"risk_level,omitempty"`
-	Owner              string       `json:"owner,omitempty"`
-	Provider           string       `json:"provider,omitempty"`
-	CloudProvider      string       `json:"cloud_provider,omitempty"`
-	AuditEvents        []AuditEvent `json:"audit_events,omitempty"`
-	Ignored            bool         `json:"ignored,omitempty"`
-	IgnoreOwner        string       `json:"ignore_owner,omitempty"`
-	IgnoreReason       string       `json:"ignore_reason,omitempty"`
-	IgnoreExpiresAt    string       `json:"ignore_expires_at,omitempty"`
+	Address            string            `json:"address"`
+	Type               string            `json:"type"`
+	Name               string            `json:"name"`
+	Actions            []string          `json:"actions"`
+	ActionReason       string            `json:"action_reason,omitempty"`
+	AttributeChanges   []AttributeChange `json:"attribute_changes,omitempty"`
+	Remediation        string            `json:"remediation,omitempty"`
+	ReconciliationHint string            `json:"reconciliation_hint,omitempty"`
+	RunbookURL         string            `json:"runbook_url,omitempty"`
+	CostImpact         string            `json:"cost_impact,omitempty"`
+	RiskLevel          string            `json:"risk_level,omitempty"`
+	Owner              string            `json:"owner,omitempty"`
+	Provider           string            `json:"provider,omitempty"`
+	CloudProvider      string            `json:"cloud_provider,omitempty"`
+	AuditEvents        []AuditEvent      `json:"audit_events,omitempty"`
+	Ignored            bool              `json:"ignored,omitempty"`
+	IgnoreOwner        string            `json:"ignore_owner,omitempty"`
+	IgnoreReason       string            `json:"ignore_reason,omitempty"`
+	IgnoreExpiresAt    string            `json:"ignore_expires_at,omitempty"`
 }
 
 // OutputChange describes a Terraform output change without retaining its value.

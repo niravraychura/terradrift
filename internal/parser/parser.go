@@ -44,8 +44,13 @@ type terraformResourceChange struct {
 }
 
 type terraformChange struct {
-	// Keep the decoded shape intentionally narrow: Terraform values and sensitive marks never enter reports.
-	Actions []string `json:"actions"`
+	// Values are decoded only into redacted attribute diffs; raw secrets never enter reports.
+	Actions         []string        `json:"actions"`
+	Before          json.RawMessage `json:"before"`
+	After           json.RawMessage `json:"after"`
+	AfterUnknown    json.RawMessage `json:"after_unknown"`
+	BeforeSensitive json.RawMessage `json:"before_sensitive"`
+	AfterSensitive  json.RawMessage `json:"after_sensitive"`
 }
 
 // ParsePlan converts the subset of Terraform plan JSON needed for reports.
@@ -116,6 +121,7 @@ func relevantChanges(source []terraformResourceChange) []report.ResourceChange {
 			Name:               resourceChange.Name,
 			Actions:            append([]string(nil), resourceChange.Change.Actions...),
 			ActionReason:       resourceChange.ActionReason,
+			AttributeChanges:   attributeChangesFor(resourceChange.Change),
 			Remediation:        report.RemediationForActions(resourceChange.Change.Actions),
 			ReconciliationHint: report.ReconciliationHintForActions(resourceChange.Change.Actions),
 			RiskLevel:          report.RiskLevelForActions(resourceChange.Change.Actions),

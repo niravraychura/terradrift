@@ -154,14 +154,25 @@ Default table output:
 
 ```text
 TerraDrift scan initialized
-Status: no_drift
-Plan mode: refresh-only
+Status: changes_detected
+Plan mode: normal
+Scan ID: 0a0cb23d-f342-4ce5-8517-03ba05aee949
 Terraform directory: /absolute/path/to/terraform/prod
-Resources checked: 0
-Changed resources: 0
+Resources checked: 144
+Changed resources: 2
+
+CRITICAL  delete,create  module.ecs.aws_ecs_task_definition.td
+  reason: replace_because_cannot_update
+  cpu: "256" -> "512"
+
+MEDIUM  update  module.alb.aws_lb.main
+  idle_timeout: 60 -> 120
+  tags.Environment: "staging" -> "dev"
 ```
 
-JSON output is available for automation:
+Attribute diffs use Terraform plan before/after values. Sensitive attributes are shown as `[REDACTED]`. Unknown values are shown as `(known after apply)`.
+
+JSON output is available for automation and includes the same `attribute_changes` on each resource:
 
 ```json
 {

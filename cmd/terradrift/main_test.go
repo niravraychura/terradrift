@@ -421,6 +421,45 @@ func TestScanNormalModeJSONOutput(t *testing.T) {
 	}
 }
 
+func TestWriteScanReportTableIncludesAttributeDiffs(t *testing.T) {
+	var output bytes.Buffer
+	err := writeScanReport(&output, report.DriftReport{
+		Status:                report.ScanStatusChangesDetected,
+		PlanMode:              "normal",
+		ScanID:                "scan-1",
+		Directory:             "/tmp/terraform",
+		TotalResourcesChecked: 10,
+		TotalChangedResources: 1,
+		ResourceChanges: []report.ResourceChange{{
+			Address:      "aws_lb.main",
+			Actions:      []string{"update"},
+			RiskLevel:    "medium",
+			ActionReason: "",
+			AttributeChanges: []report.AttributeChange{
+				{Path: "idle_timeout", Before: "60", After: "120"},
+				{Path: "tags.Environment", Before: `"staging"`, After: `"dev"`},
+			},
+		}},
+		OutputChanges: []report.OutputChange{{Name: "alb_arn", Actions: []string{"update"}}},
+	}, outputFormatTable)
+	if err != nil {
+		t.Fatalf("write table: %v", err)
+	}
+	got := output.String()
+	for _, want := range []string{
+		"Status: changes_detected",
+		"MEDIUM  update  aws_lb.main",
+		"  idle_timeout: 60 -> 120",
+		`  tags.Environment: "staging" -> "dev"`,
+		"Output changes:",
+		"  alb_arn: update",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("expected table output to contain %q, got %q", want, got)
+		}
+	}
+}
+
 func TestWriteScanReportJUnit(t *testing.T) {
 	var output bytes.Buffer
 	err := writeScanReport(&output, report.DriftReport{Status: report.ScanStatusDriftDetected, TotalChangedResources: 2}, outputFormatJUnit)
