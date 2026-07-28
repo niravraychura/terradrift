@@ -98,6 +98,8 @@ TerraDrift accepts any existing local directory at the CLI validation layer. Whe
 
 The `--timeout` flag applies a scan-level deadline to the current and future scan pipeline. The `--redact-paths` flag replaces local filesystem paths in scan output with `[REDACTED]`, which is useful for CI logs.
 
+Terraform command output, configuration files, persisted history, approvals, external-adapter input, notification responses, and uploaded report artifacts have explicit size limits. CLI JSON and dashboard output stream directly instead of buffering a second copy of the report.
+
 The `--workspace-root` flag evaluates symlinks and requires the selected Terraform directory to resolve inside the provided root, which is useful for constrained CI or hosted runner scenarios.
 
 By default, TerraDrift still emits the bootstrap no-drift report. Use `--terraform-exec` to run the Terraform-compatible CLI flow: `init`, `plan -refresh-only -detailed-exitcode`, and `show -json`. `--terraform-bin` selects the executable, defaulting to `terraform`; set it to `tofu` for OpenTofu. The executable must be available on `PATH`.

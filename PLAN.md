@@ -91,7 +91,7 @@ This plan tracks security, performance, code quality, and feature work for Terra
 - [x] Bound report input sent to external policy, cost, and audit adapters.
 - [x] Bound uploaded JSON report artifacts.
 - [x] Bound report and approval artifact file inputs.
-- [ ] Complete remaining report output/input size budgets.
+- [x] Complete report output/input size budgets with bounded storage, adapter, approval, notification, and artifact boundaries; stream user-facing output.
 - [x] Redact `ErrorMessage` before JSON, history, dashboards, policy input, and notification delivery.
 - [x] Exclude Terraform plan values and sensitive marks from report parsing, with regression coverage.
 - [x] Reject direct symlink targets for dashboard and history output paths.
