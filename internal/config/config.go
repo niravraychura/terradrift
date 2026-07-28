@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 	"time"
@@ -13,6 +14,8 @@ import (
 
 // DefaultPath is the default local TerraDrift configuration filename.
 const DefaultPath = ".terradrift.json"
+
+const maxConfigBytes = 1 << 20
 
 // Config stores repeatable TerraDrift CLI settings for local and CI usage.
 type Config struct {
@@ -66,7 +69,7 @@ func LoadProfile(path string, profile string) (Config, error) {
 	if path == "" {
 		path = DefaultPath
 	}
-	data, err := os.ReadFile(path)
+	data, err := readConfig(path)
 	if err != nil {
 		return Config{}, fmt.Errorf("read config %s: %w", path, err)
 	}
@@ -92,6 +95,22 @@ func LoadProfile(path string, profile string) (Config, error) {
 		return Config{}, err
 	}
 	return cfg, nil
+}
+
+func readConfig(path string) ([]byte, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = file.Close() }()
+	data, err := io.ReadAll(io.LimitReader(file, maxConfigBytes+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(data) > maxConfigBytes {
+		return nil, fmt.Errorf("config exceeds %d bytes", maxConfigBytes)
+	}
+	return data, nil
 }
 
 // Validate rejects invalid core settings before a scan starts.

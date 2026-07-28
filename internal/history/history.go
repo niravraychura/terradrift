@@ -4,6 +4,7 @@ package history
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"path/filepath"
@@ -14,6 +15,8 @@ import (
 )
 
 const fileTimestampFormat = "20060102T150405.000000000Z"
+
+const maxReportBytes = 1 << 20
 
 // Entry is a persisted scan report.
 type Entry struct {
@@ -39,6 +42,9 @@ func Write(directory string, scanReport report.DriftReport) (string, error) {
 		return "", fmt.Errorf("encode history report: %w", err)
 	}
 	data = append(data, '\n')
+	if len(data) > maxReportBytes {
+		return "", fmt.Errorf("history report exceeds %d bytes", maxReportBytes)
+	}
 	path := filepath.Join(directory, time.Now().UTC().Format(fileTimestampFormat)+"-"+string(scanReport.Status)+".json")
 	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
 	if err != nil {
@@ -69,7 +75,7 @@ func LoadRecent(directory string, limit int) ([]Entry, error) {
 		if len(entries) == limit {
 			break
 		}
-		data, err := os.ReadFile(path)
+		data, err := readReport(path)
 		if err != nil {
 			log.Print("skipped unreadable history report")
 			continue
@@ -82,6 +88,22 @@ func LoadRecent(directory string, limit int) ([]Entry, error) {
 		entries = append(entries, Entry{Report: scanReport})
 	}
 	return entries, nil
+}
+
+func readReport(path string) ([]byte, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = file.Close() }()
+	data, err := io.ReadAll(io.LimitReader(file, maxReportBytes+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(data) > maxReportBytes {
+		return nil, fmt.Errorf("history report exceeds %d bytes", maxReportBytes)
+	}
+	return data, nil
 }
 
 // Prune removes all but the newest keep history reports.

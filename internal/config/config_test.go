@@ -74,3 +74,13 @@ func TestLoadRejectsInvalidValues(t *testing.T) {
 		t.Fatal("expected invalid config value to fail")
 	}
 }
+
+func TestLoadRejectsOversizedConfig(t *testing.T) {
+	path := filepath.Join(t.TempDir(), DefaultPath)
+	if err := os.WriteFile(path, make([]byte, maxConfigBytes+1), 0o600); err != nil {
+		t.Fatalf("write oversized config: %v", err)
+	}
+	if _, err := Load(path); err == nil {
+		t.Fatal("expected oversized config to fail")
+	}
+}
