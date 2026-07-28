@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/niravraychura/terradrift/internal/config"
 	"github.com/niravraychura/terradrift/internal/history"
 	"github.com/niravraychura/terradrift/internal/report"
 	"github.com/niravraychura/terradrift/internal/scanner"
@@ -128,6 +129,26 @@ func TestRunDeliveriesReturnsEveryFailure(t *testing.T) {
 	})
 	if err == nil || !strings.Contains(err.Error(), "one delivery") || !strings.Contains(err.Error(), "two delivery") {
 		t.Fatalf("expected labelled delivery errors, got %v", err)
+	}
+}
+
+func TestEnrichReportRunsIndependentAdaptersConcurrently(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell fixtures require POSIX")
+	}
+	directory := t.TempDir()
+	costCommand := filepath.Join(directory, "cost")
+	auditCommand := filepath.Join(directory, "audit")
+	if err := os.WriteFile(costCommand, []byte("#!/bin/sh\nsleep 0.2\nprintf '{\"resource_costs\":[{\"address\":\"aws_instance.web\",\"monthly_delta\":\"$1\"}]}'\n"), 0o700); err != nil {
+		t.Fatalf("write cost fixture: %v", err)
+	}
+	if err := os.WriteFile(auditCommand, []byte("#!/bin/sh\nsleep 0.2\nprintf '{\"resource_events\":[{\"address\":\"aws_instance.web\",\"events\":[{\"provider\":\"aws\",\"actor\":\"operator\",\"occurred_at\":\"2026-01-01T00:00:00Z\",\"summary\":\"changed\"}]}]}'\n"), 0o700); err != nil {
+		t.Fatalf("write audit fixture: %v", err)
+	}
+	started := time.Now()
+	enriched, err := enrichReport(context.Background(), report.DriftReport{ResourceChanges: []report.ResourceChange{{Address: "aws_instance.web"}}}, costCommand, nil, auditCommand, nil)
+	if err != nil || time.Since(started) >= 350*time.Millisecond || enriched.ResourceChanges[0].CostImpact != "$1" || len(enriched.ResourceChanges[0].AuditEvents) != 1 {
+		t.Fatalf("unexpected concurrent enrichment: %#v, %v", enriched, err)
 	}
 }
 
@@ -262,6 +283,17 @@ func TestShouldCreatePersistentIssue(t *testing.T) {
 	}
 }
 
+func TestRedactedHistoryKeepsRootIdentity(t *testing.T) {
+	current := report.DriftReport{RootID: "root-a", Directory: "[REDACTED]", Status: report.ScanStatusDriftDetected, ResourceChanges: []report.ResourceChange{{Address: "aws_instance.web", Actions: []string{"update"}}}}
+	other := report.DriftReport{RootID: "root-b", Directory: "[REDACTED]", Status: report.ScanStatusDriftDetected, ResourceChanges: current.ResourceChanges}
+	if previous := previousReportForRoot([]history.Entry{{Report: other}}, current); previous.RootID != "" {
+		t.Fatalf("expected no cross-root history match, got %#v", previous)
+	}
+	if shouldCreatePersistentIssue(current, []history.Entry{{Report: other}}, 2) {
+		t.Fatal("expected different redacted roots to remain independent")
+	}
+}
+
 func TestScanRejectsNonexistentDirectory(t *testing.T) {
 	missing := filepath.Join(t.TempDir(), "missing")
 	_, _, err := executeCommand("scan", "--directory", missing)
@@ -373,6 +405,17 @@ func TestWriteScanReportSARIF(t *testing.T) {
 	}
 }
 
+func TestWriteScanReportSARIFSkipsIgnoredChanges(t *testing.T) {
+	var output bytes.Buffer
+	err := writeScanReport(&output, report.DriftReport{ResourceChanges: []report.ResourceChange{{Address: "aws_instance.ignored", Ignored: true}, {Address: "aws_instance.active"}}}, outputFormatSARIF)
+	if err != nil {
+		t.Fatalf("expected SARIF output to succeed: %v", err)
+	}
+	if strings.Contains(output.String(), "ignored") || !strings.Contains(output.String(), "active") {
+		t.Fatalf("expected only active SARIF finding, got %q", output.String())
+	}
+}
+
 func TestWriteScanReportPrometheus(t *testing.T) {
 	var output bytes.Buffer
 	err := writeScanReport(&output, report.DriftReport{Status: report.ScanStatusDriftDetected, TotalResourcesChecked: 4, TotalChangedResources: 2}, outputFormatPrometheus)
@@ -435,6 +478,18 @@ func TestInitCreatesDefaultConfig(t *testing.T) {
 	}
 	if !strings.Contains(string(data), `"directory": "."`) {
 		t.Fatalf("expected default config content, got %q", data)
+	}
+}
+
+func TestInitCreatesGuidedConfig(t *testing.T) {
+	path := filepath.Join(t.TempDir(), ".terradrift.json")
+	_, _, err := executeCommand("init", "--config", path, "--directory", "terraform/prod", "--terraform-exec", "--redact-paths", "--history-dir", ".history")
+	if err != nil {
+		t.Fatalf("create guided config: %v", err)
+	}
+	cfg, err := config.Load(path)
+	if err != nil || cfg.Directory != "terraform/prod" || !cfg.TerraformExec || !cfg.RedactPaths || cfg.HistoryDir != ".history" {
+		t.Fatalf("unexpected guided config: %#v, %v", cfg, err)
 	}
 }
 

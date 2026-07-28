@@ -160,6 +160,23 @@ func TestScanWithRunnerReturnsDriftDetected(t *testing.T) {
 	}
 }
 
+func TestSecurePlanFileUsesRestrictedPermissionsAndCleansUp(t *testing.T) {
+	path, cleanup, err := securePlanFile(t.TempDir())
+	if err != nil {
+		t.Fatalf("create plan file: %v", err)
+	}
+	info, err := os.Stat(path)
+	if err != nil || info.Mode().Perm() != 0o600 {
+		t.Fatalf("expected 0600 plan file, info=%v err=%v", info, err)
+	}
+	if err := cleanup(); err != nil {
+		t.Fatalf("cleanup plan file: %v", err)
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("expected plan file to be removed, err=%v", err)
+	}
+}
+
 func TestScanWithRunnerRejectsExistingLock(t *testing.T) {
 	directory := t.TempDir()
 	if err := os.WriteFile(filepath.Join(directory, scanLockFilename), []byte("123"), 0o600); err != nil {

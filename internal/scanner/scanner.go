@@ -4,6 +4,7 @@ package scanner
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -19,6 +20,7 @@ import (
 	"github.com/niravraychura/terradrift/internal/validation"
 )
 
+// DefaultTimeout bounds a scan when no explicit timeout is configured.
 const DefaultTimeout = 5 * time.Minute
 
 const scanLockFilename = ".terradrift-scan.lock"
@@ -27,9 +29,12 @@ const scanLockFilename = ".terradrift-scan.lock"
 type Outcome string
 
 const (
-	OutcomeNoDrift       Outcome = "no_drift"
+	// OutcomeNoDrift indicates a completed scan without active drift.
+	OutcomeNoDrift Outcome = "no_drift"
+	// OutcomeDriftDetected indicates a completed scan with active drift.
 	OutcomeDriftDetected Outcome = "drift_detected"
-	OutcomeFailed        Outcome = "failed"
+	// OutcomeFailed indicates that scanning could not complete.
+	OutcomeFailed Outcome = "failed"
 )
 
 // Options configures a scan run.
@@ -124,6 +129,7 @@ func Scan(ctx context.Context, options Options) (Result, error) {
 		now := time.Now().UTC()
 		return Result{Outcome: OutcomeNoDrift, Report: report.DriftReport{
 			ScanID:          scanID,
+			RootID:          rootID(absDir),
 			Status:          report.ScanStatusNoDrift,
 			Directory:       absDir,
 			ResourceChanges: []report.ResourceChange{},
@@ -222,10 +228,11 @@ func ValidateDirectory(directory string) (string, error) {
 	return resolved, nil
 }
 
-func runTerraformScan(ctx context.Context, runner terraform.Runner, directory string, scanID string) (report.DriftReport, error) {
+func runTerraformScan(ctx context.Context, runner terraform.Runner, directory string, scanID string) (scanReport report.DriftReport, returnErr error) {
 	startedAt := time.Now().UTC()
-	scanReport := report.DriftReport{
+	scanReport = report.DriftReport{
 		ScanID:          scanID,
+		RootID:          rootID(directory),
 		Status:          report.ScanStatusRunning,
 		Directory:       directory,
 		ResourceChanges: []report.ResourceChange{},
@@ -257,7 +264,12 @@ func runTerraformScan(ctx context.Context, runner terraform.Runner, directory st
 		failReport(&scanReport, err)
 		return scanReport, errors.New(scanReport.ErrorMessage)
 	}
-	defer cleanup()
+	defer func() {
+		if err := cleanup(); err != nil && returnErr == nil {
+			failReport(&scanReport, err)
+			returnErr = fmt.Errorf("remove secure terraform plan file: %s", scanReport.ErrorMessage)
+		}
+	}()
 
 	exitCode, err := runner.PlanRefreshOnly(ctx, directory, planFile)
 	if err != nil {
@@ -290,6 +302,11 @@ func runTerraformScan(ctx context.Context, runner terraform.Runner, directory st
 	return scanReport, nil
 }
 
+func rootID(directory string) string {
+	sum := sha256.Sum256([]byte(directory))
+	return hex.EncodeToString(sum[:])
+}
+
 func newScanID() (string, error) {
 	bytes := make([]byte, 16)
 	if _, err := rand.Read(bytes); err != nil {
@@ -306,20 +323,25 @@ func failReport(scanReport *report.DriftReport, err error) {
 	scanReport.ErrorMessage = redact.String(err.Error())
 }
 
-func securePlanFile(directory string) (string, func(), error) {
+func securePlanFile(directory string) (string, func() error, error) {
 	file, err := os.CreateTemp(directory, ".terradrift-*.tfplan")
 	if err != nil {
-		return "", func() {}, fmt.Errorf("create secure terraform plan file: %w", err)
+		return "", func() error { return nil }, fmt.Errorf("create secure terraform plan file: %w", err)
 	}
 	path := file.Name()
 	if err := file.Chmod(0o600); err != nil {
 		_ = file.Close()
 		_ = os.Remove(path)
-		return "", func() {}, fmt.Errorf("secure terraform plan file permissions: %w", err)
+		return "", func() error { return nil }, fmt.Errorf("secure terraform plan file permissions: %w", err)
 	}
 	if err := file.Close(); err != nil {
 		_ = os.Remove(path)
-		return "", func() {}, fmt.Errorf("close terraform plan file: %w", err)
+		return "", func() error { return nil }, fmt.Errorf("close terraform plan file: %w", err)
 	}
-	return path, func() { _ = os.Remove(path) }, nil
+	return path, func() error {
+		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+			return err
+		}
+		return nil
+	}, nil
 }

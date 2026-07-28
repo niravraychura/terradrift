@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -41,6 +42,7 @@ type Config struct {
 	CostCommand          string                     `json:"cost_command"`
 	CostArgs             []string                   `json:"cost_args"`
 	RemediationRunbooks  map[string]string          `json:"remediation_runbooks"`
+	BaselineRules        []report.IgnoreRule        `json:"baseline_rules"`
 	IgnoreRules          []report.IgnoreRule        `json:"ignore_rules"`
 	FailureSeverity      string                     `json:"failure_severity"`
 	ResourceOwners       map[string]string          `json:"resource_owners"`
@@ -79,6 +81,9 @@ func LoadProfile(path string, profile string) (Config, error) {
 	cfg := Default()
 	if err := decode(data, &cfg); err != nil {
 		return Config{}, fmt.Errorf("parse config %s: %w", path, err)
+	}
+	if err := validateProfiles(cfg.Profiles); err != nil {
+		return Config{}, fmt.Errorf("validate config profiles in %s: %w", path, err)
 	}
 	if profile == "" {
 		if err := cfg.Validate(); err != nil {
@@ -147,21 +152,60 @@ func (cfg Config) Validate() error {
 	if cfg.GitHubPR < 0 || cfg.GitHubIssueAfter < 0 {
 		return validation.New("config GitHub numbers", fmt.Errorf("must not be negative"))
 	}
+	for field, rawURL := range map[string]string{"slack_webhook_url": cfg.SlackWebhookURL, "teams_webhook_url": cfg.TeamsWebhookURL, "webhook_url": cfg.WebhookURL, "artifact_url": cfg.ArtifactURL} {
+		if rawURL == "" {
+			continue
+		}
+		parsed, err := url.Parse(rawURL)
+		if err != nil || parsed.Scheme != "https" || parsed.Host == "" || parsed.User != nil {
+			return validation.New("config "+field, fmt.Errorf("must be an HTTPS URL without user info"))
+		}
+	}
 	return nil
 }
 
 func decode(data []byte, target any) error {
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.DisallowUnknownFields()
-	return decoder.Decode(target)
+	if err := decoder.Decode(target); err != nil {
+		return err
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		return fmt.Errorf("unexpected trailing JSON")
+	}
+	return nil
+}
+
+func validateProfiles(profiles map[string]json.RawMessage) error {
+	for name, data := range profiles {
+		cfg := Default()
+		if err := decode(data, &cfg); err != nil {
+			return fmt.Errorf("profile %q: %w", name, err)
+		}
+		if len(cfg.Profiles) != 0 {
+			return fmt.Errorf("profile %q must not contain nested profiles", name)
+		}
+		if err := cfg.Validate(); err != nil {
+			return fmt.Errorf("profile %q: %w", name, err)
+		}
+	}
+	return nil
 }
 
 // WriteDefault writes the default configuration to path without overwriting existing files.
 func WriteDefault(path string) error {
+	return Write(path, Default())
+}
+
+// Write writes cfg to path without overwriting an existing file.
+func Write(path string, cfg Config) error {
 	if path == "" {
 		path = DefaultPath
 	}
-	data, err := json.MarshalIndent(Default(), "", "  ")
+	if err := cfg.Validate(); err != nil {
+		return err
+	}
+	data, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {
 		return fmt.Errorf("encode default config: %w", err)
 	}

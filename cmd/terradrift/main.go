@@ -26,6 +26,7 @@ import (
 	"github.com/niravraychura/terradrift/internal/history"
 	"github.com/niravraychura/terradrift/internal/notify"
 	"github.com/niravraychura/terradrift/internal/policy"
+	"github.com/niravraychura/terradrift/internal/redact"
 	"github.com/niravraychura/terradrift/internal/report"
 	"github.com/niravraychura/terradrift/internal/scanner"
 	"github.com/niravraychura/terradrift/internal/terraform"
@@ -64,7 +65,7 @@ func main() {
 	if err := newRootCommand(os.Stdout, os.Stderr).Execute(); err != nil {
 		code := exitCodeForError(err)
 		if code != exitCodeDriftDetected && !errors.Is(err, errMultiScanFailed) {
-			fmt.Fprintln(os.Stderr, "Error:", err)
+			fmt.Fprintln(os.Stderr, "Error:", redact.String(err.Error()))
 		}
 		os.Exit(code)
 	}
@@ -412,11 +413,20 @@ func newScanAllCommand(stdout io.Writer) *cobra.Command {
 
 func newInitCommand(stdout io.Writer) *cobra.Command {
 	var path string
+	var directory string
+	var terraformExec bool
+	var redactPaths bool
+	var historyDir string
 	cmd := &cobra.Command{
 		Use:   "init",
-		Short: "Create a starter TerraDrift config file",
+		Short: "Create a tailored TerraDrift config file",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := config.WriteDefault(path); err != nil {
+			cfg := config.Default()
+			cfg.Directory = directory
+			cfg.TerraformExec = terraformExec
+			cfg.RedactPaths = redactPaths
+			cfg.HistoryDir = historyDir
+			if err := config.Write(path, cfg); err != nil {
 				return err
 			}
 			_, err := fmt.Fprintf(stdout, "Created TerraDrift config: %s\n", path)
@@ -424,6 +434,10 @@ func newInitCommand(stdout io.Writer) *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&path, "config", config.DefaultPath, "config file path to create")
+	cmd.Flags().StringVar(&directory, "directory", ".", "Terraform directory for the generated config")
+	cmd.Flags().BoolVar(&terraformExec, "terraform-exec", false, "enable Terraform execution in the generated config")
+	cmd.Flags().BoolVar(&redactPaths, "redact-paths", false, "redact paths in the generated config")
+	cmd.Flags().StringVar(&historyDir, "history-dir", "", "history directory for the generated config")
 	return cmd
 }
 
@@ -449,6 +463,7 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 	var costCommand string
 	var costArgs []string
 	var remediationRunbooks map[string]string
+	var baselineRules []report.IgnoreRule
 	var ignoreRules []report.IgnoreRule
 	var failureSeverity string
 	var resourceOwners map[string]string
@@ -557,6 +572,7 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 					costArgs = append([]string(nil), cfg.CostArgs...)
 				}
 				remediationRunbooks = cfg.RemediationRunbooks
+				baselineRules = cfg.BaselineRules
 				ignoreRules = cfg.IgnoreRules
 				resourceOwners = cfg.ResourceOwners
 				ownerWebhooks = cfg.OwnerWebhooks
@@ -603,6 +619,12 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 			if githubIssueAfter > 0 && (githubIssueAfter < 2 || githubRepository == "" || historyDir == "") {
 				return fmt.Errorf("github-issue-after requires github-repository, history-dir, and a value of at least 2")
 			}
+			pipelineTimeout := timeout
+			if pipelineTimeout <= 0 {
+				pipelineTimeout = scanner.DefaultTimeout
+			}
+			scanContext, cancel := context.WithTimeout(cmd.Context(), pipelineTimeout)
+			defer cancel()
 			for _, path := range []*string{&dashboardHTMLPath, &historyDir, &auditLogPath} {
 				if *path == "" {
 					continue
@@ -628,33 +650,27 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 				scanOptions.RequireTerraformFiles = true
 			}
 
-			result, err := scanner.Scan(cmd.Context(), scanOptions)
+			result, err := scanner.Scan(scanContext, scanOptions)
 			if err != nil {
+				if redactPaths {
+					return errors.New("scan failed")
+				}
 				return err
 			}
 			auditReport = result.Report
 
 			scanReport := result.Report
-			if err := report.ApplyIgnoreRules(&scanReport, ignoreRules); err != nil {
+			if err := report.ApplyIgnoreRules(&scanReport, append(append([]report.IgnoreRule(nil), baselineRules...), ignoreRules...)); err != nil {
 				return err
 			}
 			report.ApplyOwners(&scanReport, resourceOwners)
-			if costCommand != "" {
-				enrichedReport, err := cost.Enrich(cmd.Context(), cost.Options{Command: costCommand, Args: costArgs}, scanReport)
-				if err != nil {
-					return err
-				}
-				scanReport = enrichedReport
-			}
-			if err := report.ApplyRunbooks(&scanReport, remediationRunbooks); err != nil {
+			enrichedReport, err := enrichReport(scanContext, scanReport, costCommand, costArgs, auditCommand, auditArgs)
+			if err != nil {
 				return err
 			}
-			if auditCommand != "" {
-				enrichedReport, err := audit.Enrich(cmd.Context(), audit.Options{Command: auditCommand, Args: auditArgs}, scanReport)
-				if err != nil {
-					return err
-				}
-				scanReport = enrichedReport
+			scanReport = enrichedReport
+			if err := report.ApplyRunbooks(&scanReport, remediationRunbooks); err != nil {
+				return err
 			}
 			if approvalFile != "" {
 				data, err := readLimitedFile(approvalFile, maxApprovalBytes)
@@ -684,7 +700,7 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 				if len(artifact) > maxArtifactBytes {
 					return fmt.Errorf("report artifact exceeds %d bytes", maxArtifactBytes)
 				}
-				if err := (notify.ArtifactUploader{URL: artifactURL}).Upload(cmd.Context(), artifact, "application/json"); err != nil {
+				if err := (notify.ArtifactUploader{URL: artifactURL}).Upload(scanContext, artifact, "application/json"); err != nil {
 					return err
 				}
 			}
@@ -695,9 +711,9 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 				if err != nil {
 					return err
 				}
-				previousReport = previousReportForDirectory(entries, scanReport.Directory)
+				previousReport = previousReportForRoot(entries, scanReport)
 				if shouldCreatePersistentIssue(scanReport, entries, githubIssueAfter) {
-					if err := (notify.GitHubIssueNotifier{Repository: githubRepository, Token: os.Getenv("GITHUB_TOKEN")}).Notify(cmd.Context(), scanReport); err != nil {
+					if err := (notify.GitHubIssueNotifier{Repository: githubRepository, Token: os.Getenv("GITHUB_TOKEN")}).Notify(scanContext, scanReport); err != nil {
 						return err
 					}
 				}
@@ -727,12 +743,12 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 				}
 			}
 			if policyCommand != "" {
-				if err := policy.Run(cmd.Context(), policy.Options{Command: policyCommand, Args: policyArgs}, scanReport); err != nil {
+				if err := policy.Run(scanContext, policy.Options{Command: policyCommand, Args: policyArgs}, scanReport); err != nil {
 					return err
 				}
 			}
 			shouldNotify := !notificationThrottle || report.ShouldNotify(scanReport, previousReport)
-			if err := deliverNotifications(cmd.Context(), notifyTarget, slackWebhookURL, teamsWebhookURL, webhookURL, githubRepository, githubPR, ownerWebhooks, notificationThrottle, scanReport, previousReport, shouldNotify); err != nil {
+			if err := deliverNotifications(scanContext, notifyTarget, slackWebhookURL, teamsWebhookURL, webhookURL, githubRepository, githubPR, ownerWebhooks, notificationThrottle, scanReport, previousReport, shouldNotify); err != nil {
 				return err
 			}
 			if scanReport.Status == report.ScanStatusDriftDetected {
@@ -836,9 +852,9 @@ func normalizeOutputPath(path string) (string, error) {
 	return absPath, nil
 }
 
-func previousReportForDirectory(entries []history.Entry, directory string) report.DriftReport {
+func previousReportForRoot(entries []history.Entry, current report.DriftReport) report.DriftReport {
 	for _, entry := range entries {
-		if entry.Report.Directory == directory {
+		if sameRoot(entry.Report, current) {
 			return entry.Report
 		}
 	}
@@ -852,7 +868,7 @@ func shouldCreatePersistentIssue(current report.DriftReport, entries []history.E
 	consecutive := 0
 	for _, entry := range entries {
 		previous := entry.Report
-		if previous.Directory != current.Directory {
+		if !sameRoot(previous, current) {
 			continue
 		}
 		if previous.Status != report.ScanStatusDriftDetected || report.DriftFingerprint(previous) != report.DriftFingerprint(current) {
@@ -861,6 +877,13 @@ func shouldCreatePersistentIssue(current report.DriftReport, entries []history.E
 		consecutive++
 	}
 	return consecutive == threshold-1
+}
+
+func sameRoot(left, right report.DriftReport) bool {
+	if left.RootID != "" && right.RootID != "" {
+		return left.RootID == right.RootID
+	}
+	return left.Directory == right.Directory
 }
 
 func sendNotification(ctx context.Context, target string, slackWebhookURL string, teamsWebhookURL string, webhookURL string, scanReport report.DriftReport) error {
@@ -890,6 +913,44 @@ func auditCommandNames(terraformExec bool, terraformBin, costCommand, policyComm
 		}
 	}
 	return commands
+}
+
+func enrichReport(ctx context.Context, scanReport report.DriftReport, costCommand string, costArgs []string, auditCommand string, auditArgs []string) (report.DriftReport, error) {
+	if costCommand == "" && auditCommand == "" {
+		return scanReport, nil
+	}
+	if costCommand == "" {
+		return audit.Enrich(ctx, audit.Options{Command: auditCommand, Args: auditArgs}, scanReport)
+	}
+	if auditCommand == "" {
+		return cost.Enrich(ctx, cost.Options{Command: costCommand, Args: costArgs}, scanReport)
+	}
+
+	var costReport, auditReport report.DriftReport
+	var costErr, auditErr error
+	costInput := scanReport
+	costInput.ResourceChanges = append([]report.ResourceChange(nil), scanReport.ResourceChanges...)
+	auditInput := scanReport
+	auditInput.ResourceChanges = append([]report.ResourceChange(nil), scanReport.ResourceChanges...)
+	var workers sync.WaitGroup
+	workers.Add(2)
+	go func() {
+		defer workers.Done()
+		costReport, costErr = cost.Enrich(ctx, cost.Options{Command: costCommand, Args: costArgs}, costInput)
+	}()
+	go func() {
+		defer workers.Done()
+		auditReport, auditErr = audit.Enrich(ctx, audit.Options{Command: auditCommand, Args: auditArgs}, auditInput)
+	}()
+	workers.Wait()
+	if err := errors.Join(costErr, auditErr); err != nil {
+		return scanReport, err
+	}
+	for i := range scanReport.ResourceChanges {
+		scanReport.ResourceChanges[i].CostImpact = costReport.ResourceChanges[i].CostImpact
+		scanReport.ResourceChanges[i].AuditEvents = auditReport.ResourceChanges[i].AuditEvents
+	}
+	return scanReport, nil
 }
 
 type deliveryTask struct {
@@ -1008,6 +1069,9 @@ func writeScanReport(stdout io.Writer, scanReport report.DriftReport, format out
 	case outputFormatSARIF:
 		results := make([]sarifResult, 0, len(scanReport.ResourceChanges))
 		for _, change := range scanReport.ResourceChanges {
+			if change.Ignored {
+				continue
+			}
 			results = append(results, sarifResult{RuleID: "terradrift.drift", Level: "error", Message: sarifMessage{Text: fmt.Sprintf("Terraform drift: %s", change.Address)}})
 		}
 		encoder := json.NewEncoder(stdout)

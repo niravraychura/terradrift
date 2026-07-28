@@ -10,11 +10,15 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 
 	"github.com/niravraychura/terradrift/internal/redact"
 )
 
-const maxCommandOutputBytes = 1 << 20
+const (
+	maxCommandOutputBytes   = 1 << 20
+	maxModulesManifestBytes = 1 << 20
+)
 
 // CLIRunner executes Terraform-compatible CLI commands.
 type CLIRunner struct {
@@ -43,12 +47,14 @@ func NewCLIRunner(path string) CLIRunner {
 	return CLIRunner{Path: path}
 }
 
+// Init initializes Terraform without upgrades or lockfile writes.
 func (runner CLIRunner) Init(ctx context.Context, directory string) error {
 	// Drift scans must neither upgrade providers nor modify the dependency lock file.
 	_, err := runner.run(ctx, directory, "init", "-input=false", "-backend=true", "-lockfile=readonly")
 	return err
 }
 
+// PlanRefreshOnly runs Terraform's refresh-only plan and returns its detailed exit code.
 func (runner CLIRunner) PlanRefreshOnly(ctx context.Context, directory string, outputPath string) (int, error) {
 	_, err := runner.run(ctx, directory, "plan", "-refresh-only", "-detailed-exitcode", "-out", outputPath)
 	if err == nil {
@@ -61,6 +67,7 @@ func (runner CLIRunner) PlanRefreshOnly(ctx context.Context, directory string, o
 	return 1, err
 }
 
+// ShowJSON returns the JSON rendering of a Terraform plan file.
 func (runner CLIRunner) ShowJSON(ctx context.Context, directory string, planPath string) ([]byte, error) {
 	return runner.run(ctx, directory, "show", "-json", planPath)
 }
@@ -80,7 +87,7 @@ func (runner CLIRunner) Inventory(ctx context.Context, directory string) (Invent
 	}
 	inventory := Inventory{TerraformVersion: version.TerraformVersion, ProviderVersions: version.ProviderSelections, Modules: []Module{}}
 	modulesPath := filepath.Join(directory, ".terraform", "modules", "modules.json")
-	data, err = os.ReadFile(modulesPath)
+	data, err = readLimitedFile(modulesPath, maxModulesManifestBytes)
 	if os.IsNotExist(err) {
 		return inventory, nil
 	}
@@ -93,8 +100,18 @@ func (runner CLIRunner) Inventory(ctx context.Context, directory string) (Invent
 	if err := json.Unmarshal(data, &manifest); err != nil {
 		return Inventory{}, fmt.Errorf("parse Terraform modules manifest: %w", err)
 	}
+	for i := range manifest.Modules {
+		manifest.Modules[i].Source = redactModuleSource(manifest.Modules[i].Source)
+	}
 	inventory.Modules = manifest.Modules
 	return inventory, nil
+}
+
+func redactModuleSource(source string) string {
+	if prefix, urlSource, found := strings.Cut(source, "::"); found {
+		return prefix + "::" + redact.String(urlSource)
+	}
+	return redact.String(source)
 }
 
 func (runner CLIRunner) run(ctx context.Context, directory string, args ...string) ([]byte, error) {
@@ -132,6 +149,9 @@ type limitedWriter struct {
 func (writer *limitedWriter) Write(p []byte) (int, error) {
 	originalLen := len(p)
 	if writer.n <= 0 {
+		if len(p) > 0 {
+			writer.truncated = true
+		}
 		return originalLen, nil
 	}
 	if int64(len(p)) > writer.n {
@@ -141,4 +161,20 @@ func (writer *limitedWriter) Write(p []byte) (int, error) {
 	written, err := writer.w.Write(p)
 	writer.n -= int64(written)
 	return originalLen, err
+}
+
+func readLimitedFile(path string, maximum int64) ([]byte, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = file.Close() }()
+	data, err := io.ReadAll(io.LimitReader(file, maximum+1))
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(data)) > maximum {
+		return nil, fmt.Errorf("file exceeds %d bytes", maximum)
+	}
+	return data, nil
 }

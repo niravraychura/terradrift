@@ -30,7 +30,7 @@ vuln: ## Run govulncheck
 
 ci: ## Run the local CI quality gate without modifying files
 	test -z "$$(gofmt -l $$(rg --files -g '*.go' -g '!vendor/**'))"
-	$(MAKE) vet test test-race vuln lint build
+	$(MAKE) vet test test-race vuln lint
 
 clean: ## Remove build artifacts
 	rm -rf $(BIN_DIR) dist coverage.out

@@ -73,7 +73,7 @@ func validateGenericWebhookURL(rawURL string) (string, error) {
 	}
 	parsed, err := url.Parse(webhookURL)
 	if err != nil {
-		return "", validation.New("webhook URL", fmt.Errorf("parse: %w", err))
+		return "", validation.New("webhook URL", errors.New("is malformed"))
 	}
 	if parsed.Scheme != "https" {
 		return "", validation.New("webhook URL", errors.New("must use https"))
@@ -110,7 +110,10 @@ func isBlockedWebhookIP(ip net.IP) bool {
 	if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsMulticast() || ip.IsUnspecified() {
 		return true
 	}
-	return len(ip) == net.IPv4len && ip[0] == 100 && ip[1]&0xc0 == 0x40
+	if len(ip) == net.IPv4len {
+		return ip[0] == 100 && ip[1]&0xc0 == 0x40 || ip[0] == 198 && ip[1]&0xfe == 18
+	}
+	return ip.IsInterfaceLocalMulticast()
 }
 
 func secureWebhookClient() *http.Client {

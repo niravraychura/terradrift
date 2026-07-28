@@ -46,6 +46,9 @@ func Append(path string, event Event) error {
 		return fmt.Errorf("open audit log: %w", err)
 	}
 	defer func() { _ = file.Close() }()
+	if err := file.Chmod(0o600); err != nil {
+		return fmt.Errorf("secure audit log: %w", err)
+	}
 	if _, err := file.Write(append(data, '\n')); err != nil {
 		return fmt.Errorf("write audit event: %w", err)
 	}

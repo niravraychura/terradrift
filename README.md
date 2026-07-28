@@ -76,6 +76,7 @@ terradrift scan -d ./terraform/prod --history-dir .terradrift-history --history-
 terradrift scan -d ./terraform/prod --policy-command conftest --policy-arg test --policy-arg -
 terradrift scan -d ./terraform/prod --cost-command infracost --cost-arg breakdown --cost-arg --format=json
 terradrift init
+terradrift init --directory ./terraform/prod --terraform-exec --redact-paths --history-dir .terradrift-history
 ```
 
 If `--directory` is omitted, TerraDrift scans the current working directory.
@@ -108,7 +109,7 @@ By default, TerraDrift still emits the bootstrap no-drift report. Use `--terrafo
 
 Terraform-backed scans create `.terradrift-scan.lock` in the selected root to prevent overlap. The lock is removed when the scan exits; after a crash, remove it only after confirming no scan is still active.
 
-The `terradrift init` command writes a starter `.terradrift.json` file with safe local defaults for repeated local or CI usage. Config files can also define optional scan settings such as `terraform_exec`, `terraform_bin`, `workspace_root`, `notify`, `slack_webhook_url`, `teams_webhook_url`, `webhook_url`, `dashboard_html`, `history_dir`, `history_compressed`, `audit_log`, `policy_command`, `policy_args`, `cost_command`, `cost_args`, and `remediation_runbooks`; explicit CLI flags always take precedence. Audit logs are JSON Lines with allowlisted metadata and redacted errors.
+The `terradrift init` command writes a tailored `.terradrift.json` file with safe local defaults. Use its `--directory`, `--terraform-exec`, `--redact-paths`, and `--history-dir` flags to guide the initial configuration. Config files can also define optional scan settings such as `terraform_exec`, `terraform_bin`, `workspace_root`, `notify`, `slack_webhook_url`, `teams_webhook_url`, `webhook_url`, `dashboard_html`, `history_dir`, `history_compressed`, `audit_log`, `policy_command`, `policy_args`, `cost_command`, `cost_args`, `baseline_rules`, and `remediation_runbooks`; explicit CLI flags always take precedence. Audit logs are JSON Lines with allowlisted metadata and redacted errors.
 
 Use [`docs/terradrift.schema.json`](docs/terradrift.schema.json) as the JSON Schema reference for editor and CI validation.
 
@@ -301,7 +302,7 @@ Terraform-backed reports include the CLI version, selected provider versions, an
 
 Each Terraform resource change is classified as `aws`, `azure`, or `gcp` from its provider metadata or resource type. Terraform value data, including account IDs, regions, tags, and potential secrets, is intentionally not parsed.
 
-Use exact-address `ignore_rules` for temporary, auditable exceptions. Each rule requires an owner, reason, and future RFC3339 expiry. Ignored findings stay visible in reports and dashboards but do not fail the scan.
+Use exact-address `baseline_rules` for accepted known drift and `ignore_rules` for temporary exceptions. Both require an owner, reason, and future RFC3339 expiry; explicit ignore rules take precedence when both match. Their metadata remains in reports and history as an audit trail. Ignored findings stay visible in reports and dashboards but do not fail the scan.
 
 Route active findings by owner with `resource_owners` and `owner_webhooks`. Exact resource addresses override resource types; each owner webhook uses the same HTTPS-only webhook protections as normal notifications.
 
@@ -327,7 +328,7 @@ terradrift scan --approval-file report.json.approval.json
 
 Correlate drift with CloudTrail, Azure Activity Log, or GCP Audit Log through `--audit-command`; see [audit adapter guidance](docs/AUDIT_ADAPTERS.md).
 
-For CI, set `allowed_commands` and `trusted_command_dirs` in a profile. Bare commands must resolve on `PATH`; absolute commands must be under a trusted directory. Commands containing shell syntax are rejected.
+For CI, set absolute `allowed_commands` and `trusted_command_dirs` in a profile. Resolved commands, including bare names, must be under a trusted directory; commands containing shell syntax are rejected.
 
 ```json
 {
@@ -451,7 +452,7 @@ jobs:
         uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
 
       - name: Run TerraDrift
-        run: terradrift scan --directory ./terraform/prod --output json
+        run: terradrift scan --directory ./terraform/prod --terraform-exec --output json
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
 ```

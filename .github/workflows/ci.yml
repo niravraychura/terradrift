@@ -23,6 +23,10 @@ jobs:
           check-latest: true
           cache: true
           cache-dependency-path: go.sum
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
+        with:
+          terraform_version: 1.10.0
       - name: Download dependencies
         run: go mod download
       - name: Check formatting

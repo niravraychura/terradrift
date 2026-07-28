@@ -70,12 +70,20 @@ func TestWebhookNotifierRejectsUnsafeURLs(t *testing.T) {
 }
 
 func TestBlockedWebhookIPs(t *testing.T) {
-	for _, value := range []string{"127.0.0.1", "10.0.0.1", "100.64.0.1", "169.254.169.254", "224.0.0.1", "::1", "fc00::1"} {
+	for _, value := range []string{"127.0.0.1", "10.0.0.1", "100.64.0.1", "169.254.169.254", "198.18.0.1", "224.0.0.1", "::1", "fc00::1"} {
 		t.Run(value, func(t *testing.T) {
 			if !isBlockedWebhookIP(net.ParseIP(value)) {
 				t.Fatalf("expected %s to be blocked", value)
 			}
 		})
+	}
+}
+
+func TestWebhookNotifierDoesNotExposeMalformedURL(t *testing.T) {
+	secret := "secret-value"
+	err := WebhookNotifier{WebhookURL: "https://example.com/?token=" + secret + "%zz"}.Notify(context.Background(), report.DriftReport{})
+	if err == nil || strings.Contains(err.Error(), secret) {
+		t.Fatalf("expected safe malformed URL error, got %v", err)
 	}
 }
 

@@ -33,7 +33,7 @@ func CloudProviderFor(provider string, resourceType string) string {
 	switch {
 	case strings.Contains(provider, "/aws") || strings.HasPrefix(resourceType, "aws_"):
 		return "aws"
-	case strings.Contains(provider, "/azurerm") || strings.HasPrefix(resourceType, "azurerm_"):
+	case strings.Contains(provider, "/azure") || strings.HasPrefix(resourceType, "azure"):
 		return "azure"
 	case strings.Contains(provider, "/google") || strings.HasPrefix(resourceType, "google_"):
 		return "gcp"

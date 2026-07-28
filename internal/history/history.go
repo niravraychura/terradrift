@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/niravraychura/terradrift/internal/report"
@@ -17,7 +18,10 @@ import (
 
 const fileTimestampFormat = "20060102T150405.000000000Z"
 
-const maxReportBytes = 1 << 20
+const (
+	maxReportBytes  = 1 << 20
+	maxHistoryFiles = 1000
+)
 
 // Entry is a persisted scan report.
 type Entry struct {
@@ -117,6 +121,13 @@ func LoadRecent(directory string, limit int) ([]Entry, error) {
 }
 
 func readReport(path string) ([]byte, error) {
+	info, err := os.Lstat(path)
+	if err != nil {
+		return nil, err
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		return nil, fmt.Errorf("history report must not be a symlink")
+	}
 	file, err := os.Open(path)
 	if err != nil {
 		return nil, err
@@ -160,13 +171,39 @@ func Prune(directory string, keep int) error {
 }
 
 func reportPaths(directory string) ([]string, error) {
-	matches, err := filepath.Glob(filepath.Join(directory, "*.json"))
+	info, err := os.Lstat(directory)
 	if err != nil {
-		return nil, fmt.Errorf("list history reports %s: %w", directory, err)
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("inspect history directory %s: %w", directory, err)
 	}
-	compressed, err := filepath.Glob(filepath.Join(directory, "*.json.gz"))
+	if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+		return nil, fmt.Errorf("history directory must be a non-symlink directory: %s", directory)
+	}
+	file, err := os.Open(directory)
 	if err != nil {
-		return nil, fmt.Errorf("list compressed history reports %s: %w", directory, err)
+		return nil, fmt.Errorf("open history directory %s: %w", directory, err)
 	}
-	return append(matches, compressed...), nil
+	defer func() { _ = file.Close() }()
+	paths := make([]string, 0)
+	for {
+		entries, err := file.ReadDir(100)
+		for _, entry := range entries {
+			if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".json") && !strings.HasSuffix(entry.Name(), ".json.gz") {
+				continue
+			}
+			if len(paths) == maxHistoryFiles {
+				return nil, fmt.Errorf("history directory exceeds %d report files", maxHistoryFiles)
+			}
+			paths = append(paths, filepath.Join(directory, entry.Name()))
+		}
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return nil, fmt.Errorf("list history reports %s: %w", directory, err)
+		}
+	}
+	return paths, nil
 }

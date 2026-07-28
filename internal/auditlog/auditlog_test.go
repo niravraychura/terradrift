@@ -25,3 +25,17 @@ func TestAppendRedactsSecretsAndUsesRestrictedPermissions(t *testing.T) {
 		t.Fatalf("expected redacted audit event, got %q", data)
 	}
 }
+
+func TestAppendSecuresExistingLog(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "audit.jsonl")
+	if err := os.WriteFile(path, []byte("existing\n"), 0o644); err != nil {
+		t.Fatalf("write audit log: %v", err)
+	}
+	if err := Append(path, Event{Event: "scan_completed"}); err != nil {
+		t.Fatalf("append audit event: %v", err)
+	}
+	info, err := os.Stat(path)
+	if err != nil || info.Mode().Perm() != 0o600 {
+		t.Fatalf("expected existing audit log to become 0600, info=%v err=%v", info, err)
+	}
+}

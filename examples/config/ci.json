@@ -7,9 +7,10 @@
   "workspace_root": ".",
   "notification_throttle": true,
   "history_dir": ".terradrift-history",
-  "allowed_commands": ["conftest", "infracost-adapter", "audit-adapter"],
-  "policy_command": "conftest",
+  "allowed_commands": ["/usr/local/bin/conftest", "/usr/local/bin/infracost-adapter", "/usr/local/bin/audit-adapter"],
+  "trusted_command_dirs": ["/usr/local/bin"],
+  "policy_command": "/usr/local/bin/conftest",
   "policy_args": ["test", "-"],
-  "cost_command": "infracost-adapter",
-  "audit_command": "audit-adapter"
+  "cost_command": "/usr/local/bin/infracost-adapter",
+  "audit_command": "/usr/local/bin/audit-adapter"
 }

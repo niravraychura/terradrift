@@ -67,6 +67,7 @@ type AuditEvent struct {
 // DriftReport captures the domain result of a Terraform drift scan.
 type DriftReport struct {
 	ScanID                string            `json:"scan_id"`
+	RootID                string            `json:"root_id,omitempty"`
 	Status                ScanStatus        `json:"status"`
 	Directory             string            `json:"directory"`
 	TotalResourcesChecked int               `json:"total_resources_checked"`

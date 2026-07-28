@@ -44,3 +44,14 @@ func TestRenderIndexEscapesDirectories(t *testing.T) {
 		t.Fatalf("expected index output to escape script tags, got %q", output.String())
 	}
 }
+
+func TestRenderWithHistoryIncludesTrend(t *testing.T) {
+	var output bytes.Buffer
+	err := RenderWithHistory(&output, Data{History: []history.Entry{{Report: report.DriftReport{Status: report.ScanStatusDriftDetected}}, {Report: report.DriftReport{Status: report.ScanStatusFailed}}}})
+	if err != nil {
+		t.Fatalf("render dashboard: %v", err)
+	}
+	if !strings.Contains(output.String(), "1 drifted and 1 failed scans across 2 recent scans") {
+		t.Fatalf("expected trend summary, got %q", output.String())
+	}
+}
