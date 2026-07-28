@@ -161,6 +161,9 @@ func newDashboardIndexCommand(stdout io.Writer) *cobra.Command {
 			if err != nil {
 				return err
 			}
+			if err := rejectSymlink(output); err != nil {
+				return err
+			}
 			file, err := os.OpenFile(output, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
 			if err != nil {
 				return fmt.Errorf("create dashboard index %s: %w", output, err)
@@ -705,6 +708,9 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 }
 
 func writeDashboard(path string, scanReport report.DriftReport, historyEntries []history.Entry) error {
+	if err := rejectSymlink(path); err != nil {
+		return err
+	}
 	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
 	if err != nil {
 		return fmt.Errorf("create dashboard HTML %s: %w", path, err)
@@ -715,6 +721,17 @@ func writeDashboard(path string, scanReport report.DriftReport, historyEntries [
 	}
 	if err := file.Close(); err != nil {
 		return fmt.Errorf("close dashboard HTML %s: %w", path, err)
+	}
+	return nil
+}
+
+func rejectSymlink(path string) error {
+	info, err := os.Lstat(path)
+	if err == nil && info.Mode()&os.ModeSymlink != 0 {
+		return fmt.Errorf("output path must not be a symlink: %s", path)
+	}
+	if err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("inspect output path %s: %w", path, err)
 	}
 	return nil
 }

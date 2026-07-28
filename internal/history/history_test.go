@@ -2,6 +2,8 @@ package history
 
 import (
 	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -34,6 +36,20 @@ func TestWriteAndLoadRecent(t *testing.T) {
 	}
 	if len(entries) != 1 || entries[0].Report.Status != report.ScanStatusNoDrift {
 		t.Fatalf("unexpected history entries: %#v", entries)
+	}
+}
+
+func TestWriteRejectsSymlinkDirectory(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink fixture requires POSIX permissions")
+	}
+	target := t.TempDir()
+	link := filepath.Join(t.TempDir(), "history")
+	if err := os.Symlink(target, link); err != nil {
+		t.Fatalf("create symlink: %v", err)
+	}
+	if _, err := Write(link, report.DriftReport{}); err == nil {
+		t.Fatal("expected symlink history directory to fail")
 	}
 }
 

@@ -89,7 +89,7 @@ This plan tracks security, performance, code quality, and feature work for Terra
 - [ ] Bound notification response bodies and complete output/input size budgets.
 - [ ] Redact `ErrorMessage` before JSON, history, dashboards, policy input, and notification delivery.
 - [ ] Redact Terraform plan sensitive fields and marks before any future value expansion.
-- [ ] Protect dashboard and history output paths from symlink writes.
+- [x] Reject direct symlink targets for dashboard and history output paths.
 - [ ] Document backend/state safety, secret scanning, and least-privilege AWS, Azure, and GCP IAM examples.
 - [ ] Add release supply-chain controls: checksums, SBOM, provenance, SHA-pinned Actions examples, image signing, Docker scanning, and license policy checks.
 - [ ] Add secret-safe structured audit logging with scan, config, workspace, version, and command metadata.

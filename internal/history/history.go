@@ -24,6 +24,9 @@ func Write(directory string, scanReport report.DriftReport) (string, error) {
 	if directory == "" {
 		return "", fmt.Errorf("history directory is required")
 	}
+	if info, err := os.Lstat(directory); err == nil && info.Mode()&os.ModeSymlink != 0 {
+		return "", fmt.Errorf("history directory must not be a symlink: %s", directory)
+	}
 	if err := os.MkdirAll(directory, 0o700); err != nil {
 		return "", fmt.Errorf("create history directory %s: %w", directory, err)
 	}

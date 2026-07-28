@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -141,6 +142,20 @@ func TestApproveCreatesSecureArtifact(t *testing.T) {
 	info, err := os.Stat(approvalPath)
 	if err != nil || info.Mode().Perm() != 0o600 {
 		t.Fatalf("expected secure approval artifact, info=%v err=%v", info, err)
+	}
+}
+
+func TestWriteDashboardRejectsSymlink(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink fixture requires POSIX permissions")
+	}
+	target := filepath.Join(t.TempDir(), "target.html")
+	path := filepath.Join(t.TempDir(), "dashboard.html")
+	if err := os.Symlink(target, path); err != nil {
+		t.Fatalf("create symlink: %v", err)
+	}
+	if err := writeDashboard(path, report.DriftReport{}, nil); err == nil {
+		t.Fatal("expected symlink dashboard path to fail")
 	}
 }
 
