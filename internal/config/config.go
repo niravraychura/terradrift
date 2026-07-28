@@ -39,6 +39,8 @@ type Config struct {
 	GitHubPR             int                        `json:"github_pr"`
 	GitHubIssueAfter     int                        `json:"github_issue_after"`
 	ArtifactURL          string                     `json:"artifact_url"`
+	AuditCommand         string                     `json:"audit_command"`
+	AuditArgs            []string                   `json:"audit_args"`
 	Profiles             map[string]json.RawMessage `json:"profiles,omitempty"`
 }
 

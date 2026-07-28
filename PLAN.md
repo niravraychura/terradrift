@@ -72,7 +72,7 @@ This plan tracks security, performance, code quality, and feature work for Terra
 - [x] Add configurable remediation runbook URLs by resource type and action.
 - [x] Add a human approval workflow for remediation suggestions.
 - [x] Add review-only state reconciliation hints for imports, moved blocks, and configuration updates.
-- [ ] Add cloud audit-event correlation for drift findings.
+- [x] Add cloud audit-event correlation through explicit external adapters.
 - [x] Add baseline and ignore rules with owners, reasons, expirations, and audit trails.
 - [x] Add severity gates for CI failure behavior.
 - [x] Add GitHub pull-request scan-result summaries for infrastructure repositories.

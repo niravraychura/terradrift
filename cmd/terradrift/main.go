@@ -17,6 +17,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/niravraychura/terradrift/internal/audit"
 	"github.com/niravraychura/terradrift/internal/config"
 	"github.com/niravraychura/terradrift/internal/cost"
 	"github.com/niravraychura/terradrift/internal/dashboard"
@@ -400,6 +401,8 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 	var githubIssueAfter int
 	var artifactURL string
 	var approvalFile string
+	var auditCommand string
+	var auditArgs []string
 
 	cmd := &cobra.Command{
 		Use:   "scan",
@@ -485,6 +488,12 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 				if !cmd.Flags().Changed("artifact-url") {
 					artifactURL = cfg.ArtifactURL
 				}
+				if !cmd.Flags().Changed("audit-command") {
+					auditCommand = cfg.AuditCommand
+				}
+				if !cmd.Flags().Changed("audit-arg") {
+					auditArgs = append([]string(nil), cfg.AuditArgs...)
+				}
 				if !cmd.Flags().Changed("failure-severity") {
 					failureSeverity = cfg.FailureSeverity
 				}
@@ -529,6 +538,13 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 			}
 			if err := report.ApplyRunbooks(&scanReport, remediationRunbooks); err != nil {
 				return err
+			}
+			if auditCommand != "" {
+				enrichedReport, err := audit.Enrich(cmd.Context(), audit.Options{Command: auditCommand, Args: auditArgs}, scanReport)
+				if err != nil {
+					return err
+				}
+				scanReport = enrichedReport
 			}
 			if approvalFile != "" {
 				data, err := os.ReadFile(approvalFile)
@@ -665,6 +681,8 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 	cmd.Flags().IntVar(&githubIssueAfter, "github-issue-after", 0, "create a GitHub issue after this many consecutive matching drift scans")
 	cmd.Flags().StringVar(&artifactURL, "artifact-url", "", "presigned HTTPS URL to upload the JSON report")
 	cmd.Flags().StringVar(&approvalFile, "approval-file", "", "review-only approval artifact to attach to the report")
+	cmd.Flags().StringVar(&auditCommand, "audit-command", "", "audit correlation command to enrich the scan report")
+	cmd.Flags().StringArrayVar(&auditArgs, "audit-arg", nil, "audit command argument; repeat for multiple arguments")
 	cmd.Flags().StringVar(&dashboardHTMLPath, "dashboard-html", "", "write a static HTML dashboard report to this path")
 	cmd.Flags().StringVar(&historyDir, "history-dir", "", "write JSON scan history to this directory and include recent history in dashboards")
 	cmd.Flags().StringVar(&policyCommand, "policy-command", "", "policy command to run with the scan report JSON on stdin")

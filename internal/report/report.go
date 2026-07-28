@@ -15,22 +15,23 @@ const (
 
 // ResourceChange describes a Terraform resource with detected drift.
 type ResourceChange struct {
-	Address            string   `json:"address"`
-	Type               string   `json:"type"`
-	Name               string   `json:"name"`
-	Actions            []string `json:"actions"`
-	Remediation        string   `json:"remediation,omitempty"`
-	ReconciliationHint string   `json:"reconciliation_hint,omitempty"`
-	RunbookURL         string   `json:"runbook_url,omitempty"`
-	CostImpact         string   `json:"cost_impact,omitempty"`
-	RiskLevel          string   `json:"risk_level,omitempty"`
-	Owner              string   `json:"owner,omitempty"`
-	Provider           string   `json:"provider,omitempty"`
-	CloudProvider      string   `json:"cloud_provider,omitempty"`
-	Ignored            bool     `json:"ignored,omitempty"`
-	IgnoreOwner        string   `json:"ignore_owner,omitempty"`
-	IgnoreReason       string   `json:"ignore_reason,omitempty"`
-	IgnoreExpiresAt    string   `json:"ignore_expires_at,omitempty"`
+	Address            string       `json:"address"`
+	Type               string       `json:"type"`
+	Name               string       `json:"name"`
+	Actions            []string     `json:"actions"`
+	Remediation        string       `json:"remediation,omitempty"`
+	ReconciliationHint string       `json:"reconciliation_hint,omitempty"`
+	RunbookURL         string       `json:"runbook_url,omitempty"`
+	CostImpact         string       `json:"cost_impact,omitempty"`
+	RiskLevel          string       `json:"risk_level,omitempty"`
+	Owner              string       `json:"owner,omitempty"`
+	Provider           string       `json:"provider,omitempty"`
+	CloudProvider      string       `json:"cloud_provider,omitempty"`
+	AuditEvents        []AuditEvent `json:"audit_events,omitempty"`
+	Ignored            bool         `json:"ignored,omitempty"`
+	IgnoreOwner        string       `json:"ignore_owner,omitempty"`
+	IgnoreReason       string       `json:"ignore_reason,omitempty"`
+	IgnoreExpiresAt    string       `json:"ignore_expires_at,omitempty"`
 }
 
 // IgnoreRule records a temporary, auditable exception for one resource address.
@@ -46,6 +47,14 @@ type ModuleInventory struct {
 	Key     string `json:"key"`
 	Source  string `json:"source"`
 	Version string `json:"version,omitempty"`
+}
+
+// AuditEvent identifies an external cloud audit event for a resource.
+type AuditEvent struct {
+	Provider   string `json:"provider"`
+	Actor      string `json:"actor"`
+	OccurredAt string `json:"occurred_at"`
+	Summary    string `json:"summary"`
 }
 
 // DriftReport captures the domain result of a Terraform drift scan.

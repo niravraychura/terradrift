@@ -307,6 +307,8 @@ terradrift approve --report report.json --owner platform-team \
 terradrift scan --approval-file report.json.approval.json
 ```
 
+Correlate drift with CloudTrail, Azure Activity Log, or GCP Audit Log through `--audit-command`; see [audit adapter guidance](docs/AUDIT_ADAPTERS.md).
+
 ```json
 {
   "resource_owners": {
