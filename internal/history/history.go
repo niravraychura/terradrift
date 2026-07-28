@@ -14,9 +14,8 @@ import (
 
 const fileTimestampFormat = "20060102T150405.000000000Z"
 
-// Entry is a persisted scan report plus its source path.
+// Entry is a persisted scan report.
 type Entry struct {
-	Path   string
 	Report report.DriftReport
 }
 
@@ -74,7 +73,7 @@ func LoadRecent(directory string, limit int) ([]Entry, error) {
 		if err := json.Unmarshal(data, &scanReport); err != nil {
 			return nil, fmt.Errorf("parse history report %s: %w", path, err)
 		}
-		entries = append(entries, Entry{Path: path, Report: scanReport})
+		entries = append(entries, Entry{Report: scanReport})
 	}
 	return entries, nil
 }

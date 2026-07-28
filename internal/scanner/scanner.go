@@ -65,8 +65,14 @@ func Scan(ctx context.Context, options Options) (Result, error) {
 	}
 
 	if options.Runner == nil {
-		scanReport := NewBootstrapReport(absDir)
-		return Result{Outcome: OutcomeNoDrift, Report: scanReport}, nil
+		now := time.Now().UTC()
+		return Result{Outcome: OutcomeNoDrift, Report: report.DriftReport{
+			Status:          report.ScanStatusNoDrift,
+			Directory:       absDir,
+			ResourceChanges: []report.ResourceChange{},
+			StartedAt:       now,
+			CompletedAt:     now,
+		}}, nil
 	}
 
 	scanReport, err := runTerraformScan(ctx, options.Runner, absDir)
@@ -121,18 +127,6 @@ func ValidateDirectory(directory string) (string, error) {
 		return "", fmt.Errorf("terraform path is not a directory: %s", absDir)
 	}
 	return absDir, nil
-}
-
-// NewBootstrapReport creates the placeholder report used until Terraform execution is implemented.
-func NewBootstrapReport(directory string) report.DriftReport {
-	now := time.Now().UTC()
-	return report.DriftReport{
-		Status:          report.ScanStatusNoDrift,
-		Directory:       directory,
-		ResourceChanges: []report.ResourceChange{},
-		StartedAt:       now,
-		CompletedAt:     now,
-	}
 }
 
 func runTerraformScan(ctx context.Context, runner terraform.Runner, directory string) (report.DriftReport, error) {

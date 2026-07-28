@@ -13,14 +13,13 @@ import (
 )
 
 type fakeRunner struct {
-	initErr    error
-	planExit   int
-	planErr    error
-	showJSON   []byte
-	showErr    error
-	planPath   string
-	showPath   string
-	cleanupDir string
+	initErr  error
+	planExit int
+	planErr  error
+	showJSON []byte
+	showErr  error
+	planPath string
+	showPath string
 }
 
 func (runner *fakeRunner) Init(ctx context.Context, directory string) error {
@@ -29,7 +28,6 @@ func (runner *fakeRunner) Init(ctx context.Context, directory string) error {
 
 func (runner *fakeRunner) PlanRefreshOnly(ctx context.Context, directory string, outputPath string) (int, error) {
 	runner.planPath = outputPath
-	runner.cleanupDir = directory
 	return runner.planExit, runner.planErr
 }
 

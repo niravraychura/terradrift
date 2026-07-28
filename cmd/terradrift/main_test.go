@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
-	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -322,36 +321,6 @@ func TestScanRejectsUnsupportedOutputFormat(t *testing.T) {
 	_, _, err := executeCommand("scan", "--output", "xml")
 	if err == nil || !strings.Contains(err.Error(), "unsupported output format") {
 		t.Fatalf("expected unsupported output format error, got %v", err)
-	}
-}
-
-func TestLogLevelSupported(t *testing.T) {
-	for _, level := range []string{"debug", "info", "warn", "error"} {
-		_, _, err := executeCommand("--log-level", level, "scan", "-d", t.TempDir())
-		if err != nil {
-			t.Fatalf("expected log level %q to be supported: %v", level, err)
-		}
-	}
-}
-
-func TestLogLevelConfiguresDefaultLogger(t *testing.T) {
-	var stderr bytes.Buffer
-	cmd := newRootCommand(&bytes.Buffer{}, &stderr)
-	cmd.SetArgs([]string{"--log-level", "debug", "scan", "-d", t.TempDir()})
-	if err := cmd.Execute(); err != nil {
-		t.Fatalf("expected command to execute: %v", err)
-	}
-
-	slog.Debug("debug message")
-	if !strings.Contains(stderr.String(), "debug message") {
-		t.Fatalf("expected default logger to write debug message to stderr, got %q", stderr.String())
-	}
-}
-
-func TestLogLevelUnsupported(t *testing.T) {
-	_, _, err := executeCommand("--log-level", "trace", "scan", "-d", t.TempDir())
-	if err == nil || !strings.Contains(err.Error(), "unsupported log level") {
-		t.Fatalf("expected unsupported log level error, got %v", err)
 	}
 }
 

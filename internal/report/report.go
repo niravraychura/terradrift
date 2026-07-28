@@ -7,7 +7,6 @@ import "time"
 type ScanStatus string
 
 const (
-	ScanStatusPending       ScanStatus = "pending"
 	ScanStatusRunning       ScanStatus = "running"
 	ScanStatusNoDrift       ScanStatus = "no_drift"
 	ScanStatusDriftDetected ScanStatus = "drift_detected"
