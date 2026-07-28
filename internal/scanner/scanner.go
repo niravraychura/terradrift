@@ -3,6 +3,7 @@ package scanner
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -10,6 +11,7 @@ import (
 	"time"
 
 	"github.com/niravraychura/terradrift/internal/parser"
+	"github.com/niravraychura/terradrift/internal/redact"
 	"github.com/niravraychura/terradrift/internal/report"
 	"github.com/niravraychura/terradrift/internal/terraform"
 )
@@ -183,20 +185,16 @@ func runTerraformScan(ctx context.Context, runner terraform.Runner, directory st
 	}
 
 	if err := runner.Init(ctx, directory); err != nil {
-		scanReport.Status = report.ScanStatusFailed
-		scanReport.CompletedAt = time.Now().UTC()
-		scanReport.ErrorMessage = err.Error()
-		return scanReport, fmt.Errorf("terraform init: %w", err)
+		failReport(&scanReport, err)
+		return scanReport, fmt.Errorf("terraform init: %s", scanReport.ErrorMessage)
 	}
 	if inventoryRunner, ok := runner.(interface {
 		Inventory(context.Context, string) (terraform.Inventory, error)
 	}); ok {
 		inventory, err := inventoryRunner.Inventory(ctx, directory)
 		if err != nil {
-			scanReport.Status = report.ScanStatusFailed
-			scanReport.CompletedAt = time.Now().UTC()
-			scanReport.ErrorMessage = err.Error()
-			return scanReport, fmt.Errorf("terraform inventory: %w", err)
+			failReport(&scanReport, err)
+			return scanReport, fmt.Errorf("terraform inventory: %s", scanReport.ErrorMessage)
 		}
 		scanReport.TerraformVersion = inventory.TerraformVersion
 		scanReport.ProviderVersions = inventory.ProviderVersions
@@ -208,42 +206,32 @@ func runTerraformScan(ctx context.Context, runner terraform.Runner, directory st
 
 	planFile, cleanup, err := securePlanFile(directory)
 	if err != nil {
-		scanReport.Status = report.ScanStatusFailed
-		scanReport.CompletedAt = time.Now().UTC()
-		scanReport.ErrorMessage = err.Error()
-		return scanReport, err
+		failReport(&scanReport, err)
+		return scanReport, errors.New(scanReport.ErrorMessage)
 	}
 	defer cleanup()
 
 	exitCode, err := runner.PlanRefreshOnly(ctx, directory, planFile)
 	if err != nil {
-		scanReport.Status = report.ScanStatusFailed
-		scanReport.CompletedAt = time.Now().UTC()
-		scanReport.ErrorMessage = err.Error()
-		return scanReport, fmt.Errorf("terraform refresh-only plan: %w", err)
+		failReport(&scanReport, err)
+		return scanReport, fmt.Errorf("terraform refresh-only plan: %s", scanReport.ErrorMessage)
 	}
 	if exitCode != 0 && exitCode != 2 {
 		err := fmt.Errorf("terraform refresh-only plan failed with exit code %d", exitCode)
-		scanReport.Status = report.ScanStatusFailed
-		scanReport.CompletedAt = time.Now().UTC()
-		scanReport.ErrorMessage = err.Error()
+		failReport(&scanReport, err)
 		return scanReport, err
 	}
 
 	planJSON, err := runner.ShowJSON(ctx, directory, planFile)
 	if err != nil {
-		scanReport.Status = report.ScanStatusFailed
-		scanReport.CompletedAt = time.Now().UTC()
-		scanReport.ErrorMessage = err.Error()
-		return scanReport, fmt.Errorf("terraform show JSON: %w", err)
+		failReport(&scanReport, err)
+		return scanReport, fmt.Errorf("terraform show JSON: %s", scanReport.ErrorMessage)
 	}
 
 	resourceChanges, totalResources, err := parser.ParsePlan(planJSON)
 	if err != nil {
-		scanReport.Status = report.ScanStatusFailed
-		scanReport.CompletedAt = time.Now().UTC()
-		scanReport.ErrorMessage = err.Error()
-		return scanReport, err
+		failReport(&scanReport, err)
+		return scanReport, errors.New(scanReport.ErrorMessage)
 	}
 
 	scanReport.ResourceChanges = resourceChanges
@@ -251,6 +239,12 @@ func runTerraformScan(ctx context.Context, runner terraform.Runner, directory st
 	scanReport.TotalChangedResources = len(resourceChanges)
 	scanReport.CompletedAt = time.Now().UTC()
 	return scanReport, nil
+}
+
+func failReport(scanReport *report.DriftReport, err error) {
+	scanReport.Status = report.ScanStatusFailed
+	scanReport.CompletedAt = time.Now().UTC()
+	scanReport.ErrorMessage = redact.String(err.Error())
 }
 
 func securePlanFile(directory string) (string, func(), error) {

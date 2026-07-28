@@ -178,6 +178,23 @@ func TestScanWithRunnerReturnsFailedOutcomeForPlanError(t *testing.T) {
 	}
 }
 
+func TestScanRedactsFailedRunnerErrors(t *testing.T) {
+	secret := "super-secret-token"
+	result, err := Scan(context.Background(), Options{
+		Directory: t.TempDir(),
+		Runner:    &fakeRunner{initErr: errors.New("token=" + secret)},
+	})
+	if err == nil {
+		t.Fatal("expected init failure")
+	}
+	if strings.Contains(result.Report.ErrorMessage, secret) || strings.Contains(err.Error(), secret) {
+		t.Fatalf("expected errors to be redacted, report=%q error=%q", result.Report.ErrorMessage, err)
+	}
+	if !strings.Contains(result.Report.ErrorMessage, "[REDACTED]") {
+		t.Fatalf("expected a redacted report error, got %q", result.Report.ErrorMessage)
+	}
+}
+
 func TestScanWithRunnerRejectsUnexpectedPlanExitCode(t *testing.T) {
 	result, err := Scan(context.Background(), Options{Directory: t.TempDir(), Runner: &fakeRunner{planExit: 3}})
 	if err == nil || result.Outcome != OutcomeFailed || result.Report.Status != report.ScanStatusFailed {

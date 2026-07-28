@@ -4,6 +4,7 @@ package history
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"sort"
@@ -63,18 +64,20 @@ func LoadRecent(directory string, limit int) ([]Entry, error) {
 		return nil, fmt.Errorf("list history reports %s: %w", directory, err)
 	}
 	sort.Sort(sort.Reverse(sort.StringSlice(matches)))
-	if len(matches) > limit {
-		matches = matches[:limit]
-	}
 	entries := make([]Entry, 0, len(matches))
 	for _, path := range matches {
+		if len(entries) == limit {
+			break
+		}
 		data, err := os.ReadFile(path)
 		if err != nil {
-			return nil, fmt.Errorf("read history report %s: %w", path, err)
+			log.Print("skipped unreadable history report")
+			continue
 		}
 		var scanReport report.DriftReport
 		if err := json.Unmarshal(data, &scanReport); err != nil {
-			return nil, fmt.Errorf("parse history report %s: %w", path, err)
+			log.Print("skipped malformed history report")
+			continue
 		}
 		entries = append(entries, Entry{Report: scanReport})
 	}

@@ -87,7 +87,7 @@ This plan tracks security, performance, code quality, and feature work for Terra
 
 - [x] Add external-command allowlists and trusted-path validation; use profiles for CI-safe presets.
 - [ ] Bound notification response bodies and complete output/input size budgets.
-- [ ] Redact `ErrorMessage` before JSON, history, dashboards, policy input, and notification delivery.
+- [x] Redact `ErrorMessage` before JSON, history, dashboards, policy input, and notification delivery.
 - [ ] Redact Terraform plan sensitive fields and marks before any future value expansion.
 - [x] Reject direct symlink targets for dashboard and history output paths.
 - [x] Document backend/state safety and secret-managed integration credentials.
@@ -98,7 +98,7 @@ This plan tracks security, performance, code quality, and feature work for Terra
 - [ ] Parse Terraform output-value changes, action reasons, replacement reasons, and deleted-resource context.
 - [ ] Add safe Terraform initialization controls for lockfiles, upgrades, backends, and plugin caching.
 - [ ] Add stable scan IDs to reports, history, notifications, and dashboards.
-- [ ] Skip malformed history files with warnings instead of failing dashboard rendering.
+- [x] Skip malformed history files with warnings instead of failing dashboard rendering.
 - [x] Reject unknown config fields during loading.
 - [x] Validate core config values early during loading.
 - [x] Publish a `.terradrift.json` JSON Schema.
