@@ -35,7 +35,7 @@ func (uploader ArtifactUploader) Upload(ctx context.Context, content []byte, con
 	if err != nil {
 		return fmt.Errorf("upload artifact to %s: %w", redact.String(artifactURL), err)
 	}
-	defer response.Body.Close()
+	defer func() { _ = response.Body.Close() }()
 	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
 		return fmt.Errorf("upload artifact to %s: unexpected status %s", redact.String(artifactURL), response.Status)
 	}

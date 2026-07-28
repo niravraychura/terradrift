@@ -63,7 +63,7 @@ func (notifier GitHubPRNotifier) Notify(ctx context.Context, scanReport report.D
 	if err != nil {
 		return fmt.Errorf("send GitHub pull request summary to %s: %w", redact.String(repository), err)
 	}
-	defer response.Body.Close()
+	defer func() { _ = response.Body.Close() }()
 	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
 		return fmt.Errorf("send GitHub pull request summary to %s: unexpected status %s", redact.String(repository), response.Status)
 	}
@@ -116,7 +116,7 @@ func (notifier GitHubIssueNotifier) Notify(ctx context.Context, scanReport repor
 	if err != nil {
 		return fmt.Errorf("create GitHub drift issue in %s: %w", redact.String(repository), err)
 	}
-	defer response.Body.Close()
+	defer func() { _ = response.Body.Close() }()
 	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
 		return fmt.Errorf("create GitHub drift issue in %s: unexpected status %s", redact.String(repository), response.Status)
 	}
