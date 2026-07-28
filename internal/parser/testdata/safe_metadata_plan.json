@@ -1,0 +1,25 @@
+{
+  "resource_changes": [
+    {
+      "address": "aws_instance.web",
+      "type": "aws_instance",
+      "name": "web",
+      "action_reason": "replace_because_cannot_update",
+      "change": {
+        "actions": ["delete", "create"],
+        "before": {"password": "super-secret-value"},
+        "after": {"password": "super-secret-value"},
+        "before_sensitive": {"password": true},
+        "after_sensitive": {"password": true}
+      }
+    }
+  ],
+  "output_changes": {
+    "service_url": {
+      "actions": ["update"],
+      "before": "super-secret-value",
+      "after": "super-secret-value",
+      "after_sensitive": true
+    }
+  }
+}

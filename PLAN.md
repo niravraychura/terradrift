@@ -95,14 +95,14 @@ This plan tracks security, performance, code quality, and feature work for Terra
 - [ ] Add release supply-chain controls: checksums, SBOM, provenance, SHA-pinned Actions examples, image signing, Docker scanning, and license policy checks.
 - [ ] Add secret-safe structured audit logging with scan, config, workspace, version, and command metadata.
 - [x] Test and reject unexpected Terraform detailed-exit codes; context cancellation is covered.
-- [ ] Parse Terraform output-value changes, action reasons, replacement reasons, and deleted-resource context.
+- [x] Parse Terraform output-change actions and resource action reasons without retaining Terraform values or sensitive marks.
 - [ ] Add safe Terraform initialization controls for lockfiles, upgrades, backends, and plugin caching.
 - [ ] Add stable scan IDs to reports, history, notifications, and dashboards.
 - [x] Skip malformed history files with warnings instead of failing dashboard rendering.
 - [x] Reject unknown config fields during loading.
 - [x] Validate core config values early during loading.
 - [x] Publish a `.terradrift.json` JSON Schema.
-- [ ] Add credential-free Terraform integration tests and golden plan-JSON fixtures.
+- [x] Add credential-free Terraform integration tests and golden plan-JSON fixtures.
 - [x] Sort resource changes by address for deterministic output.
 - [ ] Model complete, partial, and drift outcomes for multi-root scans.
 - [x] Bound Terraform command output and fail explicitly on truncation.

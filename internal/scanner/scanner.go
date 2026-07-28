@@ -228,13 +228,14 @@ func runTerraformScan(ctx context.Context, runner terraform.Runner, directory st
 		return scanReport, fmt.Errorf("terraform show JSON: %s", scanReport.ErrorMessage)
 	}
 
-	resourceChanges, totalResources, err := parser.ParsePlan(planJSON)
+	resourceChanges, outputChanges, totalResources, err := parser.ParsePlan(planJSON)
 	if err != nil {
 		failReport(&scanReport, err)
 		return scanReport, errors.New(scanReport.ErrorMessage)
 	}
 
 	scanReport.ResourceChanges = resourceChanges
+	scanReport.OutputChanges = outputChanges
 	scanReport.TotalResourcesChecked = totalResources
 	scanReport.TotalChangedResources = len(resourceChanges)
 	scanReport.CompletedAt = time.Now().UTC()

@@ -19,6 +19,7 @@ type ResourceChange struct {
 	Type               string       `json:"type"`
 	Name               string       `json:"name"`
 	Actions            []string     `json:"actions"`
+	ActionReason       string       `json:"action_reason,omitempty"`
 	Remediation        string       `json:"remediation,omitempty"`
 	ReconciliationHint string       `json:"reconciliation_hint,omitempty"`
 	RunbookURL         string       `json:"runbook_url,omitempty"`
@@ -32,6 +33,12 @@ type ResourceChange struct {
 	IgnoreOwner        string       `json:"ignore_owner,omitempty"`
 	IgnoreReason       string       `json:"ignore_reason,omitempty"`
 	IgnoreExpiresAt    string       `json:"ignore_expires_at,omitempty"`
+}
+
+// OutputChange describes a Terraform output change without retaining its value.
+type OutputChange struct {
+	Name    string   `json:"name"`
+	Actions []string `json:"actions"`
 }
 
 // IgnoreRule records a temporary, auditable exception for one resource address.
@@ -64,6 +71,7 @@ type DriftReport struct {
 	TotalResourcesChecked int               `json:"total_resources_checked"`
 	TotalChangedResources int               `json:"total_changed_resources"`
 	ResourceChanges       []ResourceChange  `json:"resource_changes"`
+	OutputChanges         []OutputChange    `json:"output_changes,omitempty"`
 	StartedAt             time.Time         `json:"started_at"`
 	CompletedAt           time.Time         `json:"completed_at"`
 	ErrorMessage          string            `json:"error_message,omitempty"`

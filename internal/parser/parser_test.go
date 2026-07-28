@@ -1,7 +1,10 @@
 package parser
 
 import (
+	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -15,7 +18,7 @@ func TestParsePlanReturnsChangedResourcesAndTotals(t *testing.T) {
 		]
 	}`)
 
-	changes, total, err := ParsePlan(plan)
+	changes, outputChanges, total, err := ParsePlan(plan)
 	if err != nil {
 		t.Fatalf("expected plan to parse: %v", err)
 	}
@@ -24,6 +27,9 @@ func TestParsePlanReturnsChangedResourcesAndTotals(t *testing.T) {
 	}
 	if len(changes) != 2 {
 		t.Fatalf("expected 2 changed resources, got %d", len(changes))
+	}
+	if len(outputChanges) != 0 {
+		t.Fatalf("expected no output changes, got %#v", outputChanges)
 	}
 	if changes[0].Address != "aws_db_instance.db" || len(changes[0].Actions) != 2 {
 		t.Fatalf("unexpected first change: %#v", changes[0])
@@ -34,7 +40,7 @@ func TestParsePlanReturnsChangedResourcesAndTotals(t *testing.T) {
 }
 
 func TestParsePlanRejectsInvalidJSON(t *testing.T) {
-	_, _, err := ParsePlan([]byte(`{"resource_changes":`))
+	_, _, _, err := ParsePlan([]byte(`{"resource_changes":`))
 	if err == nil {
 		t.Fatal("expected invalid JSON error")
 	}
@@ -44,9 +50,35 @@ func BenchmarkParsePlanLargePlan(b *testing.B) {
 	plan := largePlanFixture(1000)
 	b.ResetTimer()
 	for range b.N {
-		if _, _, err := ParsePlan(plan); err != nil {
+		if _, _, _, err := ParsePlan(plan); err != nil {
 			b.Fatalf("parse large plan: %v", err)
 		}
+	}
+}
+
+func TestParsePlanRetainsSafeMetadataOnly(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("testdata", "safe_metadata_plan.json"))
+	if err != nil {
+		t.Fatalf("read fixture: %v", err)
+	}
+	changes, outputChanges, _, err := ParsePlan(data)
+	if err != nil {
+		t.Fatalf("parse fixture: %v", err)
+	}
+	if len(changes) != 1 || changes[0].ActionReason != "replace_because_cannot_update" {
+		t.Fatalf("expected action reason, got %#v", changes)
+	}
+	if len(outputChanges) != 1 || outputChanges[0].Name != "service_url" || outputChanges[0].Actions[0] != "update" {
+		t.Fatalf("expected safe output metadata, got %#v", outputChanges)
+	}
+	encoded, err := json.Marshal(struct {
+		Changes []interface{} `json:"changes"`
+	}{Changes: []interface{}{changes, outputChanges}})
+	if err != nil {
+		t.Fatalf("marshal parsed report fields: %v", err)
+	}
+	if strings.Contains(string(encoded), "super-secret-value") {
+		t.Fatalf("parsed report retained a Terraform value: %s", encoded)
 	}
 }
 
