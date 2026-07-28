@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
+	"time"
 
 	"github.com/niravraychura/terradrift/internal/report"
 )
@@ -71,6 +73,9 @@ func LoadProfile(path string, profile string) (Config, error) {
 		return Config{}, fmt.Errorf("parse config %s: %w", path, err)
 	}
 	if profile == "" {
+		if err := cfg.Validate(); err != nil {
+			return Config{}, err
+		}
 		return cfg, nil
 	}
 	data, ok := cfg.Profiles[profile]
@@ -81,7 +86,38 @@ func LoadProfile(path string, profile string) (Config, error) {
 	if err := decode(data, &cfg); err != nil {
 		return Config{}, fmt.Errorf("parse config profile %q in %s: %w", profile, path, err)
 	}
+	if err := cfg.Validate(); err != nil {
+		return Config{}, err
+	}
 	return cfg, nil
+}
+
+// Validate rejects invalid core settings before a scan starts.
+func (cfg Config) Validate() error {
+	timeout, err := time.ParseDuration(cfg.Timeout)
+	if err != nil || timeout <= 0 {
+		return fmt.Errorf("config timeout must be a positive duration")
+	}
+	switch strings.ToLower(strings.TrimSpace(cfg.Output)) {
+	case "table", "json", "junit", "sarif", "prometheus":
+	default:
+		return fmt.Errorf("unsupported config output %q", cfg.Output)
+	}
+	if cfg.Notify != "" {
+		switch strings.ToLower(strings.TrimSpace(cfg.Notify)) {
+		case "slack", "teams", "webhook":
+		default:
+			return fmt.Errorf("unsupported config notify target %q", cfg.Notify)
+		}
+	}
+	if cfg.FailureSeverity != "" {
+		switch cfg.FailureSeverity {
+		case "low", "medium", "high", "critical":
+		default:
+			return fmt.Errorf("unsupported config failure_severity %q", cfg.FailureSeverity)
+		}
+	}
+	return nil
 }
 
 func decode(data []byte, target any) error {

@@ -99,7 +99,8 @@ This plan tracks security, performance, code quality, and feature work for Terra
 - [ ] Add stable scan IDs to reports, history, notifications, and dashboards.
 - [ ] Skip malformed history files with warnings instead of failing dashboard rendering.
 - [x] Reject unknown config fields during loading.
-- [ ] Validate config values early and publish a `.terradrift.json` JSON Schema.
+- [x] Validate core config values early during loading.
+- [ ] Publish a `.terradrift.json` JSON Schema.
 - [ ] Add credential-free Terraform integration tests and golden plan-JSON fixtures.
 - [x] Sort resource changes by address for deterministic output.
 - [ ] Model complete, partial, and drift outcomes for multi-root scans.

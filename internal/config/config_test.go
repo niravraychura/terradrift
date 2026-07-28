@@ -64,3 +64,13 @@ func TestLoadRejectsUnknownField(t *testing.T) {
 		t.Fatal("expected unknown config field to fail")
 	}
 }
+
+func TestLoadRejectsInvalidValues(t *testing.T) {
+	path := filepath.Join(t.TempDir(), DefaultPath)
+	if err := os.WriteFile(path, []byte(`{"output":"xml"}`), 0o600); err != nil {
+		t.Fatalf("write config fixture: %v", err)
+	}
+	if _, err := Load(path); err == nil {
+		t.Fatal("expected invalid config value to fail")
+	}
+}
