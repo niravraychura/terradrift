@@ -60,7 +60,7 @@ This plan tracks security, performance, code quality, and feature work for Terra
 - [x] Add automatic multi-root workspace discovery with include and exclude paths.
 - [x] Add first-class OpenTofu binary selection, documentation, and tests.
 - [x] Ship OPA and Conftest policy-pack examples for high-risk drift.
-- [ ] Document adapters for Infracost and custom cost APIs.
+- [x] Document adapters for Infracost and custom cost APIs.
 - [x] Add conservative action-based risk scoring.
 - [x] Add exact-address and resource-type ownership mapping with HTTPS webhook routing.
 - [x] Add notification throttling for unchanged drift with severity-based escalation.

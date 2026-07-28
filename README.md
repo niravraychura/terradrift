@@ -269,6 +269,8 @@ Use `--cost-command <command>` to run an external cost tool before output, histo
 
 Cost tool output is bounded before parsing, command errors are redacted, and arguments must be passed explicitly with repeated `--cost-arg` flags. Matching `address` values are copied into each resource change as `cost_impact`.
 
+See [cost adapter guidance](docs/COST_ADAPTERS.md) for the normalized custom-command contract and Infracost workflow.
+
 ## Remediation guidance
 
 Each changed resource includes conservative remediation guidance based on Terraform plan actions. The guidance intentionally keeps a human in the loop and frames choices such as updating Terraform configuration, importing or syncing state, restoring deleted infrastructure, or reverting an out-of-band change only after review and approval.
