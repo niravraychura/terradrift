@@ -338,6 +338,7 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 	var notificationThrottle bool
 	var githubRepository string
 	var githubPR int
+	var githubIssueAfter int
 
 	cmd := &cobra.Command{
 		Use:   "scan",
@@ -417,6 +418,9 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 				if !cmd.Flags().Changed("github-pr") {
 					githubPR = cfg.GitHubPR
 				}
+				if !cmd.Flags().Changed("github-issue-after") {
+					githubIssueAfter = cfg.GitHubIssueAfter
+				}
 				if !cmd.Flags().Changed("failure-severity") {
 					failureSeverity = cfg.FailureSeverity
 				}
@@ -426,8 +430,11 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if (githubRepository == "") != (githubPR == 0) {
-				return fmt.Errorf("github-repository and github-pr must be set together")
+			if githubPR > 0 && githubRepository == "" {
+				return fmt.Errorf("github-repository is required with github-pr")
+			}
+			if githubIssueAfter > 0 && (githubIssueAfter < 2 || githubRepository == "" || historyDir == "") {
+				return fmt.Errorf("github-issue-after requires github-repository, history-dir, and a value of at least 2")
 			}
 
 			scanOptions := scanner.Options{
@@ -468,12 +475,15 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 			var historyEntries []history.Entry
 			var previousReport report.DriftReport
 			if historyDir != "" {
-				entries, err := history.LoadRecent(historyDir, 1)
+				entries, err := history.LoadRecent(historyDir, 100)
 				if err != nil {
 					return err
 				}
-				if len(entries) > 0 {
-					previousReport = entries[0].Report
+				previousReport = previousReportForDirectory(entries, scanReport.Directory)
+				if shouldCreatePersistentIssue(scanReport, entries, githubIssueAfter) {
+					if err := (notify.GitHubIssueNotifier{Repository: githubRepository, Token: os.Getenv("GITHUB_TOKEN")}).Notify(cmd.Context(), scanReport); err != nil {
+						return err
+					}
 				}
 				if _, err := history.Write(historyDir, scanReport); err != nil {
 					return err
@@ -565,6 +575,7 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 	cmd.Flags().StringVar(&webhookURL, "webhook-url", "", "generic HTTPS webhook URL")
 	cmd.Flags().StringVar(&githubRepository, "github-repository", "", "GitHub repository for pull request summary (owner/repo)")
 	cmd.Flags().IntVar(&githubPR, "github-pr", 0, "GitHub pull request number for scan summary")
+	cmd.Flags().IntVar(&githubIssueAfter, "github-issue-after", 0, "create a GitHub issue after this many consecutive matching drift scans")
 	cmd.Flags().StringVar(&dashboardHTMLPath, "dashboard-html", "", "write a static HTML dashboard report to this path")
 	cmd.Flags().StringVar(&historyDir, "history-dir", "", "write JSON scan history to this directory and include recent history in dashboards")
 	cmd.Flags().StringVar(&policyCommand, "policy-command", "", "policy command to run with the scan report JSON on stdin")
@@ -587,6 +598,33 @@ func writeDashboard(path string, scanReport report.DriftReport, historyEntries [
 		return fmt.Errorf("close dashboard HTML %s: %w", path, err)
 	}
 	return nil
+}
+
+func previousReportForDirectory(entries []history.Entry, directory string) report.DriftReport {
+	for _, entry := range entries {
+		if entry.Report.Directory == directory {
+			return entry.Report
+		}
+	}
+	return report.DriftReport{}
+}
+
+func shouldCreatePersistentIssue(current report.DriftReport, entries []history.Entry, threshold int) bool {
+	if threshold < 2 || current.Status != report.ScanStatusDriftDetected || report.DriftFingerprint(current) == "" {
+		return false
+	}
+	consecutive := 0
+	for _, entry := range entries {
+		previous := entry.Report
+		if previous.Directory != current.Directory {
+			continue
+		}
+		if previous.Status != report.ScanStatusDriftDetected || report.DriftFingerprint(previous) != report.DriftFingerprint(current) {
+			break
+		}
+		consecutive++
+	}
+	return consecutive == threshold-1
 }
 
 func sendNotification(ctx context.Context, target string, slackWebhookURL string, teamsWebhookURL string, webhookURL string, scanReport report.DriftReport) error {

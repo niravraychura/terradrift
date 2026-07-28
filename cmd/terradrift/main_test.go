@@ -123,6 +123,18 @@ func TestDashboardIndexWritesHistory(t *testing.T) {
 	}
 }
 
+func TestShouldCreatePersistentIssue(t *testing.T) {
+	current := report.DriftReport{Directory: "terraform/prod", Status: report.ScanStatusDriftDetected, ResourceChanges: []report.ResourceChange{{Address: "aws_instance.web", Actions: []string{"update"}, RiskLevel: "medium"}}}
+	entries := []history.Entry{{Report: current}, {Report: current}}
+	if !shouldCreatePersistentIssue(current, entries, 3) {
+		t.Fatal("expected third matching scan to create an issue")
+	}
+	entries = append(entries, history.Entry{Report: current})
+	if shouldCreatePersistentIssue(current, entries, 3) {
+		t.Fatal("expected issue creation to occur only once per persistent sequence")
+	}
+}
+
 func TestScanRejectsNonexistentDirectory(t *testing.T) {
 	missing := filepath.Join(t.TempDir(), "missing")
 	_, _, err := executeCommand("scan", "--directory", missing)

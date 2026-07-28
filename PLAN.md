@@ -64,7 +64,7 @@ This plan tracks security, performance, code quality, and feature work for Terra
 - [x] Add conservative action-based risk scoring.
 - [x] Add exact-address and resource-type ownership mapping with HTTPS webhook routing.
 - [x] Add notification throttling for unchanged drift with severity-based escalation.
-- [ ] Add optional GitHub issue creation for persistent drift findings.
+- [x] Add optional GitHub issue creation for persistent drift findings.
 - [x] Add SARIF output for code-scanning dashboards.
 - [x] Add JUnit XML output for CI test reporting.
 - [x] Add Prometheus metrics for scan status, duration, resource counts, and failures.

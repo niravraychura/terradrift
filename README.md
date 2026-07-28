@@ -295,6 +295,8 @@ Post scan summaries to a GitHub pull request with `github_repository`, `github_p
 GITHUB_TOKEN="$GITHUB_TOKEN" terradrift scan --github-repository owner/repo --github-pr 42
 ```
 
+Set `github_issue_after` to create one GitHub issue when the same active drift fingerprint reaches that many consecutive scans of the same history root. It requires `github_repository`, `history_dir`, `GITHUB_TOKEN`, and a value of at least `2`.
+
 ```json
 {
   "resource_owners": {

@@ -15,6 +15,12 @@ func ShouldNotify(current DriftReport, previous DriftReport) bool {
 	return currentFindings != previousFindings || severityRank(currentRisk) > severityRank(previousRisk)
 }
 
+// DriftFingerprint identifies active findings without local paths or values.
+func DriftFingerprint(scanReport DriftReport) string {
+	fingerprint, _ := activeFingerprint(scanReport)
+	return fingerprint
+}
+
 func activeFingerprint(scanReport DriftReport) (string, string) {
 	findings := make([]string, 0, len(scanReport.ResourceChanges))
 	highestRisk := "low"
