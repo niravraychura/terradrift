@@ -32,6 +32,8 @@ type Config struct {
 	RemediationRunbooks map[string]string          `json:"remediation_runbooks"`
 	IgnoreRules         []report.IgnoreRule        `json:"ignore_rules"`
 	FailureSeverity     string                     `json:"failure_severity"`
+	ResourceOwners      map[string]string          `json:"resource_owners"`
+	OwnerWebhooks       map[string]string          `json:"owner_webhooks"`
 	Profiles            map[string]json.RawMessage `json:"profiles,omitempty"`
 }
 

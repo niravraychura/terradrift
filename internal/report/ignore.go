@@ -43,3 +43,14 @@ func ApplyIgnoreRules(scanReport *DriftReport, rules []IgnoreRule) error {
 	}
 	return nil
 }
+
+// ApplyOwners assigns exact-address owners before resource-type owners.
+func ApplyOwners(scanReport *DriftReport, owners map[string]string) {
+	for i := range scanReport.ResourceChanges {
+		change := &scanReport.ResourceChanges[i]
+		change.Owner = owners[change.Address]
+		if change.Owner == "" {
+			change.Owner = owners[change.Type]
+		}
+	}
+}

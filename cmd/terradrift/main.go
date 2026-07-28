@@ -296,6 +296,8 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 	var remediationRunbooks map[string]string
 	var ignoreRules []report.IgnoreRule
 	var failureSeverity string
+	var resourceOwners map[string]string
+	var ownerWebhooks map[string]string
 
 	cmd := &cobra.Command{
 		Use:   "scan",
@@ -366,6 +368,8 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 				}
 				remediationRunbooks = cfg.RemediationRunbooks
 				ignoreRules = cfg.IgnoreRules
+				resourceOwners = cfg.ResourceOwners
+				ownerWebhooks = cfg.OwnerWebhooks
 				if !cmd.Flags().Changed("failure-severity") {
 					failureSeverity = cfg.FailureSeverity
 				}
@@ -394,6 +398,7 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 			if err := report.ApplyIgnoreRules(&scanReport, ignoreRules); err != nil {
 				return err
 			}
+			report.ApplyOwners(&scanReport, resourceOwners)
 			if costCommand != "" {
 				enrichedReport, err := cost.Enrich(cmd.Context(), cost.Options{Command: costCommand, Args: costArgs}, scanReport)
 				if err != nil {
@@ -433,6 +438,22 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 			}
 			if notifyTarget != "" {
 				if err := sendNotification(cmd.Context(), notifyTarget, slackWebhookURL, teamsWebhookURL, webhookURL, scanReport); err != nil {
+					return err
+				}
+			}
+			for owner, webhookURL := range ownerWebhooks {
+				ownerReport := scanReport
+				ownerReport.ResourceChanges = nil
+				for _, change := range scanReport.ResourceChanges {
+					if change.Owner == owner && !change.Ignored {
+						ownerReport.ResourceChanges = append(ownerReport.ResourceChanges, change)
+					}
+				}
+				if len(ownerReport.ResourceChanges) == 0 {
+					continue
+				}
+				ownerReport.TotalChangedResources = len(ownerReport.ResourceChanges)
+				if err := (notify.WebhookNotifier{WebhookURL: webhookURL}).Notify(cmd.Context(), ownerReport); err != nil {
 					return err
 				}
 			}

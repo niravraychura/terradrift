@@ -24,6 +24,7 @@ type ResourceChange struct {
 	RunbookURL         string   `json:"runbook_url,omitempty"`
 	CostImpact         string   `json:"cost_impact,omitempty"`
 	RiskLevel          string   `json:"risk_level,omitempty"`
+	Owner              string   `json:"owner,omitempty"`
 	Ignored            bool     `json:"ignored,omitempty"`
 	IgnoreOwner        string   `json:"ignore_owner,omitempty"`
 	IgnoreReason       string   `json:"ignore_reason,omitempty"`

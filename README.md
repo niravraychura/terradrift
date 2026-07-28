@@ -273,6 +273,20 @@ Each finding has a conservative action-based risk level: replacement is `critica
 
 Use exact-address `ignore_rules` for temporary, auditable exceptions. Each rule requires an owner, reason, and future RFC3339 expiry. Ignored findings stay visible in reports and dashboards but do not fail the scan.
 
+Route active findings by owner with `resource_owners` and `owner_webhooks`. Exact resource addresses override resource types; each owner webhook uses the same HTTPS-only webhook protections as normal notifications.
+
+```json
+{
+  "resource_owners": {
+    "aws_instance": "platform",
+    "aws_instance.web": "web-team"
+  },
+  "owner_webhooks": {
+    "web-team": "https://alerts.example.com/web"
+  }
+}
+```
+
 ```json
 {
   "ignore_rules": [

@@ -62,7 +62,7 @@ This plan tracks security, performance, code quality, and feature work for Terra
 - [x] Ship OPA and Conftest policy-pack examples for high-risk drift.
 - [ ] Document adapters for Infracost and custom cost APIs.
 - [x] Add conservative action-based risk scoring.
-- [ ] Add ownership mapping and alert routing for resource addresses or tags.
+- [x] Add exact-address and resource-type ownership mapping with HTTPS webhook routing.
 - [ ] Add notification throttling for unchanged drift with severity-based escalation.
 - [ ] Add optional GitHub issue creation for persistent drift findings.
 - [x] Add SARIF output for code-scanning dashboards.
