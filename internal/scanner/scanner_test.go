@@ -13,12 +13,12 @@ import (
 )
 
 type fakeRunner struct {
-	initErr    error
-	planExit   int
-	planErr    error
-	showJSON   []byte
-	showErr    error
-	planPath   string
+	initErr  error
+	planExit int
+	planErr  error
+	showJSON []byte
+	showErr  error
+	planPath string
 	showPath string
 }
 
