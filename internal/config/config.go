@@ -41,6 +41,8 @@ type Config struct {
 	ArtifactURL          string                     `json:"artifact_url"`
 	AuditCommand         string                     `json:"audit_command"`
 	AuditArgs            []string                   `json:"audit_args"`
+	AllowedCommands      []string                   `json:"allowed_commands"`
+	TrustedCommandDirs   []string                   `json:"trusted_command_dirs"`
 	Profiles             map[string]json.RawMessage `json:"profiles,omitempty"`
 }
 

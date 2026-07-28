@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/niravraychura/terradrift/internal/audit"
+	"github.com/niravraychura/terradrift/internal/command"
 	"github.com/niravraychura/terradrift/internal/config"
 	"github.com/niravraychura/terradrift/internal/cost"
 	"github.com/niravraychura/terradrift/internal/dashboard"
@@ -403,6 +404,8 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 	var approvalFile string
 	var auditCommand string
 	var auditArgs []string
+	var allowedCommands []string
+	var trustedCommandDirs []string
 
 	cmd := &cobra.Command{
 		Use:   "scan",
@@ -494,6 +497,8 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 				if !cmd.Flags().Changed("audit-arg") {
 					auditArgs = append([]string(nil), cfg.AuditArgs...)
 				}
+				allowedCommands = append([]string(nil), cfg.AllowedCommands...)
+				trustedCommandDirs = append([]string(nil), cfg.TrustedCommandDirs...)
 				if !cmd.Flags().Changed("failure-severity") {
 					failureSeverity = cfg.FailureSeverity
 				}
@@ -502,6 +507,13 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 			parsedFormat, err := parseOutputFormat(format)
 			if err != nil {
 				return err
+			}
+			for _, external := range []string{costCommand, policyCommand, auditCommand} {
+				if external != "" {
+					if err := command.Validate(external, allowedCommands, trustedCommandDirs); err != nil {
+						return err
+					}
+				}
 			}
 			if githubPR > 0 && githubRepository == "" {
 				return fmt.Errorf("github-repository is required with github-pr")

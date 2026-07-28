@@ -309,6 +309,8 @@ terradrift scan --approval-file report.json.approval.json
 
 Correlate drift with CloudTrail, Azure Activity Log, or GCP Audit Log through `--audit-command`; see [audit adapter guidance](docs/AUDIT_ADAPTERS.md).
 
+For CI, set `allowed_commands` and `trusted_command_dirs` in a profile. Bare commands must resolve on `PATH`; absolute commands must be under a trusted directory. Commands containing shell syntax are rejected.
+
 ```json
 {
   "resource_owners": {
