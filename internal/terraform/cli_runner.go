@@ -16,7 +16,7 @@ import (
 )
 
 const (
-	maxCommandOutputBytes   = 1 << 20
+	maxCommandOutputBytes   = 32 << 20
 	maxModulesManifestBytes = 1 << 20
 )
 
