@@ -216,6 +216,23 @@ func TestScanLoadsConfigFile(t *testing.T) {
 	}
 }
 
+func TestScanLoadsConfigProfile(t *testing.T) {
+	directory := t.TempDir()
+	path := filepath.Join(t.TempDir(), ".terradrift.json")
+	configJSON := `{"profiles":{"production":{"directory":"` + filepath.ToSlash(directory) + `","output":"json"}}}`
+	if err := os.WriteFile(path, []byte(configJSON), 0o600); err != nil {
+		t.Fatalf("write config fixture: %v", err)
+	}
+
+	stdout, _, err := executeCommand("scan", "--config", path, "--profile", "production")
+	if err != nil {
+		t.Fatalf("expected profile config to load: %v", err)
+	}
+	if !json.Valid([]byte(stdout)) {
+		t.Fatalf("expected JSON output from profile, got %q", stdout)
+	}
+}
+
 func TestScanLoadsExtendedConfigFile(t *testing.T) {
 	dir := t.TempDir()
 	dashboardPath := filepath.Join(t.TempDir(), "configured-dashboard.html")

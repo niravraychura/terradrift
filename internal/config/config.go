@@ -10,24 +10,25 @@ const DefaultPath = ".terradrift.json"
 
 // Config stores repeatable TerraDrift CLI settings for local and CI usage.
 type Config struct {
-	Directory           string            `json:"directory"`
-	Output              string            `json:"output"`
-	Timeout             string            `json:"timeout"`
-	RedactPaths         bool              `json:"redact_paths"`
-	TerraformExec       bool              `json:"terraform_exec"`
-	TerraformBin        string            `json:"terraform_bin"`
-	WorkspaceRoot       string            `json:"workspace_root"`
-	Notify              string            `json:"notify"`
-	SlackWebhookURL     string            `json:"slack_webhook_url"`
-	TeamsWebhookURL     string            `json:"teams_webhook_url"`
-	WebhookURL          string            `json:"webhook_url"`
-	DashboardHTML       string            `json:"dashboard_html"`
-	HistoryDir          string            `json:"history_dir"`
-	PolicyCommand       string            `json:"policy_command"`
-	PolicyArgs          []string          `json:"policy_args"`
-	CostCommand         string            `json:"cost_command"`
-	CostArgs            []string          `json:"cost_args"`
-	RemediationRunbooks map[string]string `json:"remediation_runbooks"`
+	Directory           string                     `json:"directory"`
+	Output              string                     `json:"output"`
+	Timeout             string                     `json:"timeout"`
+	RedactPaths         bool                       `json:"redact_paths"`
+	TerraformExec       bool                       `json:"terraform_exec"`
+	TerraformBin        string                     `json:"terraform_bin"`
+	WorkspaceRoot       string                     `json:"workspace_root"`
+	Notify              string                     `json:"notify"`
+	SlackWebhookURL     string                     `json:"slack_webhook_url"`
+	TeamsWebhookURL     string                     `json:"teams_webhook_url"`
+	WebhookURL          string                     `json:"webhook_url"`
+	DashboardHTML       string                     `json:"dashboard_html"`
+	HistoryDir          string                     `json:"history_dir"`
+	PolicyCommand       string                     `json:"policy_command"`
+	PolicyArgs          []string                   `json:"policy_args"`
+	CostCommand         string                     `json:"cost_command"`
+	CostArgs            []string                   `json:"cost_args"`
+	RemediationRunbooks map[string]string          `json:"remediation_runbooks"`
+	Profiles            map[string]json.RawMessage `json:"profiles,omitempty"`
 }
 
 // Default returns a safe bootstrap configuration.
@@ -37,6 +38,11 @@ func Default() Config {
 
 // Load reads a TerraDrift JSON configuration file.
 func Load(path string) (Config, error) {
+	return LoadProfile(path, "")
+}
+
+// LoadProfile reads a config file and optionally selects a standalone named profile.
+func LoadProfile(path string, profile string) (Config, error) {
 	if path == "" {
 		path = DefaultPath
 	}
@@ -47,6 +53,17 @@ func Load(path string) (Config, error) {
 	cfg := Default()
 	if err := json.Unmarshal(data, &cfg); err != nil {
 		return Config{}, fmt.Errorf("parse config %s: %w", path, err)
+	}
+	if profile == "" {
+		return cfg, nil
+	}
+	data, ok := cfg.Profiles[profile]
+	if !ok {
+		return Config{}, fmt.Errorf("config profile %q not found in %s", profile, path)
+	}
+	cfg = Default()
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		return Config{}, fmt.Errorf("parse config profile %q in %s: %w", profile, path, err)
 	}
 	return cfg, nil
 }

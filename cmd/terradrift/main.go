@@ -97,6 +97,7 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 	var terraformExec bool
 	var terraformBin string
 	var scanConfigPath string
+	var configProfile string
 	var workspaceRoot string
 	var notifyTarget string
 	var slackWebhookURL string
@@ -117,8 +118,8 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
   terradrift scan --directory ./terraform/prod
   terradrift scan -d ./terraform/prod --output json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if scanConfigPath != "" {
-				cfg, err := config.Load(scanConfigPath)
+			if scanConfigPath != "" || configProfile != "" {
+				cfg, err := config.LoadProfile(scanConfigPath, configProfile)
 				if err != nil {
 					return err
 				}
@@ -255,6 +256,7 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 	cmd.Flags().BoolVar(&terraformExec, "terraform-exec", false, "run Terraform init, refresh-only plan, and show -json")
 	cmd.Flags().StringVar(&terraformBin, "terraform-bin", "", "Terraform-compatible executable to run (default: terraform)")
 	cmd.Flags().StringVar(&scanConfigPath, "config", "", "optional TerraDrift config file to load")
+	cmd.Flags().StringVar(&configProfile, "profile", "", "named config profile to load")
 	cmd.Flags().StringVar(&workspaceRoot, "workspace-root", "", "require the Terraform directory to resolve inside this workspace root")
 	cmd.Flags().StringVar(&notifyTarget, "notify", "", "notification target: slack, teams, webhook")
 	cmd.Flags().StringVar(&slackWebhookURL, "slack-webhook-url", "", "Slack incoming webhook URL")
