@@ -110,6 +110,8 @@ Use [`docs/terradrift.schema.json`](docs/terradrift.schema.json) as the JSON Sch
 
 Supported local and CI configuration examples are in [`examples/config`](examples/config/README.md).
 
+See [architecture and report-stability guarantees](docs/ARCHITECTURE.md) before integrating report JSON with automation.
+
 Use `profiles` for standalone development, staging, and production configurations. Select one with `--profile`; profile values do not inherit top-level settings.
 
 ```json
