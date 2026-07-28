@@ -177,3 +177,10 @@ func TestScanWithRunnerReturnsFailedOutcomeForPlanError(t *testing.T) {
 		t.Fatal("expected error message to be recorded")
 	}
 }
+
+func TestScanWithRunnerRejectsUnexpectedPlanExitCode(t *testing.T) {
+	result, err := Scan(context.Background(), Options{Directory: t.TempDir(), Runner: &fakeRunner{planExit: 3}})
+	if err == nil || result.Outcome != OutcomeFailed || result.Report.Status != report.ScanStatusFailed {
+		t.Fatalf("expected unexpected exit code failure, got %#v, %v", result, err)
+	}
+}

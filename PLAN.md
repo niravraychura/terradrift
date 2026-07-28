@@ -93,7 +93,7 @@ This plan tracks security, performance, code quality, and feature work for Terra
 - [ ] Document backend/state safety, secret scanning, and least-privilege AWS, Azure, and GCP IAM examples.
 - [ ] Add release supply-chain controls: checksums, SBOM, provenance, SHA-pinned Actions examples, image signing, Docker scanning, and license policy checks.
 - [ ] Add secret-safe structured audit logging with scan, config, workspace, version, and command metadata.
-- [ ] Test unexpected Terraform detailed-exit codes and context cancellation.
+- [x] Test and reject unexpected Terraform detailed-exit codes; context cancellation is covered.
 - [ ] Parse Terraform output-value changes, action reasons, replacement reasons, and deleted-resource context.
 - [ ] Add safe Terraform initialization controls for lockfiles, upgrades, backends, and plugin caching.
 - [ ] Add stable scan IDs to reports, history, notifications, and dashboards.

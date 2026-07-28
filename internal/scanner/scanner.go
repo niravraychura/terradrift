@@ -208,7 +208,7 @@ func runTerraformScan(ctx context.Context, runner terraform.Runner, directory st
 		scanReport.ErrorMessage = err.Error()
 		return scanReport, fmt.Errorf("terraform refresh-only plan: %w", err)
 	}
-	if exitCode == 1 {
+	if exitCode != 0 && exitCode != 2 {
 		err := fmt.Errorf("terraform refresh-only plan failed with exit code %d", exitCode)
 		scanReport.Status = report.ScanStatusFailed
 		scanReport.CompletedAt = time.Now().UTC()
