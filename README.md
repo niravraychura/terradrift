@@ -239,6 +239,8 @@ terradrift scan \
   --policy-arg -
 ```
 
+A reusable Conftest policy pack for destructive and production replacement drift is available in [`examples/policy`](examples/policy/README.md).
+
 ## Notifications
 
 Slack, Microsoft Teams, and generic HTTPS webhook notifications can send a concise drift summary after the scan report is written, for example:
