@@ -25,6 +25,23 @@ func RemediationForActions(actions []string) string {
 	return "Review the drifted resource with the owning team before changing infrastructure or Terraform state."
 }
 
+// ReconciliationHintForActions returns review-only state reconciliation guidance.
+func ReconciliationHintForActions(actions []string) string {
+	if hasAction(actions, "delete") && hasAction(actions, "create") {
+		return "Review only: add a moved block if the resource address changed; otherwise update configuration before applying."
+	}
+	if hasAction(actions, "delete") {
+		return "Review only: confirm whether configuration should restore the resource or state/configuration should stop managing it."
+	}
+	if hasAction(actions, "create") {
+		return "Review only: consider terraform import only after verifying the remote object ID and intended configuration."
+	}
+	if hasAction(actions, "update") {
+		return "Review only: update Terraform configuration to match the approved remote settings or revert the remote change."
+	}
+	return "Review only: compare Terraform configuration, state, and the remote object before making changes."
+}
+
 // ApplyRunbooks attaches validated runbook URLs by resource type or type/action.
 func ApplyRunbooks(scanReport *DriftReport, runbooks map[string]string) error {
 	for i := range scanReport.ResourceChanges {

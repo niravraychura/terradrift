@@ -267,6 +267,8 @@ Cost tool output is bounded before parsing, command errors are redacted, and arg
 
 Each changed resource includes conservative remediation guidance based on Terraform plan actions. The guidance intentionally keeps a human in the loop and frames choices such as updating Terraform configuration, importing or syncing state, restoring deleted infrastructure, or reverting an out-of-band change only after review and approval.
 
+Reports also include review-only reconciliation hints for imports, moved blocks, and configuration updates. TerraDrift never runs state commands or applies infrastructure changes.
+
 Set `remediation_runbooks` in `.terradrift.json` to link resources to HTTPS runbooks. Type/action entries override type entries:
 
 ```json

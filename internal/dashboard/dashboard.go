@@ -32,8 +32,8 @@ var reportTemplate = template.Must(template.New("dashboard").Parse(`<!doctype ht
     </dl>
     <h2>Changed resources</h2>
     <table>
-      <thead><tr><th>Address</th><th>Type</th><th>Name</th><th>Actions</th><th>Cost impact</th><th>Remediation</th><th>Runbook</th></tr></thead>
-      <tbody>{{range .Current.ResourceChanges}}<tr><td>{{.Address}}</td><td>{{.Type}}</td><td>{{.Name}}</td><td>{{range .Actions}}{{.}} {{end}}</td><td>{{.CostImpact}}</td><td>{{.Remediation}}</td><td>{{if .RunbookURL}}<a href="{{.RunbookURL}}">Open</a>{{end}}</td></tr>{{else}}<tr><td colspan="7">No changed resources</td></tr>{{end}}</tbody>
+      <thead><tr><th>Address</th><th>Type</th><th>Name</th><th>Actions</th><th>Cost impact</th><th>Remediation</th><th>Reconciliation</th><th>Runbook</th></tr></thead>
+      <tbody>{{range .Current.ResourceChanges}}<tr><td>{{.Address}}</td><td>{{.Type}}</td><td>{{.Name}}</td><td>{{range .Actions}}{{.}} {{end}}</td><td>{{.CostImpact}}</td><td>{{.Remediation}}</td><td>{{.ReconciliationHint}}</td><td>{{if .RunbookURL}}<a href="{{.RunbookURL}}">Open</a>{{end}}</td></tr>{{else}}<tr><td colspan="8">No changed resources</td></tr>{{end}}</tbody>
     </table>
     <h2>Recent scan history</h2>
     <table>

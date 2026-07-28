@@ -71,7 +71,7 @@ This plan tracks security, performance, code quality, and feature work for Terra
 - [ ] Add a static dashboard index across roots and historical trends.
 - [x] Add configurable remediation runbook URLs by resource type and action.
 - [ ] Add a human approval workflow for remediation suggestions.
-- [ ] Add review-only state reconciliation hints for imports, moved blocks, and configuration updates.
+- [x] Add review-only state reconciliation hints for imports, moved blocks, and configuration updates.
 - [ ] Add cloud audit-event correlation for drift findings.
 - [ ] Add baseline and ignore rules with owners, reasons, expirations, and audit trails.
 - [ ] Add severity gates for CI failure, notification, and ticket behavior.

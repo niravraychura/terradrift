@@ -38,3 +38,11 @@ func TestApplyRunbooksRejectsUnsafeURL(t *testing.T) {
 		t.Fatal("expected unsafe runbook URL to be rejected")
 	}
 }
+
+func TestReconciliationHintForActions(t *testing.T) {
+	for _, actions := range [][]string{{"create"}, {"delete"}, {"delete", "create"}, {"update"}} {
+		if hint := strings.ToLower(ReconciliationHintForActions(actions)); !strings.Contains(hint, "review only") {
+			t.Fatalf("expected review-only hint for %v, got %q", actions, hint)
+		}
+	}
+}
