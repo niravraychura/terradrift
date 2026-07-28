@@ -56,7 +56,7 @@ func BenchmarkParsePlanLargePlan(b *testing.B) {
 	}
 }
 
-func TestParsePlanRetainsSafeMetadataOnly(t *testing.T) {
+func TestParsePlanDropsTerraformValuesAndSensitiveMarks(t *testing.T) {
 	data, err := os.ReadFile(filepath.Join("testdata", "safe_metadata_plan.json"))
 	if err != nil {
 		t.Fatalf("read fixture: %v", err)
@@ -77,8 +77,10 @@ func TestParsePlanRetainsSafeMetadataOnly(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal parsed report fields: %v", err)
 	}
-	if strings.Contains(string(encoded), "super-secret-value") {
-		t.Fatalf("parsed report retained a Terraform value: %s", encoded)
+	for _, forbidden := range []string{"super-secret-value", "password", "before_sensitive", "after_sensitive"} {
+		if strings.Contains(string(encoded), forbidden) {
+			t.Fatalf("parsed report retained %q: %s", forbidden, encoded)
+		}
 	}
 }
 

@@ -23,6 +23,7 @@ type terraformResourceChange struct {
 }
 
 type terraformChange struct {
+	// Keep the decoded shape intentionally narrow: Terraform values and sensitive marks never enter reports.
 	Actions []string `json:"actions"`
 }
 

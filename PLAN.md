@@ -89,7 +89,7 @@ This plan tracks security, performance, code quality, and feature work for Terra
 - [x] Bound notification response bodies.
 - [ ] Complete remaining report output/input size budgets.
 - [x] Redact `ErrorMessage` before JSON, history, dashboards, policy input, and notification delivery.
-- [ ] Redact Terraform plan sensitive fields and marks before any future value expansion.
+- [x] Exclude Terraform plan values and sensitive marks from report parsing, with regression coverage.
 - [x] Reject direct symlink targets for dashboard and history output paths.
 - [x] Document backend/state safety and secret-managed integration credentials.
 - [x] Document repository secret scanning and least-privilege AWS, Azure, and GCP IAM guidance.
