@@ -102,21 +102,30 @@ func (runner CLIRunner) run(ctx context.Context, directory string, args ...strin
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	cmd.Stdout = &limitedWriter{w: &stdout, n: maxCommandOutputBytes}
-	cmd.Stderr = &limitedWriter{w: &stderr, n: maxCommandOutputBytes}
+	stdoutWriter := &limitedWriter{w: &stdout, n: maxCommandOutputBytes}
+	stderrWriter := &limitedWriter{w: &stderr, n: maxCommandOutputBytes}
+	cmd.Stdout = stdoutWriter
+	cmd.Stderr = stderrWriter
 
 	if err := cmd.Run(); err != nil {
+		if stdoutWriter.truncated || stderrWriter.truncated {
+			return stdout.Bytes(), fmt.Errorf("terraform %v: command output exceeded %d bytes", args, maxCommandOutputBytes)
+		}
 		if stderr.Len() > 0 {
 			return stdout.Bytes(), fmt.Errorf("terraform %v: %w: %s", args, err, redact.String(stderr.String()))
 		}
 		return stdout.Bytes(), fmt.Errorf("terraform %v: %w", args, err)
 	}
+	if stdoutWriter.truncated || stderrWriter.truncated {
+		return stdout.Bytes(), fmt.Errorf("terraform %v: command output exceeded %d bytes", args, maxCommandOutputBytes)
+	}
 	return stdout.Bytes(), nil
 }
 
 type limitedWriter struct {
-	w io.Writer
-	n int64
+	w         io.Writer
+	n         int64
+	truncated bool
 }
 
 func (writer *limitedWriter) Write(p []byte) (int, error) {
@@ -126,6 +135,7 @@ func (writer *limitedWriter) Write(p []byte) (int, error) {
 	}
 	if int64(len(p)) > writer.n {
 		p = p[:writer.n]
+		writer.truncated = true
 	}
 	written, err := writer.w.Write(p)
 	writer.n -= int64(written)

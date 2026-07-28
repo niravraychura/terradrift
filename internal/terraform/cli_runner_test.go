@@ -2,6 +2,7 @@ package terraform
 
 import (
 	"context"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -51,6 +52,13 @@ exit 1
 	}
 	if strings.Contains(err.Error(), "super-secret") {
 		t.Fatalf("expected stderr secret to be redacted, got %v", err)
+	}
+}
+
+func TestLimitedWriterMarksTruncation(t *testing.T) {
+	writer := &limitedWriter{w: io.Discard, n: 1}
+	if _, err := writer.Write([]byte("ab")); err != nil || !writer.truncated {
+		t.Fatalf("expected truncation, err=%v", err)
 	}
 }
 
