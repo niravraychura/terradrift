@@ -2,7 +2,7 @@ BINARY_NAME := terradrift
 BIN_DIR := bin
 GO_PACKAGES := ./...
 
-.PHONY: build run test test-race fmt vet lint vuln clean docker-build help
+.PHONY: build run test test-race fmt vet lint vuln ci clean docker-build help
 
 build: ## Build the terradrift binary
 	go build -o $(BIN_DIR)/$(BINARY_NAME) ./cmd/terradrift
@@ -27,6 +27,10 @@ lint: ## Run golangci-lint
 
 vuln: ## Run govulncheck
 	GOTOOLCHAIN=go1.26.5 go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+
+ci: ## Run the local CI quality gate without modifying files
+	test -z "$$(gofmt -l $$(rg --files -g '*.go' -g '!vendor/**'))"
+	$(MAKE) vet test test-race vuln lint build
 
 clean: ## Remove build artifacts
 	rm -rf $(BIN_DIR) dist coverage.out
