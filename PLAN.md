@@ -54,6 +54,34 @@ This plan tracks security, performance, code quality, and feature work for Terra
 - [x] Add optional cost-impact enrichment for drifted resources with explicit external command arguments and redacted bounded output.
 - [x] Add human-reviewed remediation guidance for update-code, sync-state, and revert-infrastructure workflows.
 
+## Future feature backlog
+
+- [ ] Add multi-root workspace discovery with include and exclude paths.
+- [ ] Add first-class OpenTofu binary selection, documentation, and tests.
+- [ ] Ship OPA and Conftest policy-pack examples for high-risk drift.
+- [ ] Document adapters for Infracost and custom cost APIs.
+- [ ] Add risk scoring based on resource type, environment, action, tags, exposure, and cost.
+- [ ] Add ownership mapping and alert routing for resource addresses or tags.
+- [ ] Add notification throttling for unchanged drift with severity-based escalation.
+- [ ] Add optional GitHub issue creation for persistent drift findings.
+- [ ] Add SARIF output for code-scanning dashboards.
+- [ ] Add JUnit XML output for CI test reporting.
+- [ ] Add Prometheus metrics for scan status, duration, resource counts, and failures.
+- [ ] Add a static dashboard index across roots and historical trends.
+- [ ] Add configurable remediation runbook URLs by resource type and action.
+- [ ] Add a human approval workflow for remediation suggestions.
+- [ ] Add review-only state reconciliation hints for imports, moved blocks, and configuration updates.
+- [ ] Add cloud audit-event correlation for drift findings.
+- [ ] Add baseline and ignore rules with owners, reasons, expirations, and audit trails.
+- [ ] Add severity gates for CI failure, notification, and ticket behavior.
+- [ ] Add pull-request scan-result summaries for infrastructure repositories.
+- [ ] Add remote artifact upload for reports and dashboards with safe defaults.
+- [ ] Add named configuration profiles for development, staging, and production scans.
+- [ ] Add workspace locks to prevent overlapping scans of the same Terraform root.
+- [ ] Add provider-aware enrichment for AWS, Azure, and GCP context.
+- [ ] Add Terraform, provider, and module version inventory reporting.
+- [ ] Add an optional read-only local API for serving report history.
+
 ## Ongoing quality gates
 
 Before marking a feature complete, run the relevant checks and update this file:
