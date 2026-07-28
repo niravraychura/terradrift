@@ -63,7 +63,7 @@ This plan tracks security, performance, code quality, and feature work for Terra
 - [ ] Document adapters for Infracost and custom cost APIs.
 - [x] Add conservative action-based risk scoring.
 - [x] Add exact-address and resource-type ownership mapping with HTTPS webhook routing.
-- [ ] Add notification throttling for unchanged drift with severity-based escalation.
+- [x] Add notification throttling for unchanged drift with severity-based escalation.
 - [ ] Add optional GitHub issue creation for persistent drift findings.
 - [x] Add SARIF output for code-scanning dashboards.
 - [x] Add JUnit XML output for CI test reporting.

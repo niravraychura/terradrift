@@ -58,13 +58,11 @@ func RiskLevelForActions(actions []string) string {
 
 // MeetsSeverity reports whether any active finding meets the requested threshold.
 func MeetsSeverity(scanReport DriftReport, threshold string) (bool, error) {
-	ranks := map[string]int{"low": 1, "medium": 2, "high": 3, "critical": 4}
-	thresholdRank, ok := ranks[threshold]
-	if !ok {
+	if severityRank(threshold) == 0 {
 		return false, fmt.Errorf("unsupported severity %q: low, medium, high, critical", threshold)
 	}
 	for _, change := range scanReport.ResourceChanges {
-		if !change.Ignored && ranks[change.RiskLevel] >= thresholdRank {
+		if !change.Ignored && severityRank(change.RiskLevel) >= severityRank(threshold) {
 			return true, nil
 		}
 	}

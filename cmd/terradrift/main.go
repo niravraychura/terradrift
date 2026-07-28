@@ -298,6 +298,7 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 	var failureSeverity string
 	var resourceOwners map[string]string
 	var ownerWebhooks map[string]string
+	var notificationThrottle bool
 
 	cmd := &cobra.Command{
 		Use:   "scan",
@@ -370,6 +371,7 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 				ignoreRules = cfg.IgnoreRules
 				resourceOwners = cfg.ResourceOwners
 				ownerWebhooks = cfg.OwnerWebhooks
+				notificationThrottle = cfg.NotificationThrottle
 				if !cmd.Flags().Changed("failure-severity") {
 					failureSeverity = cfg.FailureSeverity
 				}
@@ -416,11 +418,19 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 				return err
 			}
 			var historyEntries []history.Entry
+			var previousReport report.DriftReport
 			if historyDir != "" {
+				entries, err := history.LoadRecent(historyDir, 1)
+				if err != nil {
+					return err
+				}
+				if len(entries) > 0 {
+					previousReport = entries[0].Report
+				}
 				if _, err := history.Write(historyDir, scanReport); err != nil {
 					return err
 				}
-				entries, err := history.LoadRecent(historyDir, 10)
+				entries, err = history.LoadRecent(historyDir, 10)
 				if err != nil {
 					return err
 				}
@@ -436,7 +446,8 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 					return err
 				}
 			}
-			if notifyTarget != "" {
+			shouldNotify := !notificationThrottle || report.ShouldNotify(scanReport, previousReport)
+			if notifyTarget != "" && shouldNotify {
 				if err := sendNotification(cmd.Context(), notifyTarget, slackWebhookURL, teamsWebhookURL, webhookURL, scanReport); err != nil {
 					return err
 				}
@@ -453,6 +464,19 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 					continue
 				}
 				ownerReport.TotalChangedResources = len(ownerReport.ResourceChanges)
+				if notificationThrottle {
+					previousOwnerReport := previousReport
+					previousOwnerReport.ResourceChanges = nil
+					for _, change := range previousReport.ResourceChanges {
+						if change.Owner == owner && !change.Ignored {
+							previousOwnerReport.ResourceChanges = append(previousOwnerReport.ResourceChanges, change)
+						}
+					}
+					previousOwnerReport.TotalChangedResources = len(previousOwnerReport.ResourceChanges)
+					if !report.ShouldNotify(ownerReport, previousOwnerReport) {
+						continue
+					}
+				}
 				if err := (notify.WebhookNotifier{WebhookURL: webhookURL}).Notify(cmd.Context(), ownerReport); err != nil {
 					return err
 				}

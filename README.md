@@ -275,6 +275,8 @@ Use exact-address `ignore_rules` for temporary, auditable exceptions. Each rule 
 
 Route active findings by owner with `resource_owners` and `owner_webhooks`. Exact resource addresses override resource types; each owner webhook uses the same HTTPS-only webhook protections as normal notifications.
 
+Set `notification_throttle` to `true` with `history_dir` to suppress unchanged active drift notifications. New, removed, or higher-risk findings still notify; the first scan always notifies.
+
 ```json
 {
   "resource_owners": {

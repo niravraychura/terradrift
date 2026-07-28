@@ -75,3 +75,14 @@ func TestRiskLevelAndSeverity(t *testing.T) {
 		t.Fatalf("expected ignored high risk to not meet gate: %v, %v", meets, err)
 	}
 }
+
+func TestShouldNotifySuppressesOnlyUnchangedDrift(t *testing.T) {
+	previous := DriftReport{Status: ScanStatusDriftDetected, ResourceChanges: []ResourceChange{{Address: "aws_instance.web", Actions: []string{"update"}, RiskLevel: "medium"}}}
+	if ShouldNotify(previous, previous) {
+		t.Fatal("expected unchanged drift to be suppressed")
+	}
+	escalated := DriftReport{Status: ScanStatusDriftDetected, ResourceChanges: []ResourceChange{{Address: "aws_instance.web", Actions: []string{"update"}, RiskLevel: "high"}}}
+	if !ShouldNotify(escalated, previous) {
+		t.Fatal("expected risk escalation to notify")
+	}
+}
