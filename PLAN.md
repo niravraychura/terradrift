@@ -66,6 +66,4 @@ Before marking a feature complete, run the relevant checks and update this file:
 - [x] `go vet ./...`
 - [x] `go test -race ./...`
 - [x] `golangci-lint run`
-- [ ] `govulncheck ./...`
-
-`govulncheck` remains unchecked because the current environment returns HTTP 403 when fetching the Go vulnerability database. Mark it complete only after the vulnerability database can be reached and the command passes.
+- [x] `govulncheck ./...`
