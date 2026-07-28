@@ -53,10 +53,10 @@ func (notifier TeamsNotifier) Notify(ctx context.Context, scanReport report.Drif
 		return fmt.Errorf("send Teams notification to %s: %w", redact.String(webhookURL), err)
 	}
 	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
-		_ = response.Body.Close()
+		_ = closeResponseBody(response.Body)
 		return fmt.Errorf("send Teams notification to %s: unexpected status %s", redact.String(webhookURL), response.Status)
 	}
-	if err := response.Body.Close(); err != nil {
+	if err := closeResponseBody(response.Body); err != nil {
 		return fmt.Errorf("close Teams notification response: %w", err)
 	}
 	return nil

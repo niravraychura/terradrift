@@ -86,7 +86,8 @@ This plan tracks security, performance, code quality, and feature work for Terra
 ## Review Follow-ups
 
 - [x] Add external-command allowlists and trusted-path validation; use profiles for CI-safe presets.
-- [ ] Bound notification response bodies and complete output/input size budgets.
+- [x] Bound notification response bodies.
+- [ ] Complete remaining report output/input size budgets.
 - [x] Redact `ErrorMessage` before JSON, history, dashboards, policy input, and notification delivery.
 - [ ] Redact Terraform plan sensitive fields and marks before any future value expansion.
 - [x] Reject direct symlink targets for dashboard and history output paths.
