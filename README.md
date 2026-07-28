@@ -459,6 +459,9 @@ jobs:
 ## Security considerations
 
 - Treat Terraform configuration, state, plans, provider output, and logs as sensitive.
+- Use encrypted remote state with state locking; do not copy production state into CI workspaces.
+- Prefer read-only cloud credentials for refresh-only drift scans and scope them to the scanned environment.
+- Store webhook URLs, GitHub tokens, artifact URLs, and cloud audit credentials in a secret manager or CI secret store.
 - Do not commit credentials, state files, generated plans, or logs containing secrets.
 - Use least-privilege cloud credentials for drift detection.
 - Do not log Slack webhook URLs or provider credentials.
