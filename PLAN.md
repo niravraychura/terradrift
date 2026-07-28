@@ -99,8 +99,8 @@ This plan tracks security, performance, code quality, and feature work for Terra
 - [x] Document repository secret scanning and least-privilege AWS, Azure, and GCP IAM guidance.
 - [x] Pin third-party GitHub Actions to immutable SHAs in CI and user-facing examples.
 - [x] Automate tag releases with SHA-256 checksums and generated GitHub release notes.
-- [ ] Add SBOM, provenance, image signing/scanning, and license policy checks.
-- [ ] Add secret-safe structured audit logging with scan, config, workspace, version, and command metadata.
+- [x] Add SBOM, provenance, image signing/scanning, and license policy checks.
+- [x] Add secret-safe structured audit logging with scan, config, workspace, version, and command metadata.
 - [x] Test and reject unexpected Terraform detailed-exit codes; context cancellation is covered.
 - [x] Parse Terraform output-change actions and resource action reasons without retaining Terraform values or sensitive marks.
 - [x] Use read-only Terraform lockfiles, disable implicit upgrades, retain backend initialization, and document isolated plugin caching.
@@ -115,11 +115,11 @@ This plan tracks security, performance, code quality, and feature work for Terra
 - [x] Bound Terraform command output and fail explicitly on truncation.
 - [x] Fail fast when Terraform-backed roots have no configuration.
 - [x] Document Terraform provider/plugin caching with `TF_PLUGIN_CACHE_DIR` and CI cache keys.
-- [ ] Parallelize independent post-scan enrichment and delivery work safely.
+- [x] Parallelize independent post-scan enrichment and delivery work safely.
 - [x] Add local history retention pruning.
-- [ ] Add incremental scan manifests and optional compressed history artifacts.
-- [ ] Normalize workspace and output paths once through a validated execution context.
-- [ ] Add typed option validation and typed errors across config, scan, notification, policy, and cost boundaries.
+- [x] Add incremental scan manifests and optional compressed history artifacts.
+- [x] Normalize workspace and output paths once through a validated execution context.
+- [x] Add typed option validation and typed errors across config, scan, notification, policy, and cost boundaries.
 - [x] Refresh stale package documentation for implemented behavior.
 - [x] Add complete comments for exported package APIs.
 - [x] Add a non-mutating `make ci` target for local quality checks.

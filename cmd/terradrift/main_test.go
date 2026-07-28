@@ -102,6 +102,35 @@ func TestScanAllReportsPartialOutcome(t *testing.T) {
 	}
 }
 
+func TestIncrementalRootsRetriesOnlyUnhealthyRoots(t *testing.T) {
+	statePath := filepath.Join(t.TempDir(), "state.json")
+	state := multiScanReport{Roots: []multiScanRoot{
+		{Directory: "healthy", Report: report.DriftReport{Status: report.ScanStatusNoDrift}},
+		{Directory: "drifted", Report: report.DriftReport{Status: report.ScanStatusDriftDetected}},
+		{Directory: "failed", Error: "scan failed"},
+	}}
+	if err := writeIncrementalState(statePath, state); err != nil {
+		t.Fatalf("write state: %v", err)
+	}
+	roots, err := incrementalRoots(statePath, []string{"healthy", "drifted", "failed", "new"})
+	if err != nil {
+		t.Fatalf("read state: %v", err)
+	}
+	if got, want := strings.Join(roots, ","), "drifted,failed,new"; got != want {
+		t.Fatalf("incremental roots = %q, want %q", got, want)
+	}
+}
+
+func TestRunDeliveriesReturnsEveryFailure(t *testing.T) {
+	err := runDeliveries([]deliveryTask{
+		{name: "one", run: func() error { return errors.New("first") }},
+		{name: "two", run: func() error { return errors.New("second") }},
+	})
+	if err == nil || !strings.Contains(err.Error(), "one delivery") || !strings.Contains(err.Error(), "two delivery") {
+		t.Fatalf("expected labelled delivery errors, got %v", err)
+	}
+}
+
 func TestDiscoverTerraformRootsHonorsPatterns(t *testing.T) {
 	root := t.TempDir()
 	for _, directory := range []string{"included", "excluded", ".terraform/cache"} {
@@ -205,6 +234,19 @@ func TestWriteDashboardRejectsSymlink(t *testing.T) {
 	}
 	if err := writeDashboard(path, report.DriftReport{}, nil); err == nil {
 		t.Fatal("expected symlink dashboard path to fail")
+	}
+}
+
+func TestNormalizeOutputPathRejectsSymlinkParent(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink fixture requires POSIX permissions")
+	}
+	parent := filepath.Join(t.TempDir(), "parent")
+	if err := os.Symlink(t.TempDir(), parent); err != nil {
+		t.Fatalf("create symlink: %v", err)
+	}
+	if _, err := normalizeOutputPath(filepath.Join(parent, "output.json")); err == nil {
+		t.Fatal("expected symlink parent to fail")
 	}
 }
 

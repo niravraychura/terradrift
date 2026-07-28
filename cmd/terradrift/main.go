@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/niravraychura/terradrift/internal/audit"
+	"github.com/niravraychura/terradrift/internal/auditlog"
 	"github.com/niravraychura/terradrift/internal/command"
 	"github.com/niravraychura/terradrift/internal/config"
 	"github.com/niravraychura/terradrift/internal/cost"
@@ -43,8 +44,10 @@ const (
 )
 
 const (
-	maxApprovalBytes = 64 * 1024
-	maxArtifactBytes = 1 << 20
+	maxApprovalBytes   = 64 * 1024
+	maxArtifactBytes   = 1 << 20
+	maxManifestBytes   = 1 << 20
+	maxDeliveryWorkers = 4
 )
 
 type outputFormat string
@@ -134,6 +137,10 @@ func newApproveCommand(stdout io.Writer) *cobra.Command {
 			if output == "" {
 				output = reportPath + ".approval.json"
 			}
+			output, err = normalizeOutputPath(output)
+			if err != nil {
+				return err
+			}
 			data, err = json.MarshalIndent(approval, "", "  ")
 			if err != nil {
 				return fmt.Errorf("encode approval: %w", err)
@@ -182,7 +189,8 @@ func newDashboardIndexCommand(stdout io.Writer) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if err := rejectSymlink(output); err != nil {
+			output, err = normalizeOutputPath(output)
+			if err != nil {
 				return err
 			}
 			file, err := os.OpenFile(output, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
@@ -318,6 +326,7 @@ func newScanAllCommand(stdout io.Writer) *cobra.Command {
 	var terraformBin string
 	var workspaceRoot string
 	var redactPaths bool
+	var incrementalState string
 
 	cmd := &cobra.Command{
 		Use:   "scan-all",
@@ -325,6 +334,13 @@ func newScanAllCommand(stdout io.Writer) *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if (manifest == "") == (discover == "") {
 				return fmt.Errorf("provide exactly one of --manifest or --discover")
+			}
+			if incrementalState != "" {
+				normalized, err := normalizeOutputPath(incrementalState)
+				if err != nil {
+					return err
+				}
+				incrementalState = normalized
 			}
 			var directories []string
 			var err error
@@ -335,6 +351,12 @@ func newScanAllCommand(stdout io.Writer) *cobra.Command {
 			}
 			if err != nil {
 				return err
+			}
+			if incrementalState != "" {
+				directories, err = incrementalRoots(incrementalState, directories)
+				if err != nil {
+					return err
+				}
 			}
 			parsedFormat, err := parseOutputFormat(format)
 			if err != nil {
@@ -348,12 +370,21 @@ func newScanAllCommand(stdout io.Writer) *cobra.Command {
 			}
 
 			options := scanner.Options{Timeout: timeout, WorkspaceRoot: workspaceRoot}
+			options, err = scanner.PrepareOptions(options)
+			if err != nil {
+				return err
+			}
 			if terraformExec {
 				options.Runner = terraform.NewCLIRunner(terraformBin)
 			}
 			aggregate := scanAll(cmd.Context(), directories, options, concurrency, redactPaths)
 			if err := writeMultiScanReport(stdout, aggregate, parsedFormat); err != nil {
 				return err
+			}
+			if incrementalState != "" {
+				if err := writeIncrementalState(incrementalState, aggregate); err != nil {
+					return err
+				}
 			}
 			if aggregate.FailedRoots > 0 {
 				return fmt.Errorf("%w: %d roots", errMultiScanFailed, aggregate.FailedRoots)
@@ -375,6 +406,7 @@ func newScanAllCommand(stdout io.Writer) *cobra.Command {
 	cmd.Flags().StringVar(&terraformBin, "terraform-bin", "", "Terraform-compatible executable to run (default: terraform)")
 	cmd.Flags().StringVar(&workspaceRoot, "workspace-root", "", "require roots to resolve inside this workspace root")
 	cmd.Flags().BoolVar(&redactPaths, "redact-paths", false, "redact local filesystem paths from scan output")
+	cmd.Flags().StringVar(&incrementalState, "incremental-state", "", "JSON state file; retry only roots previously drifted or failed")
 	return cmd
 }
 
@@ -431,6 +463,8 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 	var auditArgs []string
 	var allowedCommands []string
 	var trustedCommandDirs []string
+	var auditLogPath string
+	var historyCompressed bool
 
 	cmd := &cobra.Command{
 		Use:   "scan",
@@ -438,7 +472,21 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 		Example: `  terradrift scan
   terradrift scan --directory ./terraform/prod
   terradrift scan -d ./terraform/prod --output json`,
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, args []string) (runErr error) {
+			var auditReport report.DriftReport
+			defer func() {
+				if auditLogPath == "" {
+					return
+				}
+				event := auditlog.Event{Event: "scan_completed", ScanID: auditReport.ScanID, Status: string(auditReport.Status), Workspace: filepath.Base(auditReport.Directory), Config: filepath.Base(scanConfigPath), Profile: configProfile, TerraformVersion: auditReport.TerraformVersion, Commands: auditCommandNames(terraformExec, terraformBin, costCommand, policyCommand, auditCommand)}
+				if runErr != nil {
+					event.Event = "scan_failed"
+					event.Error = runErr.Error()
+				}
+				if err := auditlog.Append(auditLogPath, event); err != nil && runErr == nil {
+					runErr = err
+				}
+			}()
 			if scanConfigPath != "" || configProfile != "" {
 				cfg, err := config.LoadProfile(scanConfigPath, configProfile)
 				if err != nil {
@@ -489,6 +537,12 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 				}
 				if !cmd.Flags().Changed("history-retention") {
 					historyRetention = cfg.HistoryRetention
+				}
+				if !cmd.Flags().Changed("history-compressed") {
+					historyCompressed = cfg.HistoryCompressed
+				}
+				if !cmd.Flags().Changed("audit-log") {
+					auditLogPath = cfg.AuditLog
 				}
 				if !cmd.Flags().Changed("policy-command") {
 					policyCommand = cfg.PolicyCommand
@@ -549,11 +603,25 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 			if githubIssueAfter > 0 && (githubIssueAfter < 2 || githubRepository == "" || historyDir == "") {
 				return fmt.Errorf("github-issue-after requires github-repository, history-dir, and a value of at least 2")
 			}
+			for _, path := range []*string{&dashboardHTMLPath, &historyDir, &auditLogPath} {
+				if *path == "" {
+					continue
+				}
+				normalized, err := normalizeOutputPath(*path)
+				if err != nil {
+					return err
+				}
+				*path = normalized
+			}
 
 			scanOptions := scanner.Options{
 				Directory:     directory,
 				Timeout:       timeout,
 				WorkspaceRoot: workspaceRoot,
+			}
+			scanOptions, err = scanner.PrepareOptions(scanOptions)
+			if err != nil {
+				return err
 			}
 			if terraformExec {
 				scanOptions.Runner = terraform.NewCLIRunner(terraformBin)
@@ -564,6 +632,7 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 			if err != nil {
 				return err
 			}
+			auditReport = result.Report
 
 			scanReport := result.Report
 			if err := report.ApplyIgnoreRules(&scanReport, ignoreRules); err != nil {
@@ -632,8 +701,14 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 						return err
 					}
 				}
-				if _, err := history.Write(historyDir, scanReport); err != nil {
-					return err
+				var historyWriteErr error
+				if historyCompressed {
+					_, historyWriteErr = history.WriteCompressed(historyDir, scanReport)
+				} else {
+					_, historyWriteErr = history.Write(historyDir, scanReport)
+				}
+				if historyWriteErr != nil {
+					return historyWriteErr
 				}
 				if historyRetention > 0 {
 					if err := history.Prune(historyDir, historyRetention); err != nil {
@@ -657,44 +732,8 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 				}
 			}
 			shouldNotify := !notificationThrottle || report.ShouldNotify(scanReport, previousReport)
-			if notifyTarget != "" && shouldNotify {
-				if err := sendNotification(cmd.Context(), notifyTarget, slackWebhookURL, teamsWebhookURL, webhookURL, scanReport); err != nil {
-					return err
-				}
-			}
-			if githubRepository != "" && githubPR > 0 && shouldNotify {
-				if err := (notify.GitHubPRNotifier{Repository: githubRepository, Number: githubPR, Token: os.Getenv("GITHUB_TOKEN")}).Notify(cmd.Context(), scanReport); err != nil {
-					return err
-				}
-			}
-			for owner, webhookURL := range ownerWebhooks {
-				ownerReport := scanReport
-				ownerReport.ResourceChanges = nil
-				for _, change := range scanReport.ResourceChanges {
-					if change.Owner == owner && !change.Ignored {
-						ownerReport.ResourceChanges = append(ownerReport.ResourceChanges, change)
-					}
-				}
-				if len(ownerReport.ResourceChanges) == 0 {
-					continue
-				}
-				ownerReport.TotalChangedResources = len(ownerReport.ResourceChanges)
-				if notificationThrottle {
-					previousOwnerReport := previousReport
-					previousOwnerReport.ResourceChanges = nil
-					for _, change := range previousReport.ResourceChanges {
-						if change.Owner == owner && !change.Ignored {
-							previousOwnerReport.ResourceChanges = append(previousOwnerReport.ResourceChanges, change)
-						}
-					}
-					previousOwnerReport.TotalChangedResources = len(previousOwnerReport.ResourceChanges)
-					if !report.ShouldNotify(ownerReport, previousOwnerReport) {
-						continue
-					}
-				}
-				if err := (notify.WebhookNotifier{WebhookURL: webhookURL}).Notify(cmd.Context(), ownerReport); err != nil {
-					return err
-				}
+			if err := deliverNotifications(cmd.Context(), notifyTarget, slackWebhookURL, teamsWebhookURL, webhookURL, githubRepository, githubPR, ownerWebhooks, notificationThrottle, scanReport, previousReport, shouldNotify); err != nil {
+				return err
 			}
 			if scanReport.Status == report.ScanStatusDriftDetected {
 				if failureSeverity != "" {
@@ -735,6 +774,8 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 	cmd.Flags().StringVar(&dashboardHTMLPath, "dashboard-html", "", "write a static HTML dashboard report to this path")
 	cmd.Flags().StringVar(&historyDir, "history-dir", "", "write JSON scan history to this directory and include recent history in dashboards")
 	cmd.Flags().IntVar(&historyRetention, "history-retention", 0, "maximum history reports to retain (0 keeps all)")
+	cmd.Flags().BoolVar(&historyCompressed, "history-compressed", false, "store history reports as gzip-compressed JSON")
+	cmd.Flags().StringVar(&auditLogPath, "audit-log", "", "append secret-safe JSON audit events to this path")
 	cmd.Flags().StringVar(&policyCommand, "policy-command", "", "policy command to run with the scan report JSON on stdin")
 	cmd.Flags().StringArrayVar(&policyArgs, "policy-arg", nil, "policy command argument; repeat for multiple arguments")
 	cmd.Flags().StringVar(&costCommand, "cost-command", "", "cost command to enrich the scan report from JSON stdin/stdout")
@@ -769,6 +810,30 @@ func rejectSymlink(path string) error {
 		return fmt.Errorf("inspect output path %s: %w", path, err)
 	}
 	return nil
+}
+
+func normalizeOutputPath(path string) (string, error) {
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return "", fmt.Errorf("resolve output path %s: %w", path, err)
+	}
+	if err := rejectSymlink(absPath); err != nil {
+		return "", err
+	}
+	for directory := filepath.Dir(absPath); ; directory = filepath.Dir(directory) {
+		info, err := os.Lstat(directory)
+		if err == nil && info.Mode()&os.ModeSymlink != 0 {
+			return "", fmt.Errorf("output parent must not be a symlink: %s", directory)
+		}
+		if err != nil && !os.IsNotExist(err) {
+			return "", fmt.Errorf("inspect output parent %s: %w", directory, err)
+		}
+		parent := filepath.Dir(directory)
+		if parent == directory {
+			break
+		}
+	}
+	return absPath, nil
 }
 
 func previousReportForDirectory(entries []history.Entry, directory string) report.DriftReport {
@@ -809,6 +874,103 @@ func sendNotification(ctx context.Context, target string, slackWebhookURL string
 	default:
 		return fmt.Errorf("unsupported notification target %q; supported values: slack, teams, webhook", target)
 	}
+}
+
+func auditCommandNames(terraformExec bool, terraformBin, costCommand, policyCommand, auditCommand string) []string {
+	commands := make([]string, 0, 4)
+	if terraformExec {
+		if terraformBin == "" {
+			terraformBin = "terraform"
+		}
+		commands = append(commands, filepath.Base(terraformBin))
+	}
+	for _, command := range []string{costCommand, policyCommand, auditCommand} {
+		if command != "" {
+			commands = append(commands, filepath.Base(command))
+		}
+	}
+	return commands
+}
+
+type deliveryTask struct {
+	name string
+	run  func() error
+}
+
+func deliverNotifications(ctx context.Context, target, slackWebhookURL, teamsWebhookURL, webhookURL, githubRepository string, githubPR int, ownerWebhooks map[string]string, throttle bool, scanReport, previousReport report.DriftReport, shouldNotify bool) error {
+	if !shouldNotify {
+		return nil
+	}
+	tasks := make([]deliveryTask, 0, len(ownerWebhooks)+2)
+	if target != "" {
+		tasks = append(tasks, deliveryTask{name: "notification", run: func() error {
+			return sendNotification(ctx, target, slackWebhookURL, teamsWebhookURL, webhookURL, scanReport)
+		}})
+	}
+	if githubRepository != "" && githubPR > 0 {
+		tasks = append(tasks, deliveryTask{name: "github pull request", run: func() error {
+			return (notify.GitHubPRNotifier{Repository: githubRepository, Number: githubPR, Token: os.Getenv("GITHUB_TOKEN")}).Notify(ctx, scanReport)
+		}})
+	}
+	owners := make([]string, 0, len(ownerWebhooks))
+	for owner := range ownerWebhooks {
+		owners = append(owners, owner)
+	}
+	sort.Strings(owners)
+	for _, owner := range owners {
+		ownerReport := reportForOwner(scanReport, owner)
+		if len(ownerReport.ResourceChanges) == 0 || (throttle && !report.ShouldNotify(ownerReport, reportForOwner(previousReport, owner))) {
+			continue
+		}
+		webhook := ownerWebhooks[owner]
+		tasks = append(tasks, deliveryTask{name: "owner " + owner, run: func() error {
+			return (notify.WebhookNotifier{WebhookURL: webhook}).Notify(ctx, ownerReport)
+		}})
+	}
+	return runDeliveries(tasks)
+}
+
+func reportForOwner(scanReport report.DriftReport, owner string) report.DriftReport {
+	ownerReport := scanReport
+	ownerReport.ResourceChanges = nil
+	for _, change := range scanReport.ResourceChanges {
+		if change.Owner == owner && !change.Ignored {
+			ownerReport.ResourceChanges = append(ownerReport.ResourceChanges, change)
+		}
+	}
+	ownerReport.TotalChangedResources = len(ownerReport.ResourceChanges)
+	return ownerReport
+}
+
+func runDeliveries(tasks []deliveryTask) error {
+	if len(tasks) == 0 {
+		return nil
+	}
+	jobs := make(chan deliveryTask)
+	errs := make(chan error, len(tasks))
+	var workers sync.WaitGroup
+	for range min(maxDeliveryWorkers, len(tasks)) {
+		workers.Add(1)
+		go func() {
+			defer workers.Done()
+			for task := range jobs {
+				if err := task.run(); err != nil {
+					errs <- fmt.Errorf("%s delivery: %w", task.name, err)
+				}
+			}
+		}()
+	}
+	for _, task := range tasks {
+		jobs <- task
+	}
+	close(jobs)
+	workers.Wait()
+	close(errs)
+	var all []error
+	for err := range errs {
+		all = append(all, err)
+	}
+	return errors.Join(all...)
 }
 
 func parseOutputFormat(format string) (outputFormat, error) {
@@ -939,8 +1101,101 @@ type multiScanRoot struct {
 	Error     string             `json:"error,omitempty"`
 }
 
+type incrementalState struct {
+	Version int                         `json:"version"`
+	Roots   map[string]incrementalEntry `json:"roots"`
+}
+
+type incrementalEntry struct {
+	Status    multiScanStatus `json:"status"`
+	ScanID    string          `json:"scan_id,omitempty"`
+	Completed time.Time       `json:"completed_at,omitempty"`
+}
+
+func incrementalRoots(path string, directories []string) ([]string, error) {
+	data, err := readLimitedFile(path, maxManifestBytes)
+	if os.IsNotExist(err) {
+		return directories, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("read incremental state %s: %w", path, err)
+	}
+	var state incrementalState
+	if err := json.Unmarshal(data, &state); err != nil {
+		return nil, fmt.Errorf("parse incremental state %s: %w", path, err)
+	}
+	if state.Version != 1 {
+		return nil, fmt.Errorf("unsupported incremental state version %d", state.Version)
+	}
+	roots := make([]string, 0, len(directories))
+	for _, directory := range directories {
+		entry, found := state.Roots[directory]
+		if !found || entry.Status != multiScanStatusComplete {
+			roots = append(roots, directory)
+		}
+	}
+	return roots, nil
+}
+
+func writeIncrementalState(path string, aggregate multiScanReport) error {
+	if err := rejectSymlink(path); err != nil {
+		return err
+	}
+	state := incrementalState{Version: 1, Roots: make(map[string]incrementalEntry, len(aggregate.Roots))}
+	if data, err := readLimitedFile(path, maxManifestBytes); err == nil {
+		if err := json.Unmarshal(data, &state); err != nil || state.Version != 1 {
+			return fmt.Errorf("parse incremental state %s", path)
+		}
+		if state.Roots == nil {
+			state.Roots = make(map[string]incrementalEntry)
+		}
+	} else if !os.IsNotExist(err) {
+		return fmt.Errorf("read incremental state %s: %w", path, err)
+	}
+	for _, root := range aggregate.Roots {
+		entry := incrementalEntry{Status: multiScanStatusComplete}
+		if root.Error != "" {
+			entry.Status = multiScanStatusFailed
+		} else if root.Report.Status == report.ScanStatusDriftDetected {
+			entry.Status = multiScanStatusDriftDetected
+		}
+		entry.ScanID = root.Report.ScanID
+		entry.Completed = root.Report.CompletedAt
+		state.Roots[root.Directory] = entry
+	}
+	data, err := json.MarshalIndent(state, "", "  ")
+	if err != nil {
+		return fmt.Errorf("encode incremental state: %w", err)
+	}
+	data = append(data, '\n')
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return fmt.Errorf("create incremental state directory: %w", err)
+	}
+	file, err := os.CreateTemp(filepath.Dir(path), ".terradrift-state-*")
+	if err != nil {
+		return fmt.Errorf("create incremental state: %w", err)
+	}
+	temporary := file.Name()
+	defer func() { _ = os.Remove(temporary) }()
+	if err := file.Chmod(0o600); err != nil {
+		_ = file.Close()
+		return fmt.Errorf("secure incremental state: %w", err)
+	}
+	if _, err := file.Write(data); err != nil {
+		_ = file.Close()
+		return fmt.Errorf("write incremental state: %w", err)
+	}
+	if err := file.Close(); err != nil {
+		return fmt.Errorf("close incremental state: %w", err)
+	}
+	if err := os.Rename(temporary, path); err != nil {
+		return fmt.Errorf("replace incremental state: %w", err)
+	}
+	return nil
+}
+
 func loadScanManifest(path string) ([]string, error) {
-	data, err := os.ReadFile(path)
+	data, err := readLimitedFile(path, maxManifestBytes)
 	if err != nil {
 		return nil, fmt.Errorf("read scan manifest %s: %w", path, err)
 	}

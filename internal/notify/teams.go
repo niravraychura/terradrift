@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"strings"
 
 	"github.com/niravraychura/terradrift/internal/redact"
 	"github.com/niravraychura/terradrift/internal/report"
@@ -20,13 +19,13 @@ type TeamsNotifier struct {
 
 // Notify sends a concise, redacted connector-card summary to Microsoft Teams.
 func (notifier TeamsNotifier) Notify(ctx context.Context, scanReport report.DriftReport) error {
-	webhookURL := strings.TrimSpace(notifier.WebhookURL)
-	if webhookURL == "" {
-		return fmt.Errorf("teams webhook URL is required")
+	webhookURL, err := validateGenericWebhookURL(notifier.WebhookURL)
+	if err != nil {
+		return err
 	}
 	client := notifier.Client
 	if client == nil {
-		client = http.DefaultClient
+		client = secureWebhookClient()
 	}
 
 	payload := teamsPayload{

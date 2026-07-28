@@ -2,6 +2,7 @@
 package history
 
 import (
+	"compress/gzip"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -25,6 +26,15 @@ type Entry struct {
 
 // Write stores a scan report as a secure JSON file in directory.
 func Write(directory string, scanReport report.DriftReport) (string, error) {
+	return write(directory, scanReport, false)
+}
+
+// WriteCompressed stores a gzip-compressed scan report with the same security guarantees as Write.
+func WriteCompressed(directory string, scanReport report.DriftReport) (string, error) {
+	return write(directory, scanReport, true)
+}
+
+func write(directory string, scanReport report.DriftReport, compressed bool) (string, error) {
 	if directory == "" {
 		return "", fmt.Errorf("history directory is required")
 	}
@@ -45,14 +55,30 @@ func Write(directory string, scanReport report.DriftReport) (string, error) {
 	if len(data) > maxReportBytes {
 		return "", fmt.Errorf("history report exceeds %d bytes", maxReportBytes)
 	}
-	path := filepath.Join(directory, time.Now().UTC().Format(fileTimestampFormat)+"-"+string(scanReport.Status)+".json")
+	suffix := ".json"
+	if compressed {
+		suffix += ".gz"
+	}
+	path := filepath.Join(directory, time.Now().UTC().Format(fileTimestampFormat)+"-"+string(scanReport.Status)+suffix)
 	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
 	if err != nil {
 		return "", fmt.Errorf("create history report %s: %w", path, err)
 	}
-	if _, err := file.Write(data); err != nil {
+	writer := io.Writer(file)
+	var gzipWriter *gzip.Writer
+	if compressed {
+		gzipWriter = gzip.NewWriter(file)
+		writer = gzipWriter
+	}
+	if _, err := writer.Write(data); err != nil {
 		_ = file.Close()
 		return "", fmt.Errorf("write history report %s: %w", path, err)
+	}
+	if gzipWriter != nil {
+		if err := gzipWriter.Close(); err != nil {
+			_ = file.Close()
+			return "", fmt.Errorf("close compressed history report %s: %w", path, err)
+		}
 	}
 	if err := file.Close(); err != nil {
 		return "", fmt.Errorf("close history report %s: %w", path, err)
@@ -65,9 +91,9 @@ func LoadRecent(directory string, limit int) ([]Entry, error) {
 	if directory == "" || limit <= 0 {
 		return nil, nil
 	}
-	matches, err := filepath.Glob(filepath.Join(directory, "*.json"))
+	matches, err := reportPaths(directory)
 	if err != nil {
-		return nil, fmt.Errorf("list history reports %s: %w", directory, err)
+		return nil, err
 	}
 	sort.Sort(sort.Reverse(sort.StringSlice(matches)))
 	entries := make([]Entry, 0, len(matches))
@@ -96,7 +122,16 @@ func readReport(path string) ([]byte, error) {
 		return nil, err
 	}
 	defer func() { _ = file.Close() }()
-	data, err := io.ReadAll(io.LimitReader(file, maxReportBytes+1))
+	var reader io.Reader = file
+	if filepath.Ext(path) == ".gz" {
+		gzipReader, err := gzip.NewReader(file)
+		if err != nil {
+			return nil, err
+		}
+		defer func() { _ = gzipReader.Close() }()
+		reader = gzipReader
+	}
+	data, err := io.ReadAll(io.LimitReader(reader, maxReportBytes+1))
 	if err != nil {
 		return nil, err
 	}
@@ -111,9 +146,9 @@ func Prune(directory string, keep int) error {
 	if keep <= 0 {
 		return fmt.Errorf("history retention must be greater than zero")
 	}
-	matches, err := filepath.Glob(filepath.Join(directory, "*.json"))
+	matches, err := reportPaths(directory)
 	if err != nil {
-		return fmt.Errorf("list history reports %s: %w", directory, err)
+		return err
 	}
 	sort.Sort(sort.Reverse(sort.StringSlice(matches)))
 	for _, path := range matches[keep:] {
@@ -122,4 +157,16 @@ func Prune(directory string, keep int) error {
 		}
 	}
 	return nil
+}
+
+func reportPaths(directory string) ([]string, error) {
+	matches, err := filepath.Glob(filepath.Join(directory, "*.json"))
+	if err != nil {
+		return nil, fmt.Errorf("list history reports %s: %w", directory, err)
+	}
+	compressed, err := filepath.Glob(filepath.Join(directory, "*.json.gz"))
+	if err != nil {
+		return nil, fmt.Errorf("list compressed history reports %s: %w", directory, err)
+	}
+	return append(matches, compressed...), nil
 }

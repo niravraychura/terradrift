@@ -16,6 +16,7 @@ import (
 	"github.com/niravraychura/terradrift/internal/redact"
 	"github.com/niravraychura/terradrift/internal/report"
 	"github.com/niravraychura/terradrift/internal/terraform"
+	"github.com/niravraychura/terradrift/internal/validation"
 )
 
 const DefaultTimeout = 5 * time.Minute
@@ -38,6 +39,32 @@ type Options struct {
 	Runner                terraform.Runner
 	WorkspaceRoot         string
 	RequireTerraformFiles bool
+	workspaceRootResolved bool
+}
+
+// Validate rejects invalid scan options before work starts.
+func (options Options) Validate() error {
+	if options.Timeout < 0 {
+		return validation.New("scan timeout", errors.New("must not be negative"))
+	}
+	return nil
+}
+
+// PrepareOptions validates invariant options and resolves the workspace root once.
+func PrepareOptions(options Options) (Options, error) {
+	if err := options.Validate(); err != nil {
+		return Options{}, err
+	}
+	if options.WorkspaceRoot == "" || options.workspaceRootResolved {
+		return options, nil
+	}
+	root, err := ValidateDirectory(options.WorkspaceRoot)
+	if err != nil {
+		return Options{}, fmt.Errorf("validate workspace root: %w", err)
+	}
+	options.WorkspaceRoot = root
+	options.workspaceRootResolved = true
+	return options, nil
 }
 
 // Result captures both the user-facing report and the CLI-facing outcome.
@@ -48,6 +75,11 @@ type Result struct {
 
 // Scan validates the requested Terraform directory and optionally runs Terraform.
 func Scan(ctx context.Context, options Options) (Result, error) {
+	preparedOptions, err := PrepareOptions(options)
+	if err != nil {
+		return Result{Outcome: OutcomeFailed}, err
+	}
+	options = preparedOptions
 	if options.Timeout <= 0 {
 		options.Timeout = DefaultTimeout
 	}
@@ -66,7 +98,7 @@ func Scan(ctx context.Context, options Options) (Result, error) {
 		return Result{Outcome: OutcomeFailed}, err
 	}
 	if options.WorkspaceRoot != "" {
-		if err := ValidateWorkspaceRoot(absDir, options.WorkspaceRoot); err != nil {
+		if err := validateResolvedWorkspaceRoot(absDir, options.WorkspaceRoot); err != nil {
 			return Result{Outcome: OutcomeFailed}, err
 		}
 	}
@@ -150,12 +182,16 @@ func ValidateWorkspaceRoot(directory string, workspaceRoot string) error {
 	if err != nil {
 		return fmt.Errorf("resolve workspace root symlinks: %w", err)
 	}
-	rel, err := filepath.Rel(resolvedRoot, resolvedDirectory)
+	return validateResolvedWorkspaceRoot(resolvedDirectory, resolvedRoot)
+}
+
+func validateResolvedWorkspaceRoot(directory string, workspaceRoot string) error {
+	rel, err := filepath.Rel(workspaceRoot, directory)
 	if err != nil {
 		return fmt.Errorf("compare terraform directory to workspace root: %w", err)
 	}
 	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || filepath.IsAbs(rel) {
-		return fmt.Errorf("terraform directory %s is outside workspace root %s", resolvedDirectory, resolvedRoot)
+		return fmt.Errorf("terraform directory %s is outside workspace root %s", directory, workspaceRoot)
 	}
 	return nil
 }
@@ -179,7 +215,11 @@ func ValidateDirectory(directory string) (string, error) {
 	if !info.IsDir() {
 		return "", fmt.Errorf("terraform path is not a directory: %s", absDir)
 	}
-	return absDir, nil
+	resolved, err := filepath.EvalSymlinks(absDir)
+	if err != nil {
+		return "", fmt.Errorf("resolve terraform directory symlinks: %w", err)
+	}
+	return resolved, nil
 }
 
 func runTerraformScan(ctx context.Context, runner terraform.Runner, directory string, scanID string) (report.DriftReport, error) {

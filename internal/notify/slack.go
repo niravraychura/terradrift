@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"strings"
 
 	"github.com/niravraychura/terradrift/internal/redact"
 	"github.com/niravraychura/terradrift/internal/report"
@@ -26,13 +25,13 @@ type SlackNotifier struct {
 
 // Notify sends a concise, redacted scan summary to Slack.
 func (notifier SlackNotifier) Notify(ctx context.Context, scanReport report.DriftReport) error {
-	webhookURL := strings.TrimSpace(notifier.WebhookURL)
-	if webhookURL == "" {
-		return fmt.Errorf("slack webhook URL is required")
+	webhookURL, err := validateGenericWebhookURL(notifier.WebhookURL)
+	if err != nil {
+		return err
 	}
 	client := notifier.Client
 	if client == nil {
-		client = http.DefaultClient
+		client = secureWebhookClient()
 	}
 
 	payload := slackPayload{Text: RedactedNotificationMessage(scanReport)}

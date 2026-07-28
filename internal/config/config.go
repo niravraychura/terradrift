@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/niravraychura/terradrift/internal/report"
+	"github.com/niravraychura/terradrift/internal/validation"
 )
 
 // DefaultPath is the default local TerraDrift configuration filename.
@@ -33,6 +34,8 @@ type Config struct {
 	DashboardHTML        string                     `json:"dashboard_html"`
 	HistoryDir           string                     `json:"history_dir"`
 	HistoryRetention     int                        `json:"history_retention"`
+	HistoryCompressed    bool                       `json:"history_compressed"`
+	AuditLog             string                     `json:"audit_log"`
 	PolicyCommand        string                     `json:"policy_command"`
 	PolicyArgs           []string                   `json:"policy_args"`
 	CostCommand          string                     `json:"cost_command"`
@@ -117,26 +120,32 @@ func readConfig(path string) ([]byte, error) {
 func (cfg Config) Validate() error {
 	timeout, err := time.ParseDuration(cfg.Timeout)
 	if err != nil || timeout <= 0 {
-		return fmt.Errorf("config timeout must be a positive duration")
+		return validation.New("config timeout", fmt.Errorf("must be a positive duration"))
 	}
 	switch strings.ToLower(strings.TrimSpace(cfg.Output)) {
 	case "table", "json", "junit", "sarif", "prometheus":
 	default:
-		return fmt.Errorf("unsupported config output %q", cfg.Output)
+		return validation.New("config output", fmt.Errorf("unsupported format"))
 	}
 	if cfg.Notify != "" {
 		switch strings.ToLower(strings.TrimSpace(cfg.Notify)) {
 		case "slack", "teams", "webhook":
 		default:
-			return fmt.Errorf("unsupported config notify target %q", cfg.Notify)
+			return validation.New("config notify", fmt.Errorf("unsupported target"))
 		}
 	}
 	if cfg.FailureSeverity != "" {
 		switch cfg.FailureSeverity {
 		case "low", "medium", "high", "critical":
 		default:
-			return fmt.Errorf("unsupported config failure_severity %q", cfg.FailureSeverity)
+			return validation.New("config failure_severity", fmt.Errorf("unsupported severity"))
 		}
+	}
+	if cfg.HistoryRetention < 0 {
+		return validation.New("config history_retention", fmt.Errorf("must not be negative"))
+	}
+	if cfg.GitHubPR < 0 || cfg.GitHubIssueAfter < 0 {
+		return validation.New("config GitHub numbers", fmt.Errorf("must not be negative"))
 	}
 	return nil
 }

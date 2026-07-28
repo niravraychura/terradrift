@@ -62,6 +62,7 @@ terradrift scan -d ./terraform/prod --output junit
 terradrift scan -d ./terraform/prod --output sarif
 terradrift scan -d ./terraform/prod --output prometheus
 terradrift scan-all --manifest terraform-roots.txt --concurrency 4 --output json
+terradrift scan-all --manifest terraform-roots.txt --incremental-state .terradrift-scan-state.json
 terradrift scan -d ./terraform/prod --timeout 2m --redact-paths
 terradrift scan -d ./terraform/prod --workspace-root "$PWD"
 terradrift scan -d ./terraform/prod --terraform-exec --output json
@@ -71,6 +72,7 @@ terradrift scan --config .terradrift.json --profile production
 terradrift scan -d ./terraform/prod --notify slack --slack-webhook-url "$SLACK_WEBHOOK_URL"
 terradrift scan -d ./terraform/prod --dashboard-html terradrift-report.html
 terradrift scan -d ./terraform/prod --history-dir .terradrift-history --dashboard-html terradrift-report.html
+terradrift scan -d ./terraform/prod --history-dir .terradrift-history --history-compressed --audit-log .terradrift-audit.jsonl
 terradrift scan -d ./terraform/prod --policy-command conftest --policy-arg test --policy-arg -
 terradrift scan -d ./terraform/prod --cost-command infracost --cost-arg breakdown --cost-arg --format=json
 terradrift init
@@ -78,7 +80,7 @@ terradrift init
 
 If `--directory` is omitted, TerraDrift scans the current working directory.
 
-`scan-all` reads one Terraform root per line from a manifest. Blank lines and `#` comments are ignored, and relative roots resolve from the manifest's directory. It runs roots with bounded concurrency and emits aggregate table or JSON output. The first multi-root pass intentionally excludes notifications, history, dashboards, policies, and cost enrichment.
+`scan-all` reads one Terraform root per line from a manifest. Blank lines and `#` comments are ignored, and relative roots resolve from the manifest's directory. It runs roots with bounded concurrency and emits aggregate table or JSON output. `--incremental-state` is opt-in and retries only roots that previously drifted or failed; omit it for full coverage. The first multi-root pass intentionally excludes notifications, history, dashboards, policies, and cost enrichment.
 
 Build a static cross-root dashboard index from recent history:
 
@@ -106,7 +108,7 @@ By default, TerraDrift still emits the bootstrap no-drift report. Use `--terrafo
 
 Terraform-backed scans create `.terradrift-scan.lock` in the selected root to prevent overlap. The lock is removed when the scan exits; after a crash, remove it only after confirming no scan is still active.
 
-The `terradrift init` command writes a starter `.terradrift.json` file with safe local defaults for repeated local or CI usage. Config files can also define optional scan settings such as `terraform_exec`, `terraform_bin`, `workspace_root`, `notify`, `slack_webhook_url`, `teams_webhook_url`, `webhook_url`, `dashboard_html`, `history_dir`, `policy_command`, `policy_args`, `cost_command`, `cost_args`, and `remediation_runbooks`; explicit CLI flags always take precedence.
+The `terradrift init` command writes a starter `.terradrift.json` file with safe local defaults for repeated local or CI usage. Config files can also define optional scan settings such as `terraform_exec`, `terraform_bin`, `workspace_root`, `notify`, `slack_webhook_url`, `teams_webhook_url`, `webhook_url`, `dashboard_html`, `history_dir`, `history_compressed`, `audit_log`, `policy_command`, `policy_args`, `cost_command`, `cost_args`, and `remediation_runbooks`; explicit CLI flags always take precedence. Audit logs are JSON Lines with allowlisted metadata and redacted errors.
 
 Use [`docs/terradrift.schema.json`](docs/terradrift.schema.json) as the JSON Schema reference for editor and CI validation.
 
@@ -239,7 +241,7 @@ The current runtime image intentionally does not install Terraform. To use `--te
 
 ## Releases
 
-Pushing an existing `v*` tag builds Linux amd64 and macOS arm64 archives, publishes SHA-256 checksums, and generates GitHub release notes.
+Pushing an existing `v*` tag builds Linux amd64 and macOS arm64 archives, publishes SHA-256 checksums, an image SBOM, provenance attestations, and a keyless-signed GHCR runtime image. CI scans the final runtime image and rejects AGPL or GPL-3 licenses.
 
 ## Terraform caching
 

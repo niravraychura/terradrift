@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/niravraychura/terradrift/internal/redact"
 	"github.com/niravraychura/terradrift/internal/report"
+	"github.com/niravraychura/terradrift/internal/validation"
 )
 
 // WebhookNotifier sends drift summaries to a generic HTTPS webhook endpoint.
@@ -67,24 +69,24 @@ func (notifier WebhookNotifier) Notify(ctx context.Context, scanReport report.Dr
 func validateGenericWebhookURL(rawURL string) (string, error) {
 	webhookURL := strings.TrimSpace(rawURL)
 	if webhookURL == "" {
-		return "", fmt.Errorf("webhook URL is required")
+		return "", validation.New("webhook URL", errors.New("is required"))
 	}
 	parsed, err := url.Parse(webhookURL)
 	if err != nil {
-		return "", fmt.Errorf("parse webhook URL: %w", err)
+		return "", validation.New("webhook URL", fmt.Errorf("parse: %w", err))
 	}
 	if parsed.Scheme != "https" {
-		return "", fmt.Errorf("webhook URL must use https")
+		return "", validation.New("webhook URL", errors.New("must use https"))
 	}
 	if parsed.User != nil {
-		return "", fmt.Errorf("webhook URL must not include user info")
+		return "", validation.New("webhook URL", errors.New("must not include user info"))
 	}
 	host := parsed.Hostname()
 	if host == "" {
-		return "", fmt.Errorf("webhook URL host is required")
+		return "", validation.New("webhook URL", errors.New("host is required"))
 	}
 	if isBlockedWebhookHost(host) {
-		return "", fmt.Errorf("webhook URL host is not allowed")
+		return "", validation.New("webhook URL", errors.New("host is not allowed"))
 	}
 	return parsed.String(), nil
 }

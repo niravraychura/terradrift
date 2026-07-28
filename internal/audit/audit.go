@@ -11,6 +11,7 @@ import (
 
 	"github.com/niravraychura/terradrift/internal/redact"
 	"github.com/niravraychura/terradrift/internal/report"
+	"github.com/niravraychura/terradrift/internal/validation"
 )
 
 const (
@@ -24,10 +25,18 @@ type Options struct {
 	Args    []string
 }
 
+// Validate rejects an incomplete audit adapter configuration.
+func (options Options) Validate() error {
+	if strings.TrimSpace(options.Command) == "" {
+		return validation.New("audit command", fmt.Errorf("is required"))
+	}
+	return nil
+}
+
 // Enrich runs an explicit audit adapter and attaches events by Terraform address.
 func Enrich(ctx context.Context, options Options, scanReport report.DriftReport) (report.DriftReport, error) {
-	if strings.TrimSpace(options.Command) == "" {
-		return scanReport, fmt.Errorf("audit command is required")
+	if err := options.Validate(); err != nil {
+		return scanReport, err
 	}
 	payload, err := json.Marshal(scanReport)
 	if err != nil {

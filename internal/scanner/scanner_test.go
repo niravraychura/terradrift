@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/niravraychura/terradrift/internal/report"
+	"github.com/niravraychura/terradrift/internal/validation"
 )
 
 type fakeRunner struct {
@@ -85,6 +86,14 @@ func TestScanHonorsCancelledContext(t *testing.T) {
 	}
 	if result.Outcome != OutcomeFailed {
 		t.Fatalf("expected failed outcome, got %q", result.Outcome)
+	}
+}
+
+func TestScanRejectsNegativeTimeoutWithTypedError(t *testing.T) {
+	_, err := Scan(context.Background(), Options{Directory: t.TempDir(), Timeout: -time.Second})
+	var validationErr *validation.Error
+	if !errors.As(err, &validationErr) || validationErr.Field != "scan timeout" {
+		t.Fatalf("expected typed timeout validation error, got %v", err)
 	}
 }
 

@@ -3,7 +3,7 @@ name: CI
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: [main, dev]
 
 permissions:
   contents: read
@@ -43,3 +43,22 @@ jobs:
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.0.0
         with:
           version: v2.12.2
+      - name: Build runtime image
+        run: docker build -t terradrift:ci .
+      - name: Generate image SBOM
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+        with:
+          image: terradrift:ci
+          format: spdx-json
+          output-file: sbom.spdx.json
+          upload-artifact: false
+          upload-release-assets: false
+      - name: Enforce license policy
+        run: jq -e 'all(.packages[]?.licenseConcluded; (. | test("AGPL|GPL-3")) | not)' sbom.spdx.json
+      - name: Scan runtime image
+        uses: docker/scout-action@2688993af7bafd6ba8c6a74ec652442be91dd82b # v1.23.1
+        with:
+          command: cves
+          image: terradrift:ci
+          only-severities: critical,high
+          exit-code: true

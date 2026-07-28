@@ -39,6 +39,21 @@ func TestWriteAndLoadRecent(t *testing.T) {
 	}
 }
 
+func TestWriteCompressedAndLoadRecent(t *testing.T) {
+	dir := t.TempDir()
+	path, err := WriteCompressed(dir, report.DriftReport{Status: report.ScanStatusNoDrift, Directory: "terraform/prod"})
+	if err != nil {
+		t.Fatalf("write compressed history: %v", err)
+	}
+	if !strings.HasSuffix(path, ".json.gz") {
+		t.Fatalf("expected gzip suffix, got %q", path)
+	}
+	entries, err := LoadRecent(dir, 1)
+	if err != nil || len(entries) != 1 || entries[0].Report.Directory != "terraform/prod" {
+		t.Fatalf("unexpected compressed history: %#v, %v", entries, err)
+	}
+}
+
 func TestWriteRejectsSymlinkDirectory(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("symlink fixture requires POSIX permissions")

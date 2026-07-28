@@ -11,6 +11,7 @@ import (
 
 	"github.com/niravraychura/terradrift/internal/redact"
 	"github.com/niravraychura/terradrift/internal/report"
+	"github.com/niravraychura/terradrift/internal/validation"
 )
 
 const (
@@ -24,12 +25,20 @@ type Options struct {
 	Args    []string
 }
 
+// Validate rejects an incomplete policy command configuration.
+func (options Options) Validate() error {
+	if strings.TrimSpace(options.Command) == "" {
+		return validation.New("policy command", fmt.Errorf("is required"))
+	}
+	return nil
+}
+
 // Run executes a policy command with the scan report JSON on stdin.
 func Run(ctx context.Context, options Options, scanReport report.DriftReport) error {
-	command := strings.TrimSpace(options.Command)
-	if command == "" {
-		return fmt.Errorf("policy command is required")
+	if err := options.Validate(); err != nil {
+		return err
 	}
+	command := strings.TrimSpace(options.Command)
 	payload, err := json.Marshal(scanReport)
 	if err != nil {
 		return fmt.Errorf("encode policy input: %w", err)
