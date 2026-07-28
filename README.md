@@ -468,6 +468,7 @@ jobs:
 - Review Terraform modules and providers before scanning untrusted code.
 - Terraform contacts cloud APIs only when `--terraform-exec` is supplied.
 - See [SECURITY.md](SECURITY.md) for vulnerability reporting guidance.
+- See [drift-scan IAM and secret-scanning guidance](docs/DRIFT_SCAN_IAM.md) before configuring cloud credentials.
 
 ## Contributing
 
