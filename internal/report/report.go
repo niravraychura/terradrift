@@ -39,14 +39,24 @@ type IgnoreRule struct {
 	ExpiresAt string `json:"expires_at"`
 }
 
+// ModuleInventory identifies one initialized Terraform module without local paths.
+type ModuleInventory struct {
+	Key     string `json:"key"`
+	Source  string `json:"source"`
+	Version string `json:"version,omitempty"`
+}
+
 // DriftReport captures the domain result of a Terraform drift scan.
 type DriftReport struct {
-	Status                ScanStatus       `json:"status"`
-	Directory             string           `json:"directory"`
-	TotalResourcesChecked int              `json:"total_resources_checked"`
-	TotalChangedResources int              `json:"total_changed_resources"`
-	ResourceChanges       []ResourceChange `json:"resource_changes"`
-	StartedAt             time.Time        `json:"started_at"`
-	CompletedAt           time.Time        `json:"completed_at"`
-	ErrorMessage          string           `json:"error_message,omitempty"`
+	Status                ScanStatus        `json:"status"`
+	Directory             string            `json:"directory"`
+	TotalResourcesChecked int               `json:"total_resources_checked"`
+	TotalChangedResources int               `json:"total_changed_resources"`
+	ResourceChanges       []ResourceChange  `json:"resource_changes"`
+	StartedAt             time.Time         `json:"started_at"`
+	CompletedAt           time.Time         `json:"completed_at"`
+	ErrorMessage          string            `json:"error_message,omitempty"`
+	TerraformVersion      string            `json:"terraform_version,omitempty"`
+	ProviderVersions      map[string]string `json:"provider_versions,omitempty"`
+	Modules               []ModuleInventory `json:"modules,omitempty"`
 }

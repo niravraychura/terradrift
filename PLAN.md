@@ -80,7 +80,7 @@ This plan tracks security, performance, code quality, and feature work for Terra
 - [x] Add named configuration profiles for development, staging, and production scans.
 - [x] Add workspace locks to prevent overlapping scans of the same Terraform root.
 - [ ] Add provider-aware enrichment for AWS, Azure, and GCP context.
-- [ ] Add Terraform, provider, and module version inventory reporting.
+- [x] Add Terraform, provider, and module version inventory reporting.
 - [x] Add an optional read-only local API for serving report history.
 
 ## Ongoing quality gates

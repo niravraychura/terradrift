@@ -277,6 +277,8 @@ Reports also include review-only reconciliation hints for imports, moved blocks,
 
 Each finding has a conservative action-based risk level: replacement is `critical`, deletion `high`, creation or update `medium`, and other actions `low`. Use `--failure-severity high` or `failure_severity` in config to fail CI only for active drift at or above that threshold; leaving it empty preserves failure on any drift.
 
+Terraform-backed reports include the CLI version, selected provider versions, and initialized module key/source/version inventory. Local module directories are intentionally omitted.
+
 Use exact-address `ignore_rules` for temporary, auditable exceptions. Each rule requires an owner, reason, and future RFC3339 expiry. Ignored findings stay visible in reports and dashboards but do not fail the scan.
 
 Route active findings by owner with `resource_owners` and `owner_webhooks`. Exact resource addresses override resource types; each owner webhook uses the same HTTPS-only webhook protections as normal notifications.

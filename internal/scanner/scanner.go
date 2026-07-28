@@ -174,6 +174,23 @@ func runTerraformScan(ctx context.Context, runner terraform.Runner, directory st
 		scanReport.ErrorMessage = err.Error()
 		return scanReport, fmt.Errorf("terraform init: %w", err)
 	}
+	if inventoryRunner, ok := runner.(interface {
+		Inventory(context.Context, string) (terraform.Inventory, error)
+	}); ok {
+		inventory, err := inventoryRunner.Inventory(ctx, directory)
+		if err != nil {
+			scanReport.Status = report.ScanStatusFailed
+			scanReport.CompletedAt = time.Now().UTC()
+			scanReport.ErrorMessage = err.Error()
+			return scanReport, fmt.Errorf("terraform inventory: %w", err)
+		}
+		scanReport.TerraformVersion = inventory.TerraformVersion
+		scanReport.ProviderVersions = inventory.ProviderVersions
+		scanReport.Modules = make([]report.ModuleInventory, len(inventory.Modules))
+		for i, module := range inventory.Modules {
+			scanReport.Modules[i] = report.ModuleInventory{Key: module.Key, Source: module.Source, Version: module.Version}
+		}
+	}
 
 	planFile, cleanup, err := securePlanFile(directory)
 	if err != nil {
