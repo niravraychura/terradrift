@@ -118,6 +118,19 @@ func TestScanValidDirectoryJSONOutput(t *testing.T) {
 	}
 }
 
+func TestWriteScanReportJUnit(t *testing.T) {
+	var output bytes.Buffer
+	err := writeScanReport(&output, report.DriftReport{Status: report.ScanStatusDriftDetected, TotalChangedResources: 2}, outputFormatJUnit)
+	if err != nil {
+		t.Fatalf("expected JUnit output to succeed: %v", err)
+	}
+	for _, want := range []string{`<testsuite name="terradrift" tests="1" failures="1">`, `<failure message="2 resources changed"></failure>`} {
+		if !strings.Contains(output.String(), want) {
+			t.Fatalf("expected JUnit output to contain %q, got %q", want, output.String())
+		}
+	}
+}
+
 func TestScanAcceptsTimeoutFlag(t *testing.T) {
 	_, _, err := executeCommand("scan", "-d", t.TempDir(), "--timeout", "1s")
 	if err != nil {

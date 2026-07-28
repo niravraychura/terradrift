@@ -58,6 +58,7 @@ terradrift scan
 terradrift scan --directory ./terraform/prod
 terradrift scan -d ./terraform/prod
 terradrift scan -d ./terraform/prod --output json
+terradrift scan -d ./terraform/prod --output junit
 terradrift scan -d ./terraform/prod --timeout 2m --redact-paths
 terradrift scan -d ./terraform/prod --workspace-root "$PWD"
 terradrift scan -d ./terraform/prod --terraform-exec --output json
@@ -110,6 +111,8 @@ JSON output is available for automation:
   "completed_at": "2026-07-22T00:00:00Z"
 }
 ```
+
+JUnit XML output is available for CI test reporting. A detected drift result is reported as one failing `terradrift` test case.
 
 Without `--terraform-exec`, TerraDrift emits a bootstrap no-drift report after validating the selected directory.
 

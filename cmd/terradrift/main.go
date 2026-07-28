@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"encoding/xml"
 	"errors"
 	"fmt"
 	"io"
@@ -35,6 +36,7 @@ type outputFormat string
 const (
 	outputFormatTable outputFormat = "table"
 	outputFormatJSON  outputFormat = "json"
+	outputFormatJUnit outputFormat = "junit"
 )
 
 func main() {
@@ -241,7 +243,7 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVarP(&directory, "directory", "d", ".", "Terraform directory to scan")
-	cmd.Flags().StringVarP(&format, "output", "o", string(outputFormatTable), "output format: table, json")
+	cmd.Flags().StringVarP(&format, "output", "o", string(outputFormatTable), "output format: table, json, junit")
 	cmd.Flags().DurationVar(&timeout, "timeout", scanner.DefaultTimeout, "maximum scan duration")
 	cmd.Flags().BoolVar(&redactPaths, "redact-paths", false, "redact local filesystem paths from scan output")
 	cmd.Flags().BoolVar(&terraformExec, "terraform-exec", false, "run Terraform init, refresh-only plan, and show -json")
@@ -292,10 +294,10 @@ func sendNotification(ctx context.Context, target string, slackWebhookURL string
 func parseOutputFormat(format string) (outputFormat, error) {
 	normalized := strings.ToLower(strings.TrimSpace(format))
 	switch outputFormat(normalized) {
-	case outputFormatTable, outputFormatJSON:
+	case outputFormatTable, outputFormatJSON, outputFormatJUnit:
 		return outputFormat(normalized), nil
 	default:
-		return "", fmt.Errorf("unsupported output format %q; supported values: table, json", format)
+		return "", fmt.Errorf("unsupported output format %q; supported values: table, json, junit", format)
 	}
 }
 
@@ -305,6 +307,19 @@ func writeScanReport(stdout io.Writer, scanReport report.DriftReport, format out
 		encoder := json.NewEncoder(stdout)
 		encoder.SetIndent("", "  ")
 		if err := encoder.Encode(scanReport); err != nil {
+			return fmt.Errorf("write scan output: %w", err)
+		}
+		return nil
+	case outputFormatJUnit:
+		suite := junitTestSuite{Name: "terradrift", Tests: 1, TestCases: []junitTestCase{{Name: "scan", ClassName: "terradrift"}}}
+		if scanReport.Status == report.ScanStatusDriftDetected {
+			suite.Failures = 1
+			suite.TestCases[0].Failure = &junitFailure{Message: fmt.Sprintf("%d resources changed", scanReport.TotalChangedResources)}
+		}
+		if _, err := io.WriteString(stdout, xml.Header); err != nil {
+			return fmt.Errorf("write scan output: %w", err)
+		}
+		if err := xml.NewEncoder(stdout).Encode(junitTestSuites{Suites: []junitTestSuite{suite}}); err != nil {
 			return fmt.Errorf("write scan output: %w", err)
 		}
 		return nil
@@ -326,6 +341,28 @@ func writeScanReport(stdout io.Writer, scanReport report.DriftReport, format out
 		}
 		return nil
 	default:
-		return fmt.Errorf("unsupported output format %q; supported values: table, json", format)
+		return fmt.Errorf("unsupported output format %q; supported values: table, json, junit", format)
 	}
+}
+
+type junitTestSuites struct {
+	XMLName xml.Name         `xml:"testsuites"`
+	Suites  []junitTestSuite `xml:"testsuite"`
+}
+
+type junitTestSuite struct {
+	Name      string          `xml:"name,attr"`
+	Tests     int             `xml:"tests,attr"`
+	Failures  int             `xml:"failures,attr"`
+	TestCases []junitTestCase `xml:"testcase"`
+}
+
+type junitTestCase struct {
+	Name      string        `xml:"name,attr"`
+	ClassName string        `xml:"classname,attr"`
+	Failure   *junitFailure `xml:"failure,omitempty"`
+}
+
+type junitFailure struct {
+	Message string `xml:"message,attr"`
 }
