@@ -48,7 +48,7 @@ This plan tracks security, performance, code quality, and feature work for Terra
 - [x] Consider a self-hosted dashboard only after the CLI workflow is stable.
 - [x] Add scheduled-run templates for GitHub Actions and cron runners with secret-safe defaults.
 - [x] Add Microsoft Teams notification target with redacted connector-card payloads.
-- [ ] Harden generic webhook delivery with DNS- and redirect-safe SSRF validation.
+- [x] Harden generic webhook delivery with DNS- and redirect-safe SSRF validation.
 - [x] Add historical report storage and dashboard trend views with restrictive local file permissions.
 - [x] Add policy-as-code hooks for expected drift and security guardrails with no implicit shell execution and redacted bounded output.
 - [x] Add optional cost-impact enrichment for drifted resources with explicit external command arguments and redacted bounded output.

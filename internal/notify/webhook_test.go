@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"net"
 	"net/http"
 	"strings"
 	"testing"
@@ -65,6 +66,22 @@ func TestWebhookNotifierRejectsUnsafeURLs(t *testing.T) {
 				t.Fatal("expected unsafe webhook URL to be rejected")
 			}
 		})
+	}
+}
+
+func TestBlockedWebhookIPs(t *testing.T) {
+	for _, value := range []string{"127.0.0.1", "10.0.0.1", "100.64.0.1", "169.254.169.254", "224.0.0.1", "::1", "fc00::1"} {
+		t.Run(value, func(t *testing.T) {
+			if !isBlockedWebhookIP(net.ParseIP(value)) {
+				t.Fatalf("expected %s to be blocked", value)
+			}
+		})
+	}
+}
+
+func TestSecureWebhookClientDoesNotFollowRedirects(t *testing.T) {
+	if err := secureWebhookClient().CheckRedirect(nil, nil); err != http.ErrUseLastResponse {
+		t.Fatalf("expected redirects to be rejected, got %v", err)
 	}
 }
 

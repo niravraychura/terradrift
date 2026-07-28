@@ -265,7 +265,7 @@ terradrift scan \
   --webhook-url "$WEBHOOK_URL"
 ```
 
-Slack, Teams, and generic webhook URLs are redacted in notification errors, and notification payload tests verify that local filesystem paths and webhook secrets are not included. Generic webhook URLs must use HTTPS, cannot include user info, and reject localhost, loopback, private, link-local, and unspecified IP hosts to reduce SSRF risk.
+Slack, Teams, and generic webhook URLs are redacted in notification errors, and notification payload tests verify that local filesystem paths and webhook secrets are not included. Generic webhook URLs must use HTTPS, cannot include user info, resolve only to allowed public IPs, and never follow redirects.
 
 ## Do you need to host TerraDrift?
 
