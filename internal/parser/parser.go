@@ -3,6 +3,7 @@ package parser
 import (
 	"encoding/json"
 	"fmt"
+	"sort"
 
 	"github.com/niravraychura/terradrift/internal/report"
 )
@@ -47,6 +48,7 @@ func ParsePlan(data []byte) ([]report.ResourceChange, int, error) {
 			CloudProvider:      report.CloudProviderFor(resourceChange.ProviderName, resourceChange.Type),
 		})
 	}
+	sort.Slice(changes, func(i, j int) bool { return changes[i].Address < changes[j].Address })
 
 	return changes, len(plan.ResourceChanges), nil
 }

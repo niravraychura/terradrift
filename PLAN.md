@@ -100,7 +100,8 @@ This plan tracks security, performance, code quality, and feature work for Terra
 - [ ] Skip malformed history files with warnings instead of failing dashboard rendering.
 - [ ] Validate config fields early and publish a `.terradrift.json` JSON Schema.
 - [ ] Add credential-free Terraform integration tests and golden plan-JSON fixtures.
-- [ ] Sort resource changes by address and model complete, partial, and drift outcomes for multi-root scans.
+- [x] Sort resource changes by address for deterministic output.
+- [ ] Model complete, partial, and drift outcomes for multi-root scans.
 - [ ] Stream or bound large Terraform JSON input and fail fast when Terraform roots have no configuration.
 - [ ] Document Terraform provider/plugin caching with `TF_PLUGIN_CACHE_DIR` and CI cache keys.
 - [ ] Parallelize independent post-scan enrichment and delivery work safely.
