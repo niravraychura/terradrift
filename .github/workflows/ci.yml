@@ -63,6 +63,7 @@ jobs:
         uses: docker/scout-action@2688993af7bafd6ba8c6a74ec652442be91dd82b # v1.23.1
         with:
           command: cves
-          image: terradrift:ci
+          image: local://terradrift:ci
           only-severities: critical,high
           exit-code: true
+          write-comment: false
