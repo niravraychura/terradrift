@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/niravraychura/terradrift/internal/history"
 	"github.com/niravraychura/terradrift/internal/report"
 )
 
@@ -29,5 +30,16 @@ func TestRenderEscapesResourceFields(t *testing.T) {
 	}
 	if !strings.Contains(output.String(), "drift_detected") {
 		t.Fatalf("expected status in dashboard, got %q", output.String())
+	}
+}
+
+func TestRenderIndexEscapesDirectories(t *testing.T) {
+	var output bytes.Buffer
+	err := RenderIndex(&output, []history.Entry{{Report: report.DriftReport{Directory: `<script>alert("x")</script>`}}})
+	if err != nil {
+		t.Fatalf("expected dashboard index render to succeed: %v", err)
+	}
+	if strings.Contains(output.String(), "<script>") {
+		t.Fatalf("expected index output to escape script tags, got %q", output.String())
 	}
 }
