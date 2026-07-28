@@ -8,6 +8,7 @@ import (
 	"strings"
 )
 
+// Validate ensures an external command is allowed and resolves within a trusted boundary.
 func Validate(value string, allowed []string, trustedDirs []string) error {
 	if value == "" || strings.TrimSpace(value) != value || strings.ContainsAny(value, " \t\n;&|$<>`*?[]{}()") {
 		return fmt.Errorf("external command must be one executable name or path")

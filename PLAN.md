@@ -114,7 +114,7 @@ This plan tracks security, performance, code quality, and feature work for Terra
 - [ ] Normalize workspace and output paths once through a validated execution context.
 - [ ] Add typed option validation and typed errors across config, scan, notification, policy, and cost boundaries.
 - [x] Refresh stale package documentation for implemented behavior.
-- [ ] Add complete comments for exported APIs.
+- [x] Add complete comments for exported package APIs.
 - [x] Add a non-mutating `make ci` target for local quality checks.
 - [x] Add CLI help safety-flag coverage.
 - [x] Produce CI coverage output and function summaries.

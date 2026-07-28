@@ -15,6 +15,7 @@ import (
 
 const maxOutputBytes = 256 * 1024
 
+// Options configures an external cloud audit adapter.
 type Options struct {
 	Command string
 	Args    []string

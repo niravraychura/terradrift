@@ -11,6 +11,7 @@ import (
 	"github.com/niravraychura/terradrift/internal/report"
 )
 
+// DefaultPath is the default local TerraDrift configuration filename.
 const DefaultPath = ".terradrift.json"
 
 // Config stores repeatable TerraDrift CLI settings for local and CI usage.
