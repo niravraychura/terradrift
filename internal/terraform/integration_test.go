@@ -25,7 +25,7 @@ func TestCLIRunnerIntegration(t *testing.T) {
 		t.Fatalf("terraform init: %v", err)
 	}
 	planPath := filepath.Join(directory, "plan.tfplan")
-	exitCode, err := runner.PlanRefreshOnly(ctx, directory, planPath)
+	exitCode, err := runner.Plan(ctx, directory, planPath, PlanModeRefreshOnly)
 	if err != nil || exitCode != 0 {
 		t.Fatalf("terraform plan: exit=%d err=%v", exitCode, err)
 	}

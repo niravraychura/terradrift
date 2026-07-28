@@ -21,6 +21,7 @@ type Data struct {
 type Trend struct {
 	Scans   int
 	Drifted int
+	Changes int
 	Failed  int
 }
 
@@ -34,9 +35,10 @@ var reportTemplate = template.Must(template.New("dashboard").Parse(`<!doctype ht
   <main>
     <h1>TerraDrift Report</h1>
     <dl>
-      <dt>Scan ID</dt><dd>{{.Current.ScanID}}</dd>
-      <dt>Status</dt><dd>{{.Current.Status}}</dd>
-      <dt>Resources checked</dt><dd>{{.Current.TotalResourcesChecked}}</dd>
+       <dt>Scan ID</dt><dd>{{.Current.ScanID}}</dd>
+       <dt>Status</dt><dd>{{.Current.Status}}</dd>
+       <dt>Plan mode</dt><dd>{{.Current.PlanMode}}</dd>
+       <dt>Resources checked</dt><dd>{{.Current.TotalResourcesChecked}}</dd>
       <dt>Changed resources</dt><dd>{{.Current.TotalChangedResources}}</dd>
     </dl>
     <h2>Changed resources</h2>
@@ -45,10 +47,10 @@ var reportTemplate = template.Must(template.New("dashboard").Parse(`<!doctype ht
       <tbody>{{range .Current.ResourceChanges}}<tr><td>{{.Address}}</td><td>{{.CloudProvider}}</td><td>{{.Type}}</td><td>{{.Name}}</td><td>{{range .Actions}}{{.}} {{end}}</td><td>{{.CostImpact}}</td><td>{{.Remediation}}</td><td>{{.ReconciliationHint}}</td><td>{{if .Ignored}}{{.IgnoreOwner}}: {{.IgnoreReason}} (until {{.IgnoreExpiresAt}}){{end}}</td><td>{{if .RunbookURL}}<a href="{{.RunbookURL}}">Open</a>{{end}}</td></tr>{{else}}<tr><td colspan="10">No changed resources</td></tr>{{end}}</tbody>
     </table>
      <h2>Recent scan history</h2>
-	    <p>Trend: {{.Trend.Drifted}} drifted and {{.Trend.Failed}} failed scans across {{.Trend.Scans}} recent scans.</p>
+	    <p>Trend: {{.Trend.Drifted}} drifted, {{.Trend.Changes}} with configuration changes, and {{.Trend.Failed}} failed scans across {{.Trend.Scans}} recent scans.</p>
     <table>
-      <thead><tr><th>Scan ID</th><th>Completed at</th><th>Status</th><th>Resources checked</th><th>Changed resources</th></tr></thead>
-      <tbody>{{range .History}}<tr><td>{{.Report.ScanID}}</td><td>{{.Report.CompletedAt}}</td><td>{{.Report.Status}}</td><td>{{.Report.TotalResourcesChecked}}</td><td>{{.Report.TotalChangedResources}}</td></tr>{{else}}<tr><td colspan="5">No history available</td></tr>{{end}}</tbody>
+      <thead><tr><th>Scan ID</th><th>Completed at</th><th>Status</th><th>Plan mode</th><th>Resources checked</th><th>Changed resources</th></tr></thead>
+      <tbody>{{range .History}}<tr><td>{{.Report.ScanID}}</td><td>{{.Report.CompletedAt}}</td><td>{{.Report.Status}}</td><td>{{.Report.PlanMode}}</td><td>{{.Report.TotalResourcesChecked}}</td><td>{{.Report.TotalChangedResources}}</td></tr>{{else}}<tr><td colspan="6">No history available</td></tr>{{end}}</tbody>
     </table>
   </main>
 </body>
@@ -62,8 +64,8 @@ var indexTemplate = template.Must(template.New("dashboard-index").Parse(`<!docty
   <main>
     <h1>TerraDrift Dashboard Index</h1>
     <table>
-      <thead><tr><th>Scan ID</th><th>Directory</th><th>Completed at</th><th>Status</th><th>Resources checked</th><th>Changed resources</th></tr></thead>
-      <tbody>{{range .}}<tr><td>{{.Report.ScanID}}</td><td>{{.Report.Directory}}</td><td>{{.Report.CompletedAt}}</td><td>{{.Report.Status}}</td><td>{{.Report.TotalResourcesChecked}}</td><td>{{.Report.TotalChangedResources}}</td></tr>{{else}}<tr><td colspan="6">No history available</td></tr>{{end}}</tbody>
+      <thead><tr><th>Scan ID</th><th>Directory</th><th>Completed at</th><th>Status</th><th>Plan mode</th><th>Resources checked</th><th>Changed resources</th></tr></thead>
+      <tbody>{{range .}}<tr><td>{{.Report.ScanID}}</td><td>{{.Report.Directory}}</td><td>{{.Report.CompletedAt}}</td><td>{{.Report.Status}}</td><td>{{.Report.PlanMode}}</td><td>{{.Report.TotalResourcesChecked}}</td><td>{{.Report.TotalChangedResources}}</td></tr>{{else}}<tr><td colspan="7">No history available</td></tr>{{end}}</tbody>
     </table>
   </main>
 </body>
@@ -85,6 +87,8 @@ func trendFor(entries []history.Entry) Trend {
 		switch entry.Report.Status {
 		case report.ScanStatusDriftDetected:
 			trend.Drifted++
+		case report.ScanStatusChangesDetected:
+			trend.Changes++
 		case report.ScanStatusFailed:
 			trend.Failed++
 		}

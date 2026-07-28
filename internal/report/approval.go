@@ -16,6 +16,9 @@ type Approval struct {
 
 // NewApproval creates an expiring approval for a report's active drift.
 func NewApproval(scanReport DriftReport, owner string, reason string, expiresAt string) (Approval, error) {
+	if scanReport.Status != ScanStatusDriftDetected {
+		return Approval{}, fmt.Errorf("approval requires active drift")
+	}
 	approval := Approval{Fingerprint: DriftFingerprint(scanReport), Owner: strings.TrimSpace(owner), Reason: strings.TrimSpace(reason), ExpiresAt: expiresAt}
 	if approval.Fingerprint == "" || approval.Owner == "" || approval.Reason == "" {
 		return Approval{}, fmt.Errorf("approval requires active drift, owner, and reason")
@@ -28,6 +31,9 @@ func NewApproval(scanReport DriftReport, owner string, reason string, expiresAt 
 
 // VerifyApproval confirms that an approval is current and matches the report.
 func VerifyApproval(scanReport DriftReport, approval Approval) error {
+	if scanReport.Status != ScanStatusDriftDetected {
+		return fmt.Errorf("approval requires active drift")
+	}
 	expiresAt, err := time.Parse(time.RFC3339, approval.ExpiresAt)
 	if err != nil || !expiresAt.After(time.Now().UTC()) {
 		return fmt.Errorf("approval must have a future RFC3339 expires_at")

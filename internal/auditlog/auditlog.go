@@ -15,6 +15,7 @@ type Event struct {
 	Event            string   `json:"event"`
 	ScanID           string   `json:"scan_id,omitempty"`
 	Status           string   `json:"status,omitempty"`
+	PlanMode         string   `json:"plan_mode,omitempty"`
 	Workspace        string   `json:"workspace,omitempty"`
 	Config           string   `json:"config,omitempty"`
 	Profile          string   `json:"profile,omitempty"`

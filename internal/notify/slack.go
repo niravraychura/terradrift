@@ -62,9 +62,10 @@ func (notifier SlackNotifier) Notify(ctx context.Context, scanReport report.Drif
 
 // RedactedNotificationMessage formats a scan summary without leaking raw local paths.
 func RedactedNotificationMessage(scanReport report.DriftReport) string {
-	return fmt.Sprintf("Terraform drift scan completed\nScan ID: %s\nStatus: %s\nResources checked: %d\nChanged resources: %d",
+	return fmt.Sprintf("Terraform scan completed\nScan ID: %s\nStatus: %s\nPlan mode: %s\nResources checked: %d\nChanged resources: %d",
 		scanReport.ScanID,
 		scanReport.Status,
+		scanReport.PlanMode,
 		scanReport.TotalResourcesChecked,
 		scanReport.TotalChangedResources,
 	)

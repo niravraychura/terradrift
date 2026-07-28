@@ -7,7 +7,7 @@ import (
 
 // ShouldNotify returns false only for unchanged active drift with no risk escalation.
 func ShouldNotify(current DriftReport, previous DriftReport) bool {
-	if current.Status != ScanStatusDriftDetected || previous.Status != ScanStatusDriftDetected {
+	if !HasChanges(current.Status) || current.Status != previous.Status {
 		return true
 	}
 	currentFindings, currentRisk := activeFingerprint(current)

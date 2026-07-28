@@ -32,8 +32,8 @@ func (notifier TeamsNotifier) Notify(ctx context.Context, scanReport report.Drif
 		Type:       "MessageCard",
 		Context:    "https://schema.org/extensions",
 		ThemeColor: teamsThemeColor(scanReport.Status),
-		Summary:    "Terraform drift scan completed",
-		Title:      "Terraform drift scan completed",
+		Summary:    "Terraform scan completed",
+		Title:      "Terraform scan completed",
 		Text:       RedactedNotificationMessage(scanReport),
 	}
 	body, err := json.Marshal(payload)
@@ -63,7 +63,7 @@ func (notifier TeamsNotifier) Notify(ctx context.Context, scanReport report.Drif
 
 func teamsThemeColor(status report.ScanStatus) string {
 	switch status {
-	case report.ScanStatusDriftDetected:
+	case report.ScanStatusDriftDetected, report.ScanStatusChangesDetected:
 		return "d83b01"
 	case report.ScanStatusFailed:
 		return "a4262c"

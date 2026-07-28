@@ -33,6 +33,10 @@ const (
 	OutcomeNoDrift Outcome = "no_drift"
 	// OutcomeDriftDetected indicates a completed scan with active drift.
 	OutcomeDriftDetected Outcome = "drift_detected"
+	// OutcomeNoChanges indicates a completed normal plan without changes.
+	OutcomeNoChanges Outcome = "no_changes"
+	// OutcomeChangesDetected indicates a completed normal plan with changes.
+	OutcomeChangesDetected Outcome = "changes_detected"
 	// OutcomeFailed indicates that scanning could not complete.
 	OutcomeFailed Outcome = "failed"
 )
@@ -42,6 +46,7 @@ type Options struct {
 	Directory             string
 	Timeout               time.Duration
 	Runner                terraform.Runner
+	PlanMode              terraform.PlanMode
 	WorkspaceRoot         string
 	RequireTerraformFiles bool
 	workspaceRootResolved bool
@@ -52,6 +57,9 @@ func (options Options) Validate() error {
 	if options.Timeout < 0 {
 		return validation.New("scan timeout", errors.New("must not be negative"))
 	}
+	if _, err := terraform.ParsePlanMode(string(options.PlanMode)); err != nil {
+		return validation.New("scan plan mode", err)
+	}
 	return nil
 }
 
@@ -61,6 +69,11 @@ func PrepareOptions(options Options) (Options, error) {
 		return Options{}, err
 	}
 	if options.WorkspaceRoot == "" || options.workspaceRootResolved {
+		mode, err := terraform.ParsePlanMode(string(options.PlanMode))
+		if err != nil {
+			return Options{}, validation.New("scan plan mode", err)
+		}
+		options.PlanMode = mode
 		return options, nil
 	}
 	root, err := ValidateDirectory(options.WorkspaceRoot)
@@ -69,6 +82,11 @@ func PrepareOptions(options Options) (Options, error) {
 	}
 	options.WorkspaceRoot = root
 	options.workspaceRootResolved = true
+	mode, err := terraform.ParsePlanMode(string(options.PlanMode))
+	if err != nil {
+		return Options{}, validation.New("scan plan mode", err)
+	}
+	options.PlanMode = mode
 	return options, nil
 }
 
@@ -127,11 +145,18 @@ func Scan(ctx context.Context, options Options) (Result, error) {
 
 	if options.Runner == nil {
 		now := time.Now().UTC()
-		return Result{Outcome: OutcomeNoDrift, Report: report.DriftReport{
+		status := report.ScanStatusNoDrift
+		outcome := OutcomeNoDrift
+		if options.PlanMode == terraform.PlanModeNormal {
+			status = report.ScanStatusNoChanges
+			outcome = OutcomeNoChanges
+		}
+		return Result{Outcome: outcome, Report: report.DriftReport{
 			ScanID:          scanID,
 			RootID:          rootID(absDir),
-			Status:          report.ScanStatusNoDrift,
+			Status:          status,
 			Directory:       absDir,
+			PlanMode:        string(options.PlanMode),
 			ResourceChanges: []report.ResourceChange{},
 			StartedAt:       now,
 			CompletedAt:     now,
@@ -144,13 +169,21 @@ func Scan(ctx context.Context, options Options) (Result, error) {
 	}
 	defer unlock()
 
-	scanReport, err := runTerraformScan(ctx, options.Runner, absDir, scanID)
+	scanReport, err := runTerraformScan(ctx, options.Runner, absDir, scanID, options.PlanMode)
 	if err != nil {
 		return Result{Outcome: OutcomeFailed, Report: scanReport}, err
 	}
 	if scanReport.TotalChangedResources > 0 {
+		if options.PlanMode == terraform.PlanModeNormal {
+			scanReport.Status = report.ScanStatusChangesDetected
+			return Result{Outcome: OutcomeChangesDetected, Report: scanReport}, nil
+		}
 		scanReport.Status = report.ScanStatusDriftDetected
 		return Result{Outcome: OutcomeDriftDetected, Report: scanReport}, nil
+	}
+	if options.PlanMode == terraform.PlanModeNormal {
+		scanReport.Status = report.ScanStatusNoChanges
+		return Result{Outcome: OutcomeNoChanges, Report: scanReport}, nil
 	}
 	scanReport.Status = report.ScanStatusNoDrift
 	return Result{Outcome: OutcomeNoDrift, Report: scanReport}, nil
@@ -228,13 +261,14 @@ func ValidateDirectory(directory string) (string, error) {
 	return resolved, nil
 }
 
-func runTerraformScan(ctx context.Context, runner terraform.Runner, directory string, scanID string) (scanReport report.DriftReport, returnErr error) {
+func runTerraformScan(ctx context.Context, runner terraform.Runner, directory string, scanID string, mode terraform.PlanMode) (scanReport report.DriftReport, returnErr error) {
 	startedAt := time.Now().UTC()
 	scanReport = report.DriftReport{
 		ScanID:          scanID,
 		RootID:          rootID(directory),
 		Status:          report.ScanStatusRunning,
 		Directory:       directory,
+		PlanMode:        string(mode),
 		ResourceChanges: []report.ResourceChange{},
 		StartedAt:       startedAt,
 	}
@@ -271,13 +305,13 @@ func runTerraformScan(ctx context.Context, runner terraform.Runner, directory st
 		}
 	}()
 
-	exitCode, err := runner.PlanRefreshOnly(ctx, directory, planFile)
+	exitCode, err := runner.Plan(ctx, directory, planFile, mode)
 	if err != nil {
 		failReport(&scanReport, err)
-		return scanReport, fmt.Errorf("terraform refresh-only plan: %s", scanReport.ErrorMessage)
+		return scanReport, fmt.Errorf("terraform %s plan: %s", mode, scanReport.ErrorMessage)
 	}
 	if exitCode != 0 && exitCode != 2 {
-		err := fmt.Errorf("terraform refresh-only plan failed with exit code %d", exitCode)
+		err := fmt.Errorf("terraform %s plan failed with exit code %d", mode, exitCode)
 		failReport(&scanReport, err)
 		return scanReport, err
 	}
@@ -288,7 +322,7 @@ func runTerraformScan(ctx context.Context, runner terraform.Runner, directory st
 		return scanReport, fmt.Errorf("terraform show JSON: %s", scanReport.ErrorMessage)
 	}
 
-	resourceChanges, outputChanges, totalResources, err := parser.ParsePlan(planJSON)
+	resourceChanges, outputChanges, totalResources, resourcesExact, err := parser.ParsePlan(planJSON, mode)
 	if err != nil {
 		failReport(&scanReport, err)
 		return scanReport, errors.New(scanReport.ErrorMessage)
@@ -297,6 +331,7 @@ func runTerraformScan(ctx context.Context, runner terraform.Runner, directory st
 	scanReport.ResourceChanges = resourceChanges
 	scanReport.OutputChanges = outputChanges
 	scanReport.TotalResourcesChecked = totalResources
+	scanReport.ResourcesCheckedExact = resourcesExact
 	scanReport.TotalChangedResources = len(resourceChanges)
 	scanReport.CompletedAt = time.Now().UTC()
 	return scanReport, nil

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/niravraychura/terradrift/internal/report"
+	"github.com/niravraychura/terradrift/internal/terraform"
 	"github.com/niravraychura/terradrift/internal/validation"
 )
 
@@ -21,14 +22,16 @@ type fakeRunner struct {
 	showErr  error
 	planPath string
 	showPath string
+	planMode terraform.PlanMode
 }
 
 func (runner *fakeRunner) Init(ctx context.Context, directory string) error {
 	return runner.initErr
 }
 
-func (runner *fakeRunner) PlanRefreshOnly(ctx context.Context, directory string, outputPath string) (int, error) {
+func (runner *fakeRunner) Plan(ctx context.Context, directory string, outputPath string, mode terraform.PlanMode) (int, error) {
 	runner.planPath = outputPath
+	runner.planMode = mode
 	return runner.planExit, runner.planErr
 }
 
@@ -133,6 +136,7 @@ func TestScanWithRunnerReturnsDriftDetected(t *testing.T) {
 	runner := &fakeRunner{
 		planExit: 2,
 		showJSON: []byte(`{
+			"prior_state":{"values":{"root_module":{"resources":[{"mode":"managed"}]}}},
 			"resource_changes": [
 				{"address":"aws_instance.web","type":"aws_instance","name":"web","change":{"actions":["update"]}}
 			]
@@ -157,6 +161,47 @@ func TestScanWithRunnerReturnsDriftDetected(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(directory, scanLockFilename)); !os.IsNotExist(err) {
 		t.Fatalf("expected scan lock to be cleaned up, stat err=%v", err)
+	}
+}
+
+func TestScanNormalPlanReportsChangesWithoutDrift(t *testing.T) {
+	runner := &fakeRunner{planExit: 2, showJSON: []byte(`{
+		"prior_state":{"values":{"root_module":{"resources":[{"mode":"managed"},{"mode":"managed"}]}}},
+		"resource_drift":[{"address":"aws_instance.remote","mode":"managed","change":{"actions":["update"]}}],
+		"resource_changes":[{"address":"aws_instance.config","mode":"managed","change":{"actions":["update"]}}]
+	}`)}
+	result, err := Scan(context.Background(), Options{Directory: t.TempDir(), Runner: runner, PlanMode: terraform.PlanModeNormal})
+	if err != nil {
+		t.Fatalf("scan: %v", err)
+	}
+	if runner.planMode != terraform.PlanModeNormal || result.Outcome != OutcomeChangesDetected || result.Report.Status != report.ScanStatusChangesDetected || result.Report.TotalResourcesChecked != 2 || !result.Report.ResourcesCheckedExact || len(result.Report.ResourceChanges) != 1 || result.Report.ResourceChanges[0].Address != "aws_instance.config" {
+		t.Fatalf("unexpected normal result: %#v, mode=%q", result, runner.planMode)
+	}
+}
+
+func TestPlanModesCanDifferWithTheSamePriorStateCount(t *testing.T) {
+	plan := []byte(`{
+		"prior_state":{"values":{"root_module":{"resources":[{"mode":"managed"},{"mode":"managed"}]}}},
+		"resource_drift":[{"address":"aws_instance.remote","mode":"managed","change":{"actions":["update"]}}],
+		"resource_changes":[{"address":"aws_instance.config","mode":"managed","change":{"actions":["create"]}}]
+	}`)
+	refresh, err := Scan(context.Background(), Options{Directory: t.TempDir(), Runner: &fakeRunner{planExit: 2, showJSON: plan}, PlanMode: terraform.PlanModeRefreshOnly})
+	if err != nil {
+		t.Fatalf("refresh scan: %v", err)
+	}
+	normal, err := Scan(context.Background(), Options{Directory: t.TempDir(), Runner: &fakeRunner{planExit: 2, showJSON: plan}, PlanMode: terraform.PlanModeNormal})
+	if err != nil {
+		t.Fatalf("normal scan: %v", err)
+	}
+	if refresh.Report.Status != report.ScanStatusDriftDetected || normal.Report.Status != report.ScanStatusChangesDetected || refresh.Report.TotalResourcesChecked != 2 || normal.Report.TotalResourcesChecked != 2 || refresh.Report.ResourceChanges[0].Address == normal.Report.ResourceChanges[0].Address {
+		t.Fatalf("expected distinct mode results with equal inventory: refresh=%#v normal=%#v", refresh.Report, normal.Report)
+	}
+}
+
+func TestScanRejectsInvalidPlanMode(t *testing.T) {
+	_, err := Scan(context.Background(), Options{Directory: t.TempDir(), PlanMode: "apply"})
+	if err == nil || !strings.Contains(err.Error(), "plan mode") {
+		t.Fatalf("expected invalid plan mode, got %v", err)
 	}
 }
 

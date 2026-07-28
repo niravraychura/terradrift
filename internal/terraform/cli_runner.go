@@ -54,9 +54,18 @@ func (runner CLIRunner) Init(ctx context.Context, directory string) error {
 	return err
 }
 
-// PlanRefreshOnly runs Terraform's refresh-only plan and returns its detailed exit code.
-func (runner CLIRunner) PlanRefreshOnly(ctx context.Context, directory string, outputPath string) (int, error) {
-	_, err := runner.run(ctx, directory, "plan", "-refresh-only", "-detailed-exitcode", "-out", outputPath)
+// Plan runs Terraform's selected plan mode and returns its detailed exit code.
+func (runner CLIRunner) Plan(ctx context.Context, directory string, outputPath string, mode PlanMode) (int, error) {
+	mode, err := ParsePlanMode(string(mode))
+	if err != nil {
+		return 1, err
+	}
+	args := []string{"plan"}
+	if mode == PlanModeRefreshOnly {
+		args = append(args, "-refresh-only")
+	}
+	args = append(args, "-detailed-exitcode", "-out", outputPath)
+	_, err = runner.run(ctx, directory, args...)
 	if err == nil {
 		return 0, nil
 	}

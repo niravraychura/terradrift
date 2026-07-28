@@ -113,3 +113,10 @@ func TestApprovalMatchesActiveDrift(t *testing.T) {
 		t.Fatal("expected mismatched approval to fail")
 	}
 }
+
+func TestApprovalRejectsNormalPlanChanges(t *testing.T) {
+	scanReport := DriftReport{Status: ScanStatusChangesDetected, ResourceChanges: []ResourceChange{{Address: "aws_instance.web", Actions: []string{"update"}}}}
+	if _, err := NewApproval(scanReport, "platform", "expected configuration change", time.Now().Add(time.Hour).UTC().Format(time.RFC3339)); err == nil {
+		t.Fatal("expected normal-plan approval to fail")
+	}
+}

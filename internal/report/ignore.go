@@ -38,8 +38,13 @@ func ApplyIgnoreRules(scanReport *DriftReport, rules []IgnoreRule) error {
 		change.IgnoreExpiresAt = rule.ExpiresAt
 	}
 	scanReport.TotalChangedResources = changed
-	if changed == 0 && scanReport.Status == ScanStatusDriftDetected {
-		scanReport.Status = ScanStatusNoDrift
+	if changed == 0 {
+		switch scanReport.Status {
+		case ScanStatusDriftDetected:
+			scanReport.Status = ScanStatusNoDrift
+		case ScanStatusChangesDetected:
+			scanReport.Status = ScanStatusNoChanges
+		}
 	}
 	return nil
 }

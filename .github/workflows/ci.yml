@@ -24,7 +24,7 @@ jobs:
           cache: true
           cache-dependency-path: go.sum
       - name: Set up Terraform
-        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
+        uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
         with:
           terraform_version: 1.10.0
       - name: Download dependencies
@@ -60,6 +60,7 @@ jobs:
       - name: Enforce license policy
         run: jq -e 'all(.packages[]?.licenseConcluded; (. | test("AGPL|GPL-3")) | not)' sbom.spdx.json
       - name: Scan runtime image
+        if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
         uses: docker/scout-action@2688993af7bafd6ba8c6a74ec652442be91dd82b # v1.23.1
         with:
           command: cves
@@ -67,3 +68,5 @@ jobs:
           only-severities: critical,high
           exit-code: true
           write-comment: false
+          dockerhub-user: ${{ secrets.DOCKERHUB_USERNAME }}
+          dockerhub-password: ${{ secrets.DOCKERHUB_TOKEN }}

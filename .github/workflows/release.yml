@@ -57,6 +57,8 @@ jobs:
           image: ${{ env.IMAGE }}
           only-severities: critical,high
           exit-code: true
+          dockerhub-user: ${{ secrets.DOCKERHUB_USERNAME }}
+          dockerhub-password: ${{ secrets.DOCKERHUB_TOKEN }}
       - name: Publish runtime image
         id: image
         env:

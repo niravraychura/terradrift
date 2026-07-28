@@ -66,6 +66,8 @@ terradrift scan-all --manifest terraform-roots.txt --incremental-state .terradri
 terradrift scan -d ./terraform/prod --timeout 2m --redact-paths
 terradrift scan -d ./terraform/prod --workspace-root "$PWD"
 terradrift scan -d ./terraform/prod --terraform-exec --output json
+terradrift scan -d ./terraform/prod --terraform-exec --plan-mode refresh-only
+terradrift scan -d ./terraform/prod --terraform-exec --plan-mode normal
 terradrift scan -d ./terraform/prod --terraform-exec --terraform-bin tofu
 terradrift scan --config .terradrift.json
 terradrift scan --config .terradrift.json --profile production
@@ -105,11 +107,22 @@ Terraform command output, configuration files, persisted history, approvals, ext
 
 The `--workspace-root` flag evaluates symlinks and requires the selected Terraform directory to resolve inside the provided root, which is useful for constrained CI or hosted runner scenarios.
 
-By default, TerraDrift still emits the bootstrap no-drift report. Use `--terraform-exec` to run the Terraform-compatible CLI flow: `init`, `plan -refresh-only -detailed-exitcode`, and `show -json`. `--terraform-bin` selects the executable, defaulting to `terraform`; set it to `tofu` for OpenTofu. The executable must be available on `PATH`.
+By default, TerraDrift still emits the bootstrap no-drift report. With `--terraform-exec`, `--plan-mode refresh-only` is the default and runs `plan -refresh-only -detailed-exitcode`; it reports remote infrastructure drift and state reconciliation only. `--plan-mode normal` runs `plan -detailed-exitcode` and reports all proposed configuration, state, and remote-object reconciliation changes. `--terraform-bin` selects the executable, defaulting to `terraform`; set it to `tofu` for OpenTofu. The executable must be available on `PATH`.
+
+`plan_mode` accepts `refresh-only` or `normal` in `.terradrift.json`, including standalone named profiles. Explicit `--plan-mode` takes precedence. Refresh-only reports use `no_drift` and `drift_detected`; normal reports use `no_changes` and `changes_detected` so normal configuration differences are not labelled drift.
+
+To compare a result, run both commands against the same directory, workspace, variables, backend, credentials, and Terraform/OpenTofu executable:
+
+```bash
+terradrift scan -d ./terraform/prod --terraform-exec --plan-mode refresh-only --output json
+terradrift scan -d ./terraform/prod --terraform-exec --plan-mode normal --output json
+```
+
+Normal-plan changes with no refresh-only drift usually mean unapplied configuration changes rather than out-of-band infrastructure drift.
 
 Terraform-backed scans create `.terradrift-scan.lock` in the selected root to prevent overlap. The lock is removed when the scan exits; after a crash, remove it only after confirming no scan is still active.
 
-The `terradrift init` command writes a tailored `.terradrift.json` file with safe local defaults. Use its `--directory`, `--terraform-exec`, `--redact-paths`, and `--history-dir` flags to guide the initial configuration. Config files can also define optional scan settings such as `terraform_exec`, `terraform_bin`, `workspace_root`, `notify`, `slack_webhook_url`, `teams_webhook_url`, `webhook_url`, `dashboard_html`, `history_dir`, `history_compressed`, `audit_log`, `policy_command`, `policy_args`, `cost_command`, `cost_args`, `baseline_rules`, and `remediation_runbooks`; explicit CLI flags always take precedence. Audit logs are JSON Lines with allowlisted metadata and redacted errors.
+The `terradrift init` command writes a tailored `.terradrift.json` file with safe local defaults. Use its `--directory`, `--terraform-exec`, `--redact-paths`, and `--history-dir` flags to guide the initial configuration. Config files can also define optional scan settings such as `terraform_exec`, `terraform_bin`, `plan_mode`, `workspace_root`, `notify`, `slack_webhook_url`, `teams_webhook_url`, `webhook_url`, `dashboard_html`, `history_dir`, `history_compressed`, `audit_log`, `policy_command`, `policy_args`, `cost_command`, `cost_args`, `baseline_rules`, and `remediation_runbooks`; explicit CLI flags always take precedence. Audit logs are JSON Lines with allowlisted metadata and redacted errors.
 
 Use [`docs/terradrift.schema.json`](docs/terradrift.schema.json) as the JSON Schema reference for editor and CI validation.
 
@@ -126,6 +139,7 @@ Use `profiles` for standalone development, staging, and production configuration
       "directory": "./terraform/prod",
       "output": "json",
       "terraform_exec": true,
+      "plan_mode": "refresh-only",
       "redact_paths": true
     }
   }
@@ -141,6 +155,7 @@ Default table output:
 ```text
 TerraDrift scan initialized
 Status: no_drift
+Plan mode: refresh-only
 Terraform directory: /absolute/path/to/terraform/prod
 Resources checked: 0
 Changed resources: 0
@@ -151,8 +166,10 @@ JSON output is available for automation:
 ```json
 {
   "status": "no_drift",
+  "plan_mode": "refresh-only",
   "directory": "/absolute/path/to/terraform/prod",
   "total_resources_checked": 0,
+  "resources_checked_exact": false,
   "total_changed_resources": 0,
   "resource_changes": [],
   "started_at": "2026-07-22T00:00:00Z",
@@ -160,9 +177,9 @@ JSON output is available for automation:
 }
 ```
 
-JUnit XML output is available for CI test reporting. A detected drift result is reported as one failing `terradrift` test case.
+JUnit XML output is available for CI test reporting. A detected drift or normal-plan change result is reported as one failing `terradrift` test case.
 
-SARIF output is available for code-scanning dashboards. Each changed resource is emitted as an error-level `terradrift.drift` result without a local filesystem location.
+SARIF output is available for code-scanning dashboards. Refresh-only findings use `terradrift.drift`; normal-plan findings use `terradrift.change`, both without a local filesystem location.
 
 Prometheus text output exposes scan status, duration, and resource counts. It deliberately omits directory and resource labels to avoid exposing local paths or creating unbounded label cardinality.
 
@@ -254,19 +271,19 @@ When `--terraform-exec` is provided, `terradrift scan` performs this flow:
 
 1. Validate the Terraform directory.
 2. Run `terraform init -input=false -backend=true -lockfile=readonly`. A committed `.terraform.lock.hcl` is required; TerraDrift never upgrades providers or rewrites the lockfile.
-3. Run `terraform plan -refresh-only -detailed-exitcode -out <planfile>`.
+3. Run `terraform plan -refresh-only -detailed-exitcode -out <planfile>` for refresh-only mode, or `terraform plan -detailed-exitcode -out <planfile>` for normal mode.
 4. Run `terraform show -json <planfile>`.
 5. Parse the JSON plan.
-6. Produce a TerraDrift drift report.
-7. Return clear exit codes for no drift, drift detected, and scan failure.
+6. Produce a TerraDrift report.
+7. Return clear exit codes for no changes, detected drift or changes, and scan failure.
 
 The CLI reserves these exit codes for automation-friendly workflows:
 
 | Exit code | Meaning |
 | ---: | --- |
-| `0` | Scan completed successfully with no drift. |
+| `0` | Scan completed successfully with no drift or normal-plan changes. |
 | `1` | Scan failed before producing a reliable result. |
-| `2` | Scan completed successfully and drift was detected. |
+| `2` | Scan completed successfully and drift or normal-plan changes were detected. |
 
 ## Feature ideas and improvement backlog
 
@@ -298,7 +315,7 @@ Reports also include review-only reconciliation hints for imports, moved blocks,
 
 Each finding has a conservative action-based risk level: replacement is `critical`, deletion `high`, creation or update `medium`, and other actions `low`. Use `--failure-severity high` or `failure_severity` in config to fail CI only for active drift at or above that threshold; leaving it empty preserves failure on any drift.
 
-Terraform-backed reports include the CLI version, selected provider versions, and initialized module key/source/version inventory. Local module directories are intentionally omitted.
+Terraform-backed reports include the CLI version, selected provider versions, initialized module key/source/version inventory, and managed instance inventory from `prior_state`. Module inventory metadata identifies initialized modules only; it does not prove that module resources were counted or drifted. `resources_checked_exact` is true only when prior state supplied a root module; otherwise the count is an estimate from plan entries. Local module directories are intentionally omitted.
 
 Each Terraform resource change is classified as `aws`, `azure`, or `gcp` from its provider metadata or resource type. Terraform value data, including account IDs, regions, tags, and potential secrets, is intentionally not parsed.
 
@@ -449,7 +466,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up Terraform
-        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
+        uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
 
       - name: Run TerraDrift
         run: terradrift scan --directory ./terraform/prod --terraform-exec --output json

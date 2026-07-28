@@ -9,6 +9,7 @@
     "redact_paths": { "type": "boolean" },
     "terraform_exec": { "type": "boolean" },
     "terraform_bin": { "type": "string" },
+    "plan_mode": { "enum": ["refresh-only", "normal"] },
     "workspace_root": { "type": "string" },
     "notify": { "enum": ["slack", "teams", "webhook"] },
     "slack_webhook_url": { "type": "string" },
