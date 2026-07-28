@@ -20,7 +20,6 @@ The first version of TerraDrift is a project foundation. It includes:
 - Directory validation, optional workspace-root enforcement, and absolute path reporting
 - Human-friendly table output and automation-friendly JSON output
 - Documented exit codes for future CI drift workflows
-- Structured logging foundations with `log/slog`
 - Domain models for future drift reports
 - A Terraform runner interface and explicit Terraform CLI execution mode
 - Secret-safe Slack notifications and static HTML dashboard output
@@ -105,30 +104,13 @@ JSON output is available for automation:
   "directory": "/absolute/path/to/terraform/prod",
   "total_resources_checked": 0,
   "total_changed_resources": 0,
-  "resource_changes": null,
+  "resource_changes": [],
   "started_at": "2026-07-22T00:00:00Z",
   "completed_at": "2026-07-22T00:00:00Z"
 }
 ```
 
-Today, this only resolves the selected directory to an absolute path, verifies that it exists and is a directory, and emits a bootstrap no-drift report. Real Terraform execution is still planned next.
-
-## Logging
-
-The CLI supports a global `--log-level` flag:
-
-```bash
-terradrift --log-level debug scan --directory ./terraform/prod
-```
-
-Supported values:
-
-- `debug`
-- `info`
-- `warn`
-- `error`
-
-The default log level is `info`.
+Without `--terraform-exec`, TerraDrift emits a bootstrap no-drift report after validating the selected directory.
 
 ## Installation and local development
 
@@ -192,7 +174,7 @@ Build the image:
 make docker-build
 ```
 
-The current runtime image intentionally does not install Terraform yet. To use `--terraform-exec` in Docker, build a derived image that installs Terraform or mount/provide a trusted Terraform binary on `PATH`. Pin Terraform, provider, and module versions in CI for repeatable drift results.
+The current runtime image intentionally does not install Terraform. To use `--terraform-exec` in Docker, build a derived image that installs Terraform or mount/provide a trusted Terraform binary on `PATH`. Pin Terraform, provider, and module versions in CI for repeatable drift results.
 
 ## Terraform execution flow
 
@@ -299,7 +281,7 @@ You can run TerraDrift from:
 
 No hosted service is required. For lightweight visibility, `--dashboard-html <path>` writes an escaped static HTML report that can be archived by CI or served by your own internal tooling. Use `--history-dir <directory>` to keep secure local JSON history and include recent scan trends in the static dashboard. A richer hosted service may be useful later for team visibility and long-term tracking.
 
-## Example future GitHub Actions usage
+## Example GitHub Actions usage
 
 With Terraform execution enabled, a scheduled drift scan could look like this:
 
@@ -342,7 +324,7 @@ jobs:
 - Use least-privilege cloud credentials for drift detection.
 - Do not log Slack webhook URLs or provider credentials.
 - Review Terraform modules and providers before scanning untrusted code.
-- This bootstrap release does not contact cloud APIs or execute Terraform.
+- Terraform contacts cloud APIs only when `--terraform-exec` is supplied.
 - See [SECURITY.md](SECURITY.md) for vulnerability reporting guidance.
 
 ## Contributing

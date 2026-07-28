@@ -5,11 +5,10 @@ This plan tracks security, performance, code quality, and feature work for Terra
 ## Completed in this foundation pass
 
 - [x] Add a repository-level `PLAN.md` so product and engineering work can be tracked in one place.
-- [x] Ensure the global `--log-level` flag installs the configured `slog` logger instead of only validating the value.
 - [x] Normalize `--output` values by trimming whitespace and accepting case-insensitive values.
 - [x] Emit an empty `resource_changes` array in bootstrap JSON reports instead of `null`.
 - [x] Add a reusable redaction package for high-risk strings before Terraform execution or notifications are implemented.
-- [x] Add tests for output normalization, logger installation behavior, empty resource-change JSON, and redaction.
+- [x] Add tests for output normalization, empty resource-change JSON, and redaction.
 
 ## Security plan
 
@@ -31,8 +30,6 @@ This plan tracks security, performance, code quality, and feature work for Terra
 
 ## Code quality plan
 
-- [x] Install the configured logger as the process default logger.
-- [x] Make output format parsing consistent with log-level parsing by accepting trimmed, case-insensitive values.
 - [x] Move scan orchestration out of Cobra command code into `internal/scanner`.
 - [x] Add typed scan outcomes so CLI exit codes can cleanly distinguish no drift, drift detected, and scan failure.
 - [x] Decide whether `scan` should accept any directory or require at least one `.tf` file, then update docs/tests accordingly.
@@ -49,9 +46,9 @@ This plan tracks security, performance, code quality, and feature work for Terra
 - [x] Add Slack notifications only after redaction and secret-safe logging are fully tested.
 - [x] Add Docker runtime guidance for Terraform execution, including whether Terraform is bundled or mounted.
 - [x] Consider a self-hosted dashboard only after the CLI workflow is stable.
-- [x] Add scheduled-run templates for GitHub Actions and cron/containerized runners with secret-safe defaults.
+- [x] Add scheduled-run templates for GitHub Actions and cron runners with secret-safe defaults.
 - [x] Add Microsoft Teams notification target with redacted connector-card payloads.
-- [x] Add generic webhook notification target with SSRF-safe URL validation and payload controls.
+- [ ] Harden generic webhook delivery with DNS- and redirect-safe SSRF validation.
 - [x] Add historical report storage and dashboard trend views with restrictive local file permissions.
 - [x] Add policy-as-code hooks for expected drift and security guardrails with no implicit shell execution and redacted bounded output.
 - [x] Add optional cost-impact enrichment for drifted resources with explicit external command arguments and redacted bounded output.
