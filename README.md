@@ -58,10 +58,16 @@ terradrift scan
 terradrift scan --directory ./terraform/prod
 terradrift scan -d ./terraform/prod
 terradrift scan -d ./terraform/prod --output json
+terradrift scan -d ./terraform/prod --output junit
+terradrift scan -d ./terraform/prod --output sarif
+terradrift scan -d ./terraform/prod --output prometheus
+terradrift scan-all --manifest terraform-roots.txt --concurrency 4 --output json
 terradrift scan -d ./terraform/prod --timeout 2m --redact-paths
 terradrift scan -d ./terraform/prod --workspace-root "$PWD"
 terradrift scan -d ./terraform/prod --terraform-exec --output json
+terradrift scan -d ./terraform/prod --terraform-exec --terraform-bin tofu
 terradrift scan --config .terradrift.json
+terradrift scan --config .terradrift.json --profile production
 terradrift scan -d ./terraform/prod --notify slack --slack-webhook-url "$SLACK_WEBHOOK_URL"
 terradrift scan -d ./terraform/prod --dashboard-html terradrift-report.html
 terradrift scan -d ./terraform/prod --history-dir .terradrift-history --dashboard-html terradrift-report.html
@@ -72,15 +78,54 @@ terradrift init
 
 If `--directory` is omitted, TerraDrift scans the current working directory.
 
+`scan-all` reads one Terraform root per line from a manifest. Blank lines and `#` comments are ignored, and relative roots resolve from the manifest's directory. It runs roots with bounded concurrency and emits aggregate table or JSON output. The first multi-root pass intentionally excludes notifications, history, dashboards, policies, and cost enrichment.
+
+Build a static cross-root dashboard index from recent history:
+
+```bash
+terradrift dashboard-index --history-dir .terradrift-history --output terradrift-index.html
+```
+
+Use `--discover <workspace>` to find roots containing `.tf` files. Repeat `--include` or `--exclude` with root-relative `filepath.Match` patterns; `.terraform` directories are always skipped. Use either `--manifest` or `--discover`, not both.
+
+```text
+# terraform-roots.txt
+environments/development
+environments/production
+```
+
 TerraDrift accepts any existing local directory at the CLI validation layer. When `--terraform-exec` is enabled, Terraform performs its own configuration validation and returns a scan failure if the selected directory is not usable Terraform configuration.
 
 The `--timeout` flag applies a scan-level deadline to the current and future scan pipeline. The `--redact-paths` flag replaces local filesystem paths in scan output with `[REDACTED]`, which is useful for CI logs.
 
 The `--workspace-root` flag evaluates symlinks and requires the selected Terraform directory to resolve inside the provided root, which is useful for constrained CI or hosted runner scenarios.
 
-By default, TerraDrift still emits the bootstrap no-drift report. Use `--terraform-exec` to run the Terraform CLI flow: `terraform init`, `terraform plan -refresh-only -detailed-exitcode`, and `terraform show -json`. This requires Terraform to be installed and available on `PATH`.
+By default, TerraDrift still emits the bootstrap no-drift report. Use `--terraform-exec` to run the Terraform-compatible CLI flow: `init`, `plan -refresh-only -detailed-exitcode`, and `show -json`. `--terraform-bin` selects the executable, defaulting to `terraform`; set it to `tofu` for OpenTofu. The executable must be available on `PATH`.
 
-The `terradrift init` command writes a starter `.terradrift.json` file with safe local defaults for repeated local or CI usage. Config files can also define optional scan settings such as `terraform_exec`, `workspace_root`, `notify`, `slack_webhook_url`, `teams_webhook_url`, `webhook_url`, `dashboard_html`, `history_dir`, `policy_command`, `policy_args`, `cost_command`, and `cost_args`; explicit CLI flags always take precedence.
+Terraform-backed scans create `.terradrift-scan.lock` in the selected root to prevent overlap. The lock is removed when the scan exits; after a crash, remove it only after confirming no scan is still active.
+
+The `terradrift init` command writes a starter `.terradrift.json` file with safe local defaults for repeated local or CI usage. Config files can also define optional scan settings such as `terraform_exec`, `terraform_bin`, `workspace_root`, `notify`, `slack_webhook_url`, `teams_webhook_url`, `webhook_url`, `dashboard_html`, `history_dir`, `policy_command`, `policy_args`, `cost_command`, `cost_args`, and `remediation_runbooks`; explicit CLI flags always take precedence.
+
+Use [`docs/terradrift.schema.json`](docs/terradrift.schema.json) as the JSON Schema reference for editor and CI validation.
+
+Supported local and CI configuration examples are in [`examples/config`](examples/config/README.md).
+
+See [architecture and report-stability guarantees](docs/ARCHITECTURE.md) before integrating report JSON with automation.
+
+Use `profiles` for standalone development, staging, and production configurations. Select one with `--profile`; profile values do not inherit top-level settings.
+
+```json
+{
+  "profiles": {
+    "production": {
+      "directory": "./terraform/prod",
+      "output": "json",
+      "terraform_exec": true,
+      "redact_paths": true
+    }
+  }
+}
+```
 
 Slack notifications are available with `--notify slack --slack-webhook-url "$SLACK_WEBHOOK_URL"`. Microsoft Teams notifications are available with `--notify teams --teams-webhook-url "$TEAMS_WEBHOOK_URL"`. Generic HTTPS webhooks are available with `--notify webhook --webhook-url "$WEBHOOK_URL"`. Notification messages use concise summaries and avoid including local filesystem paths or webhook secrets.
 
@@ -109,6 +154,20 @@ JSON output is available for automation:
   "completed_at": "2026-07-22T00:00:00Z"
 }
 ```
+
+JUnit XML output is available for CI test reporting. A detected drift result is reported as one failing `terradrift` test case.
+
+SARIF output is available for code-scanning dashboards. Each changed resource is emitted as an error-level `terradrift.drift` result without a local filesystem location.
+
+Prometheus text output exposes scan status, duration, and resource counts. It deliberately omits directory and resource labels to avoid exposing local paths or creating unbounded label cardinality.
+
+Serve local scan history with a loopback-only API:
+
+```bash
+terradrift serve --history-dir .terradrift-history
+```
+
+`GET /reports` returns recent history as JSON and `GET /` renders an escaped dashboard. The server accepts only loopback listener addresses and has no write endpoints.
 
 Without `--terraform-exec`, TerraDrift emits a bootstrap no-drift report after validating the selected directory.
 
@@ -176,6 +235,10 @@ make docker-build
 
 The current runtime image intentionally does not install Terraform. To use `--terraform-exec` in Docker, build a derived image that installs Terraform or mount/provide a trusted Terraform binary on `PATH`. Pin Terraform, provider, and module versions in CI for repeatable drift results.
 
+## Terraform caching
+
+For scheduled CI scans, set `TF_PLUGIN_CACHE_DIR` to a job cache directory and cache it using a key that includes the Terraform lockfile hash and platform. Keep `.terraform.lock.hcl` committed; invalidate the cache when it changes. Do not share plugin caches between trust boundaries.
+
 ## Terraform execution flow
 
 When `--terraform-exec` is provided, `terradrift scan` performs this flow:
@@ -216,9 +279,83 @@ Use `--cost-command <command>` to run an external cost tool before output, histo
 
 Cost tool output is bounded before parsing, command errors are redacted, and arguments must be passed explicitly with repeated `--cost-arg` flags. Matching `address` values are copied into each resource change as `cost_impact`.
 
+See [cost adapter guidance](docs/COST_ADAPTERS.md) for the normalized custom-command contract and Infracost workflow.
+
 ## Remediation guidance
 
 Each changed resource includes conservative remediation guidance based on Terraform plan actions. The guidance intentionally keeps a human in the loop and frames choices such as updating Terraform configuration, importing or syncing state, restoring deleted infrastructure, or reverting an out-of-band change only after review and approval.
+
+Reports also include review-only reconciliation hints for imports, moved blocks, and configuration updates. TerraDrift never runs state commands or applies infrastructure changes.
+
+Each finding has a conservative action-based risk level: replacement is `critical`, deletion `high`, creation or update `medium`, and other actions `low`. Use `--failure-severity high` or `failure_severity` in config to fail CI only for active drift at or above that threshold; leaving it empty preserves failure on any drift.
+
+Terraform-backed reports include the CLI version, selected provider versions, and initialized module key/source/version inventory. Local module directories are intentionally omitted.
+
+Each Terraform resource change is classified as `aws`, `azure`, or `gcp` from its provider metadata or resource type. Terraform value data, including account IDs, regions, tags, and potential secrets, is intentionally not parsed.
+
+Use exact-address `ignore_rules` for temporary, auditable exceptions. Each rule requires an owner, reason, and future RFC3339 expiry. Ignored findings stay visible in reports and dashboards but do not fail the scan.
+
+Route active findings by owner with `resource_owners` and `owner_webhooks`. Exact resource addresses override resource types; each owner webhook uses the same HTTPS-only webhook protections as normal notifications.
+
+Set `notification_throttle` to `true` with `history_dir` to suppress unchanged active drift notifications. New, removed, or higher-risk findings still notify; the first scan always notifies.
+
+Post scan summaries to a GitHub pull request with `github_repository`, `github_pr`, and `GITHUB_TOKEN`. The token is read only from the environment and requires `pull-requests: write` permission.
+
+```bash
+GITHUB_TOKEN="$GITHUB_TOKEN" terradrift scan --github-repository owner/repo --github-pr 42
+```
+
+Set `github_issue_after` to create one GitHub issue when the same active drift fingerprint reaches that many consecutive scans of the same history root. It requires `github_repository`, `history_dir`, `GITHUB_TOKEN`, and a value of at least `2`.
+
+Upload a JSON report to a presigned HTTPS URL with `--artifact-url` or `artifact_url`. This supports cloud object-storage uploads without storing cloud credentials in TerraDrift. Artifact URLs use the same HTTPS, public-destination, no-proxy, and no-redirect protections as generic webhooks.
+
+Create a review-only approval artifact for a JSON drift report, then attach it to later scan output with `--approval-file`. Approvals are bound to the active drift fingerprint and expiry; they never apply Terraform or modify state.
+
+```bash
+terradrift approve --report report.json --owner platform-team \
+  --reason "approved maintenance" --expires-at 2026-08-01T00:00:00Z
+terradrift scan --approval-file report.json.approval.json
+```
+
+Correlate drift with CloudTrail, Azure Activity Log, or GCP Audit Log through `--audit-command`; see [audit adapter guidance](docs/AUDIT_ADAPTERS.md).
+
+For CI, set `allowed_commands` and `trusted_command_dirs` in a profile. Bare commands must resolve on `PATH`; absolute commands must be under a trusted directory. Commands containing shell syntax are rejected.
+
+```json
+{
+  "resource_owners": {
+    "aws_instance": "platform",
+    "aws_instance.web": "web-team"
+  },
+  "owner_webhooks": {
+    "web-team": "https://alerts.example.com/web"
+  }
+}
+```
+
+```json
+{
+  "ignore_rules": [
+    {
+      "address": "aws_instance.web",
+      "owner": "platform-team",
+      "reason": "approved maintenance window",
+      "expires_at": "2026-08-01T00:00:00Z"
+    }
+  ]
+}
+```
+
+Set `remediation_runbooks` in `.terradrift.json` to link resources to HTTPS runbooks. Type/action entries override type entries:
+
+```json
+{
+  "remediation_runbooks": {
+    "aws_instance": "https://runbooks.example.com/instances",
+    "aws_s3_bucket/delete": "https://runbooks.example.com/bucket-deletion"
+  }
+}
+```
 
 ## Policy-as-code hooks
 
@@ -234,6 +371,8 @@ terradrift scan \
   --policy-arg test \
   --policy-arg -
 ```
+
+A reusable Conftest policy pack for destructive and production replacement drift is available in [`examples/policy`](examples/policy/README.md).
 
 ## Notifications
 
@@ -265,7 +404,7 @@ terradrift scan \
   --webhook-url "$WEBHOOK_URL"
 ```
 
-Slack, Teams, and generic webhook URLs are redacted in notification errors, and notification payload tests verify that local filesystem paths and webhook secrets are not included. Generic webhook URLs must use HTTPS, cannot include user info, and reject localhost, loopback, private, link-local, and unspecified IP hosts to reduce SSRF risk.
+Slack, Teams, and generic webhook URLs are redacted in notification errors, and notification payload tests verify that local filesystem paths and webhook secrets are not included. Generic webhook URLs must use HTTPS, cannot include user info, resolve only to allowed public IPs, and never follow redirects.
 
 ## Do you need to host TerraDrift?
 
@@ -320,12 +459,16 @@ jobs:
 ## Security considerations
 
 - Treat Terraform configuration, state, plans, provider output, and logs as sensitive.
+- Use encrypted remote state with state locking; do not copy production state into CI workspaces.
+- Prefer read-only cloud credentials for refresh-only drift scans and scope them to the scanned environment.
+- Store webhook URLs, GitHub tokens, artifact URLs, and cloud audit credentials in a secret manager or CI secret store.
 - Do not commit credentials, state files, generated plans, or logs containing secrets.
 - Use least-privilege cloud credentials for drift detection.
 - Do not log Slack webhook URLs or provider credentials.
 - Review Terraform modules and providers before scanning untrusted code.
 - Terraform contacts cloud APIs only when `--terraform-exec` is supplied.
 - See [SECURITY.md](SECURITY.md) for vulnerability reporting guidance.
+- See [drift-scan IAM and secret-scanning guidance](docs/DRIFT_SCAN_IAM.md) before configuring cloud credentials.
 
 ## Contributing
 

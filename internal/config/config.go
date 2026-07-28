@@ -1,31 +1,53 @@
 package config
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
+	"time"
+
+	"github.com/niravraychura/terradrift/internal/report"
 )
 
 const DefaultPath = ".terradrift.json"
 
 // Config stores repeatable TerraDrift CLI settings for local and CI usage.
 type Config struct {
-	Directory       string   `json:"directory"`
-	Output          string   `json:"output"`
-	Timeout         string   `json:"timeout"`
-	RedactPaths     bool     `json:"redact_paths"`
-	TerraformExec   bool     `json:"terraform_exec"`
-	WorkspaceRoot   string   `json:"workspace_root"`
-	Notify          string   `json:"notify"`
-	SlackWebhookURL string   `json:"slack_webhook_url"`
-	TeamsWebhookURL string   `json:"teams_webhook_url"`
-	WebhookURL      string   `json:"webhook_url"`
-	DashboardHTML   string   `json:"dashboard_html"`
-	HistoryDir      string   `json:"history_dir"`
-	PolicyCommand   string   `json:"policy_command"`
-	PolicyArgs      []string `json:"policy_args"`
-	CostCommand     string   `json:"cost_command"`
-	CostArgs        []string `json:"cost_args"`
+	Directory            string                     `json:"directory"`
+	Output               string                     `json:"output"`
+	Timeout              string                     `json:"timeout"`
+	RedactPaths          bool                       `json:"redact_paths"`
+	TerraformExec        bool                       `json:"terraform_exec"`
+	TerraformBin         string                     `json:"terraform_bin"`
+	WorkspaceRoot        string                     `json:"workspace_root"`
+	Notify               string                     `json:"notify"`
+	SlackWebhookURL      string                     `json:"slack_webhook_url"`
+	TeamsWebhookURL      string                     `json:"teams_webhook_url"`
+	WebhookURL           string                     `json:"webhook_url"`
+	DashboardHTML        string                     `json:"dashboard_html"`
+	HistoryDir           string                     `json:"history_dir"`
+	HistoryRetention     int                        `json:"history_retention"`
+	PolicyCommand        string                     `json:"policy_command"`
+	PolicyArgs           []string                   `json:"policy_args"`
+	CostCommand          string                     `json:"cost_command"`
+	CostArgs             []string                   `json:"cost_args"`
+	RemediationRunbooks  map[string]string          `json:"remediation_runbooks"`
+	IgnoreRules          []report.IgnoreRule        `json:"ignore_rules"`
+	FailureSeverity      string                     `json:"failure_severity"`
+	ResourceOwners       map[string]string          `json:"resource_owners"`
+	OwnerWebhooks        map[string]string          `json:"owner_webhooks"`
+	NotificationThrottle bool                       `json:"notification_throttle"`
+	GitHubRepository     string                     `json:"github_repository"`
+	GitHubPR             int                        `json:"github_pr"`
+	GitHubIssueAfter     int                        `json:"github_issue_after"`
+	ArtifactURL          string                     `json:"artifact_url"`
+	AuditCommand         string                     `json:"audit_command"`
+	AuditArgs            []string                   `json:"audit_args"`
+	AllowedCommands      []string                   `json:"allowed_commands"`
+	TrustedCommandDirs   []string                   `json:"trusted_command_dirs"`
+	Profiles             map[string]json.RawMessage `json:"profiles,omitempty"`
 }
 
 // Default returns a safe bootstrap configuration.
@@ -35,6 +57,11 @@ func Default() Config {
 
 // Load reads a TerraDrift JSON configuration file.
 func Load(path string) (Config, error) {
+	return LoadProfile(path, "")
+}
+
+// LoadProfile reads a config file and optionally selects a standalone named profile.
+func LoadProfile(path string, profile string) (Config, error) {
 	if path == "" {
 		path = DefaultPath
 	}
@@ -43,10 +70,61 @@ func Load(path string) (Config, error) {
 		return Config{}, fmt.Errorf("read config %s: %w", path, err)
 	}
 	cfg := Default()
-	if err := json.Unmarshal(data, &cfg); err != nil {
+	if err := decode(data, &cfg); err != nil {
 		return Config{}, fmt.Errorf("parse config %s: %w", path, err)
 	}
+	if profile == "" {
+		if err := cfg.Validate(); err != nil {
+			return Config{}, err
+		}
+		return cfg, nil
+	}
+	data, ok := cfg.Profiles[profile]
+	if !ok {
+		return Config{}, fmt.Errorf("config profile %q not found in %s", profile, path)
+	}
+	cfg = Default()
+	if err := decode(data, &cfg); err != nil {
+		return Config{}, fmt.Errorf("parse config profile %q in %s: %w", profile, path, err)
+	}
+	if err := cfg.Validate(); err != nil {
+		return Config{}, err
+	}
 	return cfg, nil
+}
+
+// Validate rejects invalid core settings before a scan starts.
+func (cfg Config) Validate() error {
+	timeout, err := time.ParseDuration(cfg.Timeout)
+	if err != nil || timeout <= 0 {
+		return fmt.Errorf("config timeout must be a positive duration")
+	}
+	switch strings.ToLower(strings.TrimSpace(cfg.Output)) {
+	case "table", "json", "junit", "sarif", "prometheus":
+	default:
+		return fmt.Errorf("unsupported config output %q", cfg.Output)
+	}
+	if cfg.Notify != "" {
+		switch strings.ToLower(strings.TrimSpace(cfg.Notify)) {
+		case "slack", "teams", "webhook":
+		default:
+			return fmt.Errorf("unsupported config notify target %q", cfg.Notify)
+		}
+	}
+	if cfg.FailureSeverity != "" {
+		switch cfg.FailureSeverity {
+		case "low", "medium", "high", "critical":
+		default:
+			return fmt.Errorf("unsupported config failure_severity %q", cfg.FailureSeverity)
+		}
+	}
+	return nil
+}
+
+func decode(data []byte, target any) error {
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	return decoder.Decode(target)
 }
 
 // WriteDefault writes the default configuration to path without overwriting existing files.

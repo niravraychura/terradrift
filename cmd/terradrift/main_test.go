@@ -4,11 +4,16 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/niravraychura/terradrift/internal/history"
 	"github.com/niravraychura/terradrift/internal/report"
 )
 
@@ -32,6 +37,149 @@ func TestScanDefaultsToCurrentDirectory(t *testing.T) {
 	}
 	if !strings.Contains(stdout, "Terraform directory: "+wd) {
 		t.Fatalf("expected stdout to include current directory %q, got %q", wd, stdout)
+	}
+}
+
+func TestScanAllLoadsRelativeManifestRoots(t *testing.T) {
+	root := t.TempDir()
+	for _, directory := range []string{"development", "production"} {
+		if err := os.Mkdir(filepath.Join(root, directory), 0o700); err != nil {
+			t.Fatalf("create root fixture: %v", err)
+		}
+	}
+	manifest := filepath.Join(root, "roots.txt")
+	if err := os.WriteFile(manifest, []byte("# Terraform roots\ndevelopment\nproduction\n"), 0o600); err != nil {
+		t.Fatalf("write manifest fixture: %v", err)
+	}
+
+	stdout, _, err := executeCommand("scan-all", "--manifest", manifest, "--output", "json", "--concurrency", "1")
+	if err != nil {
+		t.Fatalf("expected multi-root scan to succeed: %v", err)
+	}
+	var aggregate multiScanReport
+	if err := json.Unmarshal([]byte(stdout), &aggregate); err != nil {
+		t.Fatalf("expected aggregate JSON: %v", err)
+	}
+	if aggregate.TotalRoots != 2 || aggregate.FailedRoots != 0 || len(aggregate.Roots) != 2 {
+		t.Fatalf("unexpected aggregate: %#v", aggregate)
+	}
+}
+
+func TestDiscoverTerraformRootsHonorsPatterns(t *testing.T) {
+	root := t.TempDir()
+	for _, directory := range []string{"included", "excluded", ".terraform/cache"} {
+		if err := os.MkdirAll(filepath.Join(root, directory), 0o700); err != nil {
+			t.Fatalf("create root fixture: %v", err)
+		}
+		if err := os.WriteFile(filepath.Join(root, directory, "main.tf"), []byte("terraform {}"), 0o600); err != nil {
+			t.Fatalf("write Terraform fixture: %v", err)
+		}
+	}
+
+	directories, err := discoverTerraformRoots(root, []string{"included"}, []string{"excluded"})
+	if err != nil {
+		t.Fatalf("discover roots: %v", err)
+	}
+	if len(directories) != 1 || directories[0] != filepath.Join(root, "included") {
+		t.Fatalf("unexpected discovered roots: %#v", directories)
+	}
+}
+
+func TestHistoryHandlerServesReadOnlyReports(t *testing.T) {
+	historyDir := t.TempDir()
+	if _, err := history.Write(historyDir, report.DriftReport{Status: report.ScanStatusNoDrift}); err != nil {
+		t.Fatalf("write history fixture: %v", err)
+	}
+	handler := newHistoryHandler(historyDir, 10)
+
+	for _, path := range []string{"/reports", "/"} {
+		recorder := httptest.NewRecorder()
+		handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, path, nil))
+		if recorder.Code != http.StatusOK {
+			t.Fatalf("expected %s to succeed, got %d", path, recorder.Code)
+		}
+	}
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, "/reports", nil))
+	if recorder.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("expected writes to be rejected, got %d", recorder.Code)
+	}
+}
+
+func TestDashboardIndexWritesHistory(t *testing.T) {
+	historyDir := t.TempDir()
+	if _, err := history.Write(historyDir, report.DriftReport{Directory: "terraform/prod", Status: report.ScanStatusNoDrift}); err != nil {
+		t.Fatalf("write history fixture: %v", err)
+	}
+	output := filepath.Join(t.TempDir(), "index.html")
+	_, _, err := executeCommand("dashboard-index", "--history-dir", historyDir, "--output", output)
+	if err != nil {
+		t.Fatalf("expected dashboard index to succeed: %v", err)
+	}
+	data, err := os.ReadFile(output)
+	if err != nil {
+		t.Fatalf("read dashboard index: %v", err)
+	}
+	if !strings.Contains(string(data), "terraform/prod") {
+		t.Fatalf("expected dashboard index to contain history, got %q", data)
+	}
+}
+
+func TestApproveCreatesSecureArtifact(t *testing.T) {
+	reportPath := filepath.Join(t.TempDir(), "report.json")
+	data, err := json.Marshal(report.DriftReport{Status: report.ScanStatusDriftDetected, ResourceChanges: []report.ResourceChange{{Address: "aws_instance.web", Actions: []string{"update"}}}})
+	if err != nil {
+		t.Fatalf("encode report fixture: %v", err)
+	}
+	if err := os.WriteFile(reportPath, data, 0o600); err != nil {
+		t.Fatalf("write report fixture: %v", err)
+	}
+	approvalPath := filepath.Join(t.TempDir(), "approval.json")
+	_, _, err = executeCommand("approve", "--report", reportPath, "--owner", "platform", "--reason", "approved maintenance", "--expires-at", time.Now().Add(time.Hour).UTC().Format(time.RFC3339), "--output", approvalPath)
+	if err != nil {
+		t.Fatalf("create approval: %v", err)
+	}
+	info, err := os.Stat(approvalPath)
+	if err != nil || info.Mode().Perm() != 0o600 {
+		t.Fatalf("expected secure approval artifact, info=%v err=%v", info, err)
+	}
+}
+
+func TestScanHelpIncludesSafetyFlags(t *testing.T) {
+	stdout, _, err := executeCommand("scan", "--help")
+	if err != nil {
+		t.Fatalf("show scan help: %v", err)
+	}
+	for _, flag := range []string{"--terraform-exec", "--redact-paths", "--workspace-root", "--audit-command", "--approval-file"} {
+		if !strings.Contains(stdout, flag) {
+			t.Fatalf("expected scan help to contain %q", flag)
+		}
+	}
+}
+
+func TestWriteDashboardRejectsSymlink(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink fixture requires POSIX permissions")
+	}
+	target := filepath.Join(t.TempDir(), "target.html")
+	path := filepath.Join(t.TempDir(), "dashboard.html")
+	if err := os.Symlink(target, path); err != nil {
+		t.Fatalf("create symlink: %v", err)
+	}
+	if err := writeDashboard(path, report.DriftReport{}, nil); err == nil {
+		t.Fatal("expected symlink dashboard path to fail")
+	}
+}
+
+func TestShouldCreatePersistentIssue(t *testing.T) {
+	current := report.DriftReport{Directory: "terraform/prod", Status: report.ScanStatusDriftDetected, ResourceChanges: []report.ResourceChange{{Address: "aws_instance.web", Actions: []string{"update"}, RiskLevel: "medium"}}}
+	entries := []history.Entry{{Report: current}, {Report: current}}
+	if !shouldCreatePersistentIssue(current, entries, 3) {
+		t.Fatal("expected third matching scan to create an issue")
+	}
+	entries = append(entries, history.Entry{Report: current})
+	if shouldCreatePersistentIssue(current, entries, 3) {
+		t.Fatal("expected issue creation to occur only once per persistent sequence")
 	}
 }
 
@@ -118,10 +266,78 @@ func TestScanValidDirectoryJSONOutput(t *testing.T) {
 	}
 }
 
+func TestWriteScanReportJUnit(t *testing.T) {
+	var output bytes.Buffer
+	err := writeScanReport(&output, report.DriftReport{Status: report.ScanStatusDriftDetected, TotalChangedResources: 2}, outputFormatJUnit)
+	if err != nil {
+		t.Fatalf("expected JUnit output to succeed: %v", err)
+	}
+	for _, want := range []string{`<testsuite name="terradrift" tests="1" failures="1">`, `<failure message="2 resources changed"></failure>`} {
+		if !strings.Contains(output.String(), want) {
+			t.Fatalf("expected JUnit output to contain %q, got %q", want, output.String())
+		}
+	}
+}
+
+func TestWriteScanReportSARIF(t *testing.T) {
+	var output bytes.Buffer
+	err := writeScanReport(&output, report.DriftReport{ResourceChanges: []report.ResourceChange{{Address: "aws_instance.web"}}}, outputFormatSARIF)
+	if err != nil {
+		t.Fatalf("expected SARIF output to succeed: %v", err)
+	}
+	var log sarifLog
+	if err := json.Unmarshal(output.Bytes(), &log); err != nil {
+		t.Fatalf("expected valid SARIF JSON: %v", err)
+	}
+	if log.Version != "2.1.0" || len(log.Runs) != 1 || len(log.Runs[0].Results) != 1 || log.Runs[0].Results[0].Message.Text != "Terraform drift: aws_instance.web" {
+		t.Fatalf("unexpected SARIF log: %#v", log)
+	}
+}
+
+func TestWriteScanReportPrometheus(t *testing.T) {
+	var output bytes.Buffer
+	err := writeScanReport(&output, report.DriftReport{Status: report.ScanStatusDriftDetected, TotalResourcesChecked: 4, TotalChangedResources: 2}, outputFormatPrometheus)
+	if err != nil {
+		t.Fatalf("expected Prometheus output to succeed: %v", err)
+	}
+	for _, want := range []string{"# TYPE terradrift_scan_status gauge", `terradrift_scan_status{status="drift_detected"} 1`, "terradrift_resources_checked 4", "terradrift_resources_changed 2"} {
+		if !strings.Contains(output.String(), want) {
+			t.Fatalf("expected Prometheus output to contain %q, got %q", want, output.String())
+		}
+	}
+}
+
 func TestScanAcceptsTimeoutFlag(t *testing.T) {
 	_, _, err := executeCommand("scan", "-d", t.TempDir(), "--timeout", "1s")
 	if err != nil {
 		t.Fatalf("expected timeout flag to be accepted, got %v", err)
+	}
+}
+
+func TestScanUsesConfiguredTerraformBinary(t *testing.T) {
+	directory := t.TempDir()
+	if err := os.WriteFile(filepath.Join(directory, "main.tf"), []byte("terraform {}"), 0o600); err != nil {
+		t.Fatalf("write Terraform fixture: %v", err)
+	}
+	_, _, err := executeCommand("scan", "-d", directory, "--terraform-exec", "--terraform-bin", "tofu-not-installed")
+	if err == nil || !strings.Contains(err.Error(), "tofu-not-installed") {
+		t.Fatalf("expected configured Terraform binary error, got %v", err)
+	}
+}
+
+func TestScanUsesTerraformBinaryFromConfig(t *testing.T) {
+	directory := t.TempDir()
+	if err := os.WriteFile(filepath.Join(directory, "main.tf"), []byte("terraform {}"), 0o600); err != nil {
+		t.Fatalf("write Terraform fixture: %v", err)
+	}
+	path := filepath.Join(t.TempDir(), ".terradrift.json")
+	if err := os.WriteFile(path, []byte(`{"directory":"`+filepath.ToSlash(directory)+`","terraform_exec":true,"terraform_bin":"tofu-from-config"}`), 0o600); err != nil {
+		t.Fatalf("write config fixture: %v", err)
+	}
+
+	_, _, err := executeCommand("scan", "--config", path)
+	if err == nil || !strings.Contains(err.Error(), "tofu-from-config") {
+		t.Fatalf("expected configured Terraform binary error, got %v", err)
 	}
 }
 
@@ -166,6 +382,23 @@ func TestScanLoadsConfigFile(t *testing.T) {
 	}
 	if scanReport.Directory != "[REDACTED]" {
 		t.Fatalf("expected redacted directory from config, got %q", scanReport.Directory)
+	}
+}
+
+func TestScanLoadsConfigProfile(t *testing.T) {
+	directory := t.TempDir()
+	path := filepath.Join(t.TempDir(), ".terradrift.json")
+	configJSON := `{"profiles":{"production":{"directory":"` + filepath.ToSlash(directory) + `","output":"json"}}}`
+	if err := os.WriteFile(path, []byte(configJSON), 0o600); err != nil {
+		t.Fatalf("write config fixture: %v", err)
+	}
+
+	stdout, _, err := executeCommand("scan", "--config", path, "--profile", "production")
+	if err != nil {
+		t.Fatalf("expected profile config to load: %v", err)
+	}
+	if !json.Valid([]byte(stdout)) {
+		t.Fatalf("expected JSON output from profile, got %q", stdout)
 	}
 }
 

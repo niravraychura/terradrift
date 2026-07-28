@@ -28,7 +28,7 @@ func (notifier WebhookNotifier) Notify(ctx context.Context, scanReport report.Dr
 	}
 	client := notifier.Client
 	if client == nil {
-		client = http.DefaultClient
+		client = secureWebhookClient()
 	}
 
 	payload := webhookPayload{
@@ -97,7 +97,57 @@ func isBlockedWebhookHost(host string) bool {
 	if ip == nil {
 		return false
 	}
-	return ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsUnspecified()
+	return isBlockedWebhookIP(ip)
+}
+
+func isBlockedWebhookIP(ip net.IP) bool {
+	if ipv4 := ip.To4(); ipv4 != nil {
+		ip = ipv4
+	}
+	if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsMulticast() || ip.IsUnspecified() {
+		return true
+	}
+	return len(ip) == net.IPv4len && ip[0] == 100 && ip[1]&0xc0 == 0x40
+}
+
+func secureWebhookClient() *http.Client {
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.Proxy = nil
+	transport.DialContext = secureWebhookDialContext
+	return &http.Client{
+		Transport: transport,
+		CheckRedirect: func(*http.Request, []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+}
+
+func secureWebhookDialContext(ctx context.Context, network string, address string) (net.Conn, error) {
+	host, port, err := net.SplitHostPort(address)
+	if err != nil {
+		return nil, fmt.Errorf("split webhook address: %w", err)
+	}
+	addresses, err := net.DefaultResolver.LookupIP(ctx, "ip", host)
+	if err != nil {
+		return nil, fmt.Errorf("resolve webhook host: %w", err)
+	}
+
+	dialer := net.Dialer{}
+	var dialErr error
+	for _, ip := range addresses {
+		if isBlockedWebhookIP(ip) {
+			continue
+		}
+		connection, err := dialer.DialContext(ctx, network, net.JoinHostPort(ip.String(), port))
+		if err == nil {
+			return connection, nil
+		}
+		dialErr = err
+	}
+	if dialErr != nil {
+		return nil, fmt.Errorf("dial webhook host: %w", dialErr)
+	}
+	return nil, fmt.Errorf("webhook host has no allowed IP addresses")
 }
 
 type webhookPayload struct {

@@ -24,6 +24,9 @@ func Write(directory string, scanReport report.DriftReport) (string, error) {
 	if directory == "" {
 		return "", fmt.Errorf("history directory is required")
 	}
+	if info, err := os.Lstat(directory); err == nil && info.Mode()&os.ModeSymlink != 0 {
+		return "", fmt.Errorf("history directory must not be a symlink: %s", directory)
+	}
 	if err := os.MkdirAll(directory, 0o700); err != nil {
 		return "", fmt.Errorf("create history directory %s: %w", directory, err)
 	}
@@ -76,4 +79,22 @@ func LoadRecent(directory string, limit int) ([]Entry, error) {
 		entries = append(entries, Entry{Report: scanReport})
 	}
 	return entries, nil
+}
+
+// Prune removes all but the newest keep history reports.
+func Prune(directory string, keep int) error {
+	if keep <= 0 {
+		return fmt.Errorf("history retention must be greater than zero")
+	}
+	matches, err := filepath.Glob(filepath.Join(directory, "*.json"))
+	if err != nil {
+		return fmt.Errorf("list history reports %s: %w", directory, err)
+	}
+	sort.Sort(sort.Reverse(sort.StringSlice(matches)))
+	for _, path := range matches[keep:] {
+		if err := os.Remove(path); err != nil {
+			return fmt.Errorf("remove history report %s: %w", path, err)
+		}
+	}
+	return nil
 }

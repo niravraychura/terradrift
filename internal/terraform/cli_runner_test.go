@@ -2,6 +2,7 @@ package terraform
 
 import (
 	"context"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -51,6 +52,37 @@ exit 1
 	}
 	if strings.Contains(err.Error(), "super-secret") {
 		t.Fatalf("expected stderr secret to be redacted, got %v", err)
+	}
+}
+
+func TestLimitedWriterMarksTruncation(t *testing.T) {
+	writer := &limitedWriter{w: io.Discard, n: 1}
+	if _, err := writer.Write([]byte("ab")); err != nil || !writer.truncated {
+		t.Fatalf("expected truncation, err=%v", err)
+	}
+}
+
+func TestCLIRunnerInventory(t *testing.T) {
+	directory := t.TempDir()
+	modulesDir := filepath.Join(directory, ".terraform", "modules")
+	if err := os.MkdirAll(modulesDir, 0o700); err != nil {
+		t.Fatalf("create modules fixture: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(modulesDir, "modules.json"), []byte(`{"Modules":[{"Key":"network","Source":"hashicorp/network/aws","Version":"1.0.0"}]}`), 0o600); err != nil {
+		t.Fatalf("write modules fixture: %v", err)
+	}
+	runner := NewCLIRunner(writeTerraformStub(t, `#!/bin/sh
+if [ "$1" = "version" ]; then
+  printf '{"terraform_version":"1.10.0","provider_selections":{"registry.terraform.io/hashicorp/aws":"5.0.0"}}'
+fi
+`))
+
+	inventory, err := runner.Inventory(context.Background(), directory)
+	if err != nil {
+		t.Fatalf("inventory: %v", err)
+	}
+	if inventory.TerraformVersion != "1.10.0" || inventory.ProviderVersions["registry.terraform.io/hashicorp/aws"] != "5.0.0" || len(inventory.Modules) != 1 || inventory.Modules[0].Source != "hashicorp/network/aws" {
+		t.Fatalf("unexpected inventory: %#v", inventory)
 	}
 }
 

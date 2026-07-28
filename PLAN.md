@@ -48,11 +48,79 @@ This plan tracks security, performance, code quality, and feature work for Terra
 - [x] Consider a self-hosted dashboard only after the CLI workflow is stable.
 - [x] Add scheduled-run templates for GitHub Actions and cron runners with secret-safe defaults.
 - [x] Add Microsoft Teams notification target with redacted connector-card payloads.
-- [ ] Harden generic webhook delivery with DNS- and redirect-safe SSRF validation.
+- [x] Harden generic webhook delivery with DNS- and redirect-safe SSRF validation.
 - [x] Add historical report storage and dashboard trend views with restrictive local file permissions.
 - [x] Add policy-as-code hooks for expected drift and security guardrails with no implicit shell execution and redacted bounded output.
 - [x] Add optional cost-impact enrichment for drifted resources with explicit external command arguments and redacted bounded output.
 - [x] Add human-reviewed remediation guidance for update-code, sync-state, and revert-infrastructure workflows.
+
+## Future feature backlog
+
+- [x] Add manifest-based multi-root scans with bounded concurrency and aggregate reports.
+- [x] Add automatic multi-root workspace discovery with include and exclude paths.
+- [x] Add first-class OpenTofu binary selection, documentation, and tests.
+- [x] Ship OPA and Conftest policy-pack examples for high-risk drift.
+- [x] Document adapters for Infracost and custom cost APIs.
+- [x] Add conservative action-based risk scoring.
+- [x] Add exact-address and resource-type ownership mapping with HTTPS webhook routing.
+- [x] Add notification throttling for unchanged drift with severity-based escalation.
+- [x] Add optional GitHub issue creation for persistent drift findings.
+- [x] Add SARIF output for code-scanning dashboards.
+- [x] Add JUnit XML output for CI test reporting.
+- [x] Add Prometheus metrics for scan status, duration, resource counts, and failures.
+- [x] Add a static dashboard index across roots and historical trends.
+- [x] Add configurable remediation runbook URLs by resource type and action.
+- [x] Add a human approval workflow for remediation suggestions.
+- [x] Add review-only state reconciliation hints for imports, moved blocks, and configuration updates.
+- [x] Add cloud audit-event correlation through explicit external adapters.
+- [x] Add baseline and ignore rules with owners, reasons, expirations, and audit trails.
+- [x] Add severity gates for CI failure behavior.
+- [x] Add GitHub pull-request scan-result summaries for infrastructure repositories.
+- [x] Add remote report artifact upload through presigned HTTPS URLs.
+- [x] Add named configuration profiles for development, staging, and production scans.
+- [x] Add workspace locks to prevent overlapping scans of the same Terraform root.
+- [x] Add provider-aware AWS, Azure, and GCP classification from Terraform metadata.
+- [x] Add Terraform, provider, and module version inventory reporting.
+- [x] Add an optional read-only local API for serving report history.
+
+## Review Follow-ups
+
+- [x] Add external-command allowlists and trusted-path validation; use profiles for CI-safe presets.
+- [ ] Bound notification response bodies and complete output/input size budgets.
+- [ ] Redact `ErrorMessage` before JSON, history, dashboards, policy input, and notification delivery.
+- [ ] Redact Terraform plan sensitive fields and marks before any future value expansion.
+- [x] Reject direct symlink targets for dashboard and history output paths.
+- [x] Document backend/state safety and secret-managed integration credentials.
+- [x] Document repository secret scanning and least-privilege AWS, Azure, and GCP IAM guidance.
+- [ ] Add release supply-chain controls: checksums, SBOM, provenance, SHA-pinned Actions examples, image signing, Docker scanning, and license policy checks.
+- [ ] Add secret-safe structured audit logging with scan, config, workspace, version, and command metadata.
+- [x] Test and reject unexpected Terraform detailed-exit codes; context cancellation is covered.
+- [ ] Parse Terraform output-value changes, action reasons, replacement reasons, and deleted-resource context.
+- [ ] Add safe Terraform initialization controls for lockfiles, upgrades, backends, and plugin caching.
+- [ ] Add stable scan IDs to reports, history, notifications, and dashboards.
+- [ ] Skip malformed history files with warnings instead of failing dashboard rendering.
+- [x] Reject unknown config fields during loading.
+- [x] Validate core config values early during loading.
+- [x] Publish a `.terradrift.json` JSON Schema.
+- [ ] Add credential-free Terraform integration tests and golden plan-JSON fixtures.
+- [x] Sort resource changes by address for deterministic output.
+- [ ] Model complete, partial, and drift outcomes for multi-root scans.
+- [x] Bound Terraform command output and fail explicitly on truncation.
+- [x] Fail fast when Terraform-backed roots have no configuration.
+- [x] Document Terraform provider/plugin caching with `TF_PLUGIN_CACHE_DIR` and CI cache keys.
+- [ ] Parallelize independent post-scan enrichment and delivery work safely.
+- [x] Add local history retention pruning.
+- [ ] Add incremental scan manifests and optional compressed history artifacts.
+- [ ] Normalize workspace and output paths once through a validated execution context.
+- [ ] Add typed option validation and typed errors across config, scan, notification, policy, and cost boundaries.
+- [x] Refresh stale package documentation for implemented behavior.
+- [ ] Add complete comments for exported APIs.
+- [x] Add a non-mutating `make ci` target for local quality checks.
+- [x] Add CLI help safety-flag coverage.
+- [x] Produce CI coverage output and function summaries.
+- [ ] Add changelog automation and release automation.
+- [x] Add supported local and CI configuration examples.
+- [x] Document stable JSON report guarantees and package architecture/scan-sequence design.
 
 ## Ongoing quality gates
 
