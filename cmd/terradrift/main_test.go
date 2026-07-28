@@ -42,6 +42,16 @@ func TestScanDefaultsToCurrentDirectory(t *testing.T) {
 	}
 }
 
+func TestReadLimitedFileRejectsOversizedInput(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "report.json")
+	if err := os.WriteFile(path, make([]byte, 2), 0o600); err != nil {
+		t.Fatalf("write report fixture: %v", err)
+	}
+	if _, err := readLimitedFile(path, 1); err == nil {
+		t.Fatal("expected oversized file to fail")
+	}
+}
+
 func TestScanAllLoadsRelativeManifestRoots(t *testing.T) {
 	root := t.TempDir()
 	for _, directory := range []string{"development", "production"} {
