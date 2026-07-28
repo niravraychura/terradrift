@@ -83,6 +83,8 @@ The `--workspace-root` flag evaluates symlinks and requires the selected Terrafo
 
 By default, TerraDrift still emits the bootstrap no-drift report. Use `--terraform-exec` to run the Terraform-compatible CLI flow: `init`, `plan -refresh-only -detailed-exitcode`, and `show -json`. `--terraform-bin` selects the executable, defaulting to `terraform`; set it to `tofu` for OpenTofu. The executable must be available on `PATH`.
 
+Terraform-backed scans create `.terradrift-scan.lock` in the selected root to prevent overlap. The lock is removed when the scan exits; after a crash, remove it only after confirming no scan is still active.
+
 The `terradrift init` command writes a starter `.terradrift.json` file with safe local defaults for repeated local or CI usage. Config files can also define optional scan settings such as `terraform_exec`, `terraform_bin`, `workspace_root`, `notify`, `slack_webhook_url`, `teams_webhook_url`, `webhook_url`, `dashboard_html`, `history_dir`, `policy_command`, `policy_args`, `cost_command`, and `cost_args`; explicit CLI flags always take precedence.
 
 Slack notifications are available with `--notify slack --slack-webhook-url "$SLACK_WEBHOOK_URL"`. Microsoft Teams notifications are available with `--notify teams --teams-webhook-url "$TEAMS_WEBHOOK_URL"`. Generic HTTPS webhooks are available with `--notify webhook --webhook-url "$WEBHOOK_URL"`. Notification messages use concise summaries and avoid including local filesystem paths or webhook secrets.

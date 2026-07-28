@@ -117,6 +117,7 @@ func TestValidateWorkspaceRootRejectsDirectoryOutsideRoot(t *testing.T) {
 }
 
 func TestScanWithRunnerReturnsDriftDetected(t *testing.T) {
+	directory := t.TempDir()
 	runner := &fakeRunner{
 		planExit: 2,
 		showJSON: []byte(`{
@@ -126,7 +127,7 @@ func TestScanWithRunnerReturnsDriftDetected(t *testing.T) {
 		}`),
 	}
 
-	result, err := Scan(context.Background(), Options{Directory: t.TempDir(), Runner: runner})
+	result, err := Scan(context.Background(), Options{Directory: directory, Runner: runner})
 	if err != nil {
 		t.Fatalf("expected scan to succeed: %v", err)
 	}
@@ -141,6 +142,24 @@ func TestScanWithRunnerReturnsDriftDetected(t *testing.T) {
 	}
 	if _, err := os.Stat(runner.planPath); !os.IsNotExist(err) {
 		t.Fatalf("expected secure plan file to be cleaned up, stat err=%v", err)
+	}
+	if _, err := os.Stat(filepath.Join(directory, scanLockFilename)); !os.IsNotExist(err) {
+		t.Fatalf("expected scan lock to be cleaned up, stat err=%v", err)
+	}
+}
+
+func TestScanWithRunnerRejectsExistingLock(t *testing.T) {
+	directory := t.TempDir()
+	if err := os.WriteFile(filepath.Join(directory, scanLockFilename), []byte("123"), 0o600); err != nil {
+		t.Fatalf("write lock fixture: %v", err)
+	}
+
+	result, err := Scan(context.Background(), Options{Directory: directory, Runner: &fakeRunner{}})
+	if err == nil || !strings.Contains(err.Error(), "already running") {
+		t.Fatalf("expected existing lock error, got %v", err)
+	}
+	if result.Outcome != OutcomeFailed {
+		t.Fatalf("expected failed outcome, got %q", result.Outcome)
 	}
 }
 

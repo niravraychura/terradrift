@@ -77,7 +77,7 @@ This plan tracks security, performance, code quality, and feature work for Terra
 - [ ] Add pull-request scan-result summaries for infrastructure repositories.
 - [ ] Add remote artifact upload for reports and dashboards with safe defaults.
 - [ ] Add named configuration profiles for development, staging, and production scans.
-- [ ] Add workspace locks to prevent overlapping scans of the same Terraform root.
+- [x] Add workspace locks to prevent overlapping scans of the same Terraform root.
 - [ ] Add provider-aware enrichment for AWS, Azure, and GCP context.
 - [ ] Add Terraform, provider, and module version inventory reporting.
 - [ ] Add an optional read-only local API for serving report history.

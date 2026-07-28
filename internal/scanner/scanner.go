@@ -16,6 +16,8 @@ import (
 
 const DefaultTimeout = 5 * time.Minute
 
+const scanLockFilename = ".terradrift-scan.lock"
+
 // Outcome describes the automation-relevant result of a scan.
 type Outcome string
 
@@ -75,6 +77,12 @@ func Scan(ctx context.Context, options Options) (Result, error) {
 		}}, nil
 	}
 
+	unlock, err := acquireScanLock(absDir)
+	if err != nil {
+		return Result{Outcome: OutcomeFailed}, err
+	}
+	defer unlock()
+
 	scanReport, err := runTerraformScan(ctx, options.Runner, absDir)
 	if err != nil {
 		return Result{Outcome: OutcomeFailed, Report: scanReport}, err
@@ -85,6 +93,28 @@ func Scan(ctx context.Context, options Options) (Result, error) {
 	}
 	scanReport.Status = report.ScanStatusNoDrift
 	return Result{Outcome: OutcomeNoDrift, Report: scanReport}, nil
+}
+
+func acquireScanLock(directory string) (func(), error) {
+	path := filepath.Join(directory, scanLockFilename)
+	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	if err != nil {
+		if os.IsExist(err) {
+			return nil, fmt.Errorf("terraform scan already running for %s; remove stale %s after confirming no scan is active", directory, path)
+		}
+		return nil, fmt.Errorf("create terraform scan lock: %w", err)
+	}
+	if _, err := fmt.Fprintln(file, os.Getpid()); err != nil {
+		_ = file.Close()
+		_ = os.Remove(path)
+		return nil, fmt.Errorf("write terraform scan lock: %w", err)
+	}
+	if err := file.Close(); err != nil {
+		_ = os.Remove(path)
+		return nil, fmt.Errorf("close terraform scan lock: %w", err)
+	}
+	// ponytail: local O_EXCL lock; use a shared lock service for distributed runners.
+	return func() { _ = os.Remove(path) }, nil
 }
 
 // ValidateWorkspaceRoot ensures directory resolves inside workspaceRoot after symlink evaluation.
