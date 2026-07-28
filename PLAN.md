@@ -94,7 +94,8 @@ This plan tracks security, performance, code quality, and feature work for Terra
 - [x] Reject direct symlink targets for dashboard and history output paths.
 - [x] Document backend/state safety and secret-managed integration credentials.
 - [x] Document repository secret scanning and least-privilege AWS, Azure, and GCP IAM guidance.
-- [ ] Add release supply-chain controls: checksums, SBOM, provenance, SHA-pinned Actions examples, image signing, Docker scanning, and license policy checks.
+- [x] Pin third-party GitHub Actions to immutable SHAs in CI and user-facing examples.
+- [ ] Add release checksums, SBOM, provenance, image signing/scanning, and license policy checks.
 - [ ] Add secret-safe structured audit logging with scan, config, workspace, version, and command metadata.
 - [x] Test and reject unexpected Terraform detailed-exit codes; context cancellation is covered.
 - [x] Parse Terraform output-change actions and resource action reasons without retaining Terraform values or sensitive marks.

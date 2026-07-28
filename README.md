@@ -437,10 +437,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout infrastructure
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up Terraform
-        uses: hashicorp/setup-terraform@v3
+        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
 
       - name: Run TerraDrift
         run: terradrift scan --directory ./terraform/prod --output json
