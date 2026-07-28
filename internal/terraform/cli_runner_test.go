@@ -55,6 +55,24 @@ exit 1
 	}
 }
 
+func TestCLIRunnerInitUsesSafeFlags(t *testing.T) {
+	runner := NewCLIRunner(writeTerraformStub(t, `#!/bin/sh
+printf '%s' "$*" > "$TERRADRIFT_ARGS"
+`))
+	argsPath := filepath.Join(t.TempDir(), "args")
+	t.Setenv("TERRADRIFT_ARGS", argsPath)
+	if err := runner.Init(context.Background(), t.TempDir()); err != nil {
+		t.Fatalf("init: %v", err)
+	}
+	data, err := os.ReadFile(argsPath)
+	if err != nil {
+		t.Fatalf("read arguments: %v", err)
+	}
+	if string(data) != "init -input=false -backend=true -lockfile=readonly" {
+		t.Fatalf("unexpected init arguments: %q", data)
+	}
+}
+
 func TestLimitedWriterMarksTruncation(t *testing.T) {
 	writer := &limitedWriter{w: io.Discard, n: 1}
 	if _, err := writer.Write([]byte("ab")); err != nil || !writer.truncated {

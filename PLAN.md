@@ -96,7 +96,7 @@ This plan tracks security, performance, code quality, and feature work for Terra
 - [ ] Add secret-safe structured audit logging with scan, config, workspace, version, and command metadata.
 - [x] Test and reject unexpected Terraform detailed-exit codes; context cancellation is covered.
 - [x] Parse Terraform output-change actions and resource action reasons without retaining Terraform values or sensitive marks.
-- [ ] Add safe Terraform initialization controls for lockfiles, upgrades, backends, and plugin caching.
+- [x] Use read-only Terraform lockfiles, disable implicit upgrades, retain backend initialization, and document isolated plugin caching.
 - [x] Add stable scan IDs to reports, history, notifications, and dashboards.
 - [x] Skip malformed history files with warnings instead of failing dashboard rendering.
 - [x] Reject unknown config fields during loading.

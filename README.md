@@ -244,7 +244,7 @@ For scheduled CI scans, set `TF_PLUGIN_CACHE_DIR` to a job cache directory and c
 When `--terraform-exec` is provided, `terradrift scan` performs this flow:
 
 1. Validate the Terraform directory.
-2. Run `terraform init`.
+2. Run `terraform init -input=false -backend=true -lockfile=readonly`. A committed `.terraform.lock.hcl` is required; TerraDrift never upgrades providers or rewrites the lockfile.
 3. Run `terraform plan -refresh-only -detailed-exitcode -out <planfile>`.
 4. Run `terraform show -json <planfile>`.
 5. Parse the JSON plan.

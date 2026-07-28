@@ -44,7 +44,8 @@ func NewCLIRunner(path string) CLIRunner {
 }
 
 func (runner CLIRunner) Init(ctx context.Context, directory string) error {
-	_, err := runner.run(ctx, directory, "init", "-input=false")
+	// Drift scans must neither upgrade providers nor modify the dependency lock file.
+	_, err := runner.run(ctx, directory, "init", "-input=false", "-backend=true", "-lockfile=readonly")
 	return err
 }
 
