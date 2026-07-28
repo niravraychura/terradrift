@@ -145,6 +145,18 @@ func TestApproveCreatesSecureArtifact(t *testing.T) {
 	}
 }
 
+func TestScanHelpIncludesSafetyFlags(t *testing.T) {
+	stdout, _, err := executeCommand("scan", "--help")
+	if err != nil {
+		t.Fatalf("show scan help: %v", err)
+	}
+	for _, flag := range []string{"--terraform-exec", "--redact-paths", "--workspace-root", "--audit-command", "--approval-file"} {
+		if !strings.Contains(stdout, flag) {
+			t.Fatalf("expected scan help to contain %q", flag)
+		}
+	}
+}
+
 func TestWriteDashboardRejectsSymlink(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("symlink fixture requires POSIX permissions")

@@ -113,7 +113,8 @@ This plan tracks security, performance, code quality, and feature work for Terra
 - [x] Refresh stale package documentation for implemented behavior.
 - [ ] Add complete comments for exported APIs.
 - [x] Add a non-mutating `make ci` target for local quality checks.
-- [ ] Add CLI help snapshots, coverage reports, changelog automation, and release automation.
+- [x] Add CLI help safety-flag coverage.
+- [ ] Add coverage reports, changelog automation, and release automation.
 - [x] Add supported local and CI configuration examples.
 - [x] Document stable JSON report guarantees and package architecture/scan-sequence design.
 
