@@ -1,2 +1,2 @@
-// Package config will contain TerraDrift configuration loading and validation.
+// Package config loads and validates TerraDrift configuration.
 package config

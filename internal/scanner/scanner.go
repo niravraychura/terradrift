@@ -41,7 +41,7 @@ type Result struct {
 	Report  report.DriftReport
 }
 
-// Scan validates the requested Terraform directory and returns a bootstrap no-drift result.
+// Scan validates the requested Terraform directory and optionally runs Terraform.
 func Scan(ctx context.Context, options Options) (Result, error) {
 	if options.Timeout <= 0 {
 		options.Timeout = DefaultTimeout

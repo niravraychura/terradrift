@@ -110,7 +110,8 @@ This plan tracks security, performance, code quality, and feature work for Terra
 - [ ] Add incremental scan manifests, history retention pruning, and optional compressed history artifacts.
 - [ ] Normalize workspace and output paths once through a validated execution context.
 - [ ] Add typed option validation and typed errors across config, scan, notification, policy, and cost boundaries.
-- [ ] Refresh stale package documentation and add complete comments for exported APIs.
+- [x] Refresh stale package documentation for implemented behavior.
+- [ ] Add complete comments for exported APIs.
 - [x] Add a non-mutating `make ci` target for local quality checks.
 - [ ] Add CLI help snapshots, coverage reports, changelog automation, and release automation.
 - [x] Add supported local and CI configuration examples.
