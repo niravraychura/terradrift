@@ -79,8 +79,45 @@ func newRootCommand(stdout, stderr io.Writer) *cobra.Command {
 	cmd.SetErr(stderr)
 	cmd.AddCommand(newScanCommand(stdout))
 	cmd.AddCommand(newScanAllCommand(stdout))
+	cmd.AddCommand(newDashboardIndexCommand(stdout))
 	cmd.AddCommand(newServeCommand(stdout))
 	cmd.AddCommand(newInitCommand(stdout))
+	return cmd
+}
+
+func newDashboardIndexCommand(stdout io.Writer) *cobra.Command {
+	var historyDir string
+	var output string
+	var limit int
+	cmd := &cobra.Command{
+		Use:   "dashboard-index",
+		Short: "Write a static dashboard index from scan history",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if limit <= 0 {
+				return fmt.Errorf("limit must be greater than zero")
+			}
+			entries, err := history.LoadRecent(historyDir, limit)
+			if err != nil {
+				return err
+			}
+			file, err := os.OpenFile(output, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
+			if err != nil {
+				return fmt.Errorf("create dashboard index %s: %w", output, err)
+			}
+			if err := dashboard.RenderIndex(file, entries); err != nil {
+				_ = file.Close()
+				return err
+			}
+			if err := file.Close(); err != nil {
+				return fmt.Errorf("close dashboard index %s: %w", output, err)
+			}
+			_, err = fmt.Fprintf(stdout, "Wrote dashboard index: %s\n", output)
+			return err
+		},
+	}
+	cmd.Flags().StringVar(&historyDir, "history-dir", ".terradrift-history", "directory containing scan history")
+	cmd.Flags().StringVar(&output, "output", "terradrift-index.html", "HTML dashboard index path")
+	cmd.Flags().IntVar(&limit, "limit", 100, "maximum history reports to include")
 	return cmd
 }
 

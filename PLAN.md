@@ -68,7 +68,7 @@ This plan tracks security, performance, code quality, and feature work for Terra
 - [x] Add SARIF output for code-scanning dashboards.
 - [x] Add JUnit XML output for CI test reporting.
 - [x] Add Prometheus metrics for scan status, duration, resource counts, and failures.
-- [ ] Add a static dashboard index across roots and historical trends.
+- [x] Add a static dashboard index across roots and historical trends.
 - [x] Add configurable remediation runbook URLs by resource type and action.
 - [ ] Add a human approval workflow for remediation suggestions.
 - [x] Add review-only state reconciliation hints for imports, moved blocks, and configuration updates.

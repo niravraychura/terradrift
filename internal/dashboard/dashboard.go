@@ -45,10 +45,33 @@ var reportTemplate = template.Must(template.New("dashboard").Parse(`<!doctype ht
 </html>
 `))
 
+var indexTemplate = template.Must(template.New("dashboard-index").Parse(`<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>TerraDrift Dashboard Index</title></head>
+<body>
+  <main>
+    <h1>TerraDrift Dashboard Index</h1>
+    <table>
+      <thead><tr><th>Directory</th><th>Completed at</th><th>Status</th><th>Resources checked</th><th>Changed resources</th></tr></thead>
+      <tbody>{{range .}}<tr><td>{{.Report.Directory}}</td><td>{{.Report.CompletedAt}}</td><td>{{.Report.Status}}</td><td>{{.Report.TotalResourcesChecked}}</td><td>{{.Report.TotalChangedResources}}</td></tr>{{else}}<tr><td colspan="5">No history available</td></tr>{{end}}</tbody>
+    </table>
+  </main>
+</body>
+</html>
+`))
+
 // RenderWithHistory writes a static, escaped HTML dashboard with optional history.
 func RenderWithHistory(w io.Writer, data Data) error {
 	if err := reportTemplate.Execute(w, data); err != nil {
 		return fmt.Errorf("render dashboard: %w", err)
+	}
+	return nil
+}
+
+// RenderIndex writes an escaped static index across recent scan history.
+func RenderIndex(w io.Writer, entries []history.Entry) error {
+	if err := indexTemplate.Execute(w, entries); err != nil {
+		return fmt.Errorf("render dashboard index: %w", err)
 	}
 	return nil
 }

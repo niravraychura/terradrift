@@ -80,6 +80,12 @@ If `--directory` is omitted, TerraDrift scans the current working directory.
 
 `scan-all` reads one Terraform root per line from a manifest. Blank lines and `#` comments are ignored, and relative roots resolve from the manifest's directory. It runs roots with bounded concurrency and emits aggregate table or JSON output. The first multi-root pass intentionally excludes notifications, history, dashboards, policies, and cost enrichment.
 
+Build a static cross-root dashboard index from recent history:
+
+```bash
+terradrift dashboard-index --history-dir .terradrift-history --output terradrift-index.html
+```
+
 Use `--discover <workspace>` to find roots containing `.tf` files. Repeat `--include` or `--exclude` with root-relative `filepath.Match` patterns; `.terraform` directories are always skipped. Use either `--manifest` or `--discover`, not both.
 
 ```text

@@ -104,6 +104,25 @@ func TestHistoryHandlerServesReadOnlyReports(t *testing.T) {
 	}
 }
 
+func TestDashboardIndexWritesHistory(t *testing.T) {
+	historyDir := t.TempDir()
+	if _, err := history.Write(historyDir, report.DriftReport{Directory: "terraform/prod", Status: report.ScanStatusNoDrift}); err != nil {
+		t.Fatalf("write history fixture: %v", err)
+	}
+	output := filepath.Join(t.TempDir(), "index.html")
+	_, _, err := executeCommand("dashboard-index", "--history-dir", historyDir, "--output", output)
+	if err != nil {
+		t.Fatalf("expected dashboard index to succeed: %v", err)
+	}
+	data, err := os.ReadFile(output)
+	if err != nil {
+		t.Fatalf("read dashboard index: %v", err)
+	}
+	if !strings.Contains(string(data), "terraform/prod") {
+		t.Fatalf("expected dashboard index to contain history, got %q", data)
+	}
+}
+
 func TestScanRejectsNonexistentDirectory(t *testing.T) {
 	missing := filepath.Join(t.TempDir(), "missing")
 	_, _, err := executeCommand("scan", "--directory", missing)
