@@ -85,7 +85,7 @@ By default, TerraDrift still emits the bootstrap no-drift report. Use `--terrafo
 
 Terraform-backed scans create `.terradrift-scan.lock` in the selected root to prevent overlap. The lock is removed when the scan exits; after a crash, remove it only after confirming no scan is still active.
 
-The `terradrift init` command writes a starter `.terradrift.json` file with safe local defaults for repeated local or CI usage. Config files can also define optional scan settings such as `terraform_exec`, `terraform_bin`, `workspace_root`, `notify`, `slack_webhook_url`, `teams_webhook_url`, `webhook_url`, `dashboard_html`, `history_dir`, `policy_command`, `policy_args`, `cost_command`, and `cost_args`; explicit CLI flags always take precedence.
+The `terradrift init` command writes a starter `.terradrift.json` file with safe local defaults for repeated local or CI usage. Config files can also define optional scan settings such as `terraform_exec`, `terraform_bin`, `workspace_root`, `notify`, `slack_webhook_url`, `teams_webhook_url`, `webhook_url`, `dashboard_html`, `history_dir`, `policy_command`, `policy_args`, `cost_command`, `cost_args`, and `remediation_runbooks`; explicit CLI flags always take precedence.
 
 Slack notifications are available with `--notify slack --slack-webhook-url "$SLACK_WEBHOOK_URL"`. Microsoft Teams notifications are available with `--notify teams --teams-webhook-url "$TEAMS_WEBHOOK_URL"`. Generic HTTPS webhooks are available with `--notify webhook --webhook-url "$WEBHOOK_URL"`. Notification messages use concise summaries and avoid including local filesystem paths or webhook secrets.
 
@@ -228,6 +228,17 @@ Cost tool output is bounded before parsing, command errors are redacted, and arg
 ## Remediation guidance
 
 Each changed resource includes conservative remediation guidance based on Terraform plan actions. The guidance intentionally keeps a human in the loop and frames choices such as updating Terraform configuration, importing or syncing state, restoring deleted infrastructure, or reverting an out-of-band change only after review and approval.
+
+Set `remediation_runbooks` in `.terradrift.json` to link resources to HTTPS runbooks. Type/action entries override type entries:
+
+```json
+{
+  "remediation_runbooks": {
+    "aws_instance": "https://runbooks.example.com/instances",
+    "aws_s3_bucket/delete": "https://runbooks.example.com/bucket-deletion"
+  }
+}
+```
 
 ## Policy-as-code hooks
 

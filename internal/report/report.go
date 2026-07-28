@@ -20,6 +20,7 @@ type ResourceChange struct {
 	Name        string   `json:"name"`
 	Actions     []string `json:"actions"`
 	Remediation string   `json:"remediation,omitempty"`
+	RunbookURL  string   `json:"runbook_url,omitempty"`
 	CostImpact  string   `json:"cost_impact,omitempty"`
 }
 

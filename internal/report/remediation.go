@@ -1,5 +1,10 @@
 package report
 
+import (
+	"fmt"
+	"net/url"
+)
+
 // RemediationForActions returns human-reviewed remediation guidance for Terraform drift actions.
 func RemediationForActions(actions []string) string {
 	if hasAction(actions, "delete") && hasAction(actions, "create") {
@@ -18,6 +23,29 @@ func RemediationForActions(actions []string) string {
 		return "Review refreshed resource values and verify whether provider-side changes require Terraform configuration or state updates."
 	}
 	return "Review the drifted resource with the owning team before changing infrastructure or Terraform state."
+}
+
+// ApplyRunbooks attaches validated runbook URLs by resource type or type/action.
+func ApplyRunbooks(scanReport *DriftReport, runbooks map[string]string) error {
+	for i := range scanReport.ResourceChanges {
+		change := &scanReport.ResourceChanges[i]
+		runbookURL := runbooks[change.Type]
+		for _, action := range change.Actions {
+			if actionURL, ok := runbooks[change.Type+"/"+action]; ok {
+				runbookURL = actionURL
+				break
+			}
+		}
+		if runbookURL == "" {
+			continue
+		}
+		parsed, err := url.Parse(runbookURL)
+		if err != nil || parsed.Scheme != "https" || parsed.Host == "" || parsed.User != nil {
+			return fmt.Errorf("invalid runbook URL for %s: must be an HTTPS URL without user info", change.Type)
+		}
+		change.RunbookURL = parsed.String()
+	}
+	return nil
 }
 
 func hasAction(actions []string, want string) bool {

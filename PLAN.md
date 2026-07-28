@@ -68,7 +68,7 @@ This plan tracks security, performance, code quality, and feature work for Terra
 - [x] Add JUnit XML output for CI test reporting.
 - [ ] Add Prometheus metrics for scan status, duration, resource counts, and failures.
 - [ ] Add a static dashboard index across roots and historical trends.
-- [ ] Add configurable remediation runbook URLs by resource type and action.
+- [x] Add configurable remediation runbook URLs by resource type and action.
 - [ ] Add a human approval workflow for remediation suggestions.
 - [ ] Add review-only state reconciliation hints for imports, moved blocks, and configuration updates.
 - [ ] Add cloud audit-event correlation for drift findings.

@@ -108,6 +108,7 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 	var policyArgs []string
 	var costCommand string
 	var costArgs []string
+	var remediationRunbooks map[string]string
 
 	cmd := &cobra.Command{
 		Use:   "scan",
@@ -176,6 +177,7 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 				if !cmd.Flags().Changed("cost-arg") {
 					costArgs = append([]string(nil), cfg.CostArgs...)
 				}
+				remediationRunbooks = cfg.RemediationRunbooks
 			}
 
 			parsedFormat, err := parseOutputFormat(format)
@@ -204,6 +206,9 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 					return err
 				}
 				scanReport = enrichedReport
+			}
+			if err := report.ApplyRunbooks(&scanReport, remediationRunbooks); err != nil {
+				return err
 			}
 			if redactPaths {
 				scanReport.Directory = "[REDACTED]"

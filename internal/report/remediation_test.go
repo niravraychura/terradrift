@@ -21,3 +21,20 @@ func TestRemediationForActions(t *testing.T) {
 		})
 	}
 }
+
+func TestApplyRunbooks(t *testing.T) {
+	scanReport := DriftReport{ResourceChanges: []ResourceChange{{Type: "aws_instance", Actions: []string{"update"}}, {Type: "aws_s3_bucket", Actions: []string{"delete"}}}}
+	if err := ApplyRunbooks(&scanReport, map[string]string{"aws_instance": "https://example.com/instance", "aws_s3_bucket/delete": "https://example.com/bucket-delete"}); err != nil {
+		t.Fatalf("apply runbooks: %v", err)
+	}
+	if scanReport.ResourceChanges[0].RunbookURL != "https://example.com/instance" || scanReport.ResourceChanges[1].RunbookURL != "https://example.com/bucket-delete" {
+		t.Fatalf("unexpected runbooks: %#v", scanReport.ResourceChanges)
+	}
+}
+
+func TestApplyRunbooksRejectsUnsafeURL(t *testing.T) {
+	err := ApplyRunbooks(&DriftReport{ResourceChanges: []ResourceChange{{Type: "aws_instance"}}}, map[string]string{"aws_instance": "http://example.com/runbook"})
+	if err == nil {
+		t.Fatal("expected unsafe runbook URL to be rejected")
+	}
+}

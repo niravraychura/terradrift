@@ -10,23 +10,24 @@ const DefaultPath = ".terradrift.json"
 
 // Config stores repeatable TerraDrift CLI settings for local and CI usage.
 type Config struct {
-	Directory       string   `json:"directory"`
-	Output          string   `json:"output"`
-	Timeout         string   `json:"timeout"`
-	RedactPaths     bool     `json:"redact_paths"`
-	TerraformExec   bool     `json:"terraform_exec"`
-	TerraformBin    string   `json:"terraform_bin"`
-	WorkspaceRoot   string   `json:"workspace_root"`
-	Notify          string   `json:"notify"`
-	SlackWebhookURL string   `json:"slack_webhook_url"`
-	TeamsWebhookURL string   `json:"teams_webhook_url"`
-	WebhookURL      string   `json:"webhook_url"`
-	DashboardHTML   string   `json:"dashboard_html"`
-	HistoryDir      string   `json:"history_dir"`
-	PolicyCommand   string   `json:"policy_command"`
-	PolicyArgs      []string `json:"policy_args"`
-	CostCommand     string   `json:"cost_command"`
-	CostArgs        []string `json:"cost_args"`
+	Directory           string            `json:"directory"`
+	Output              string            `json:"output"`
+	Timeout             string            `json:"timeout"`
+	RedactPaths         bool              `json:"redact_paths"`
+	TerraformExec       bool              `json:"terraform_exec"`
+	TerraformBin        string            `json:"terraform_bin"`
+	WorkspaceRoot       string            `json:"workspace_root"`
+	Notify              string            `json:"notify"`
+	SlackWebhookURL     string            `json:"slack_webhook_url"`
+	TeamsWebhookURL     string            `json:"teams_webhook_url"`
+	WebhookURL          string            `json:"webhook_url"`
+	DashboardHTML       string            `json:"dashboard_html"`
+	HistoryDir          string            `json:"history_dir"`
+	PolicyCommand       string            `json:"policy_command"`
+	PolicyArgs          []string          `json:"policy_args"`
+	CostCommand         string            `json:"cost_command"`
+	CostArgs            []string          `json:"cost_args"`
+	RemediationRunbooks map[string]string `json:"remediation_runbooks"`
 }
 
 // Default returns a safe bootstrap configuration.
