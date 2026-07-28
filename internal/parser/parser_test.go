@@ -9,7 +9,7 @@ import (
 func TestParsePlanReturnsChangedResourcesAndTotals(t *testing.T) {
 	plan := []byte(`{
 		"resource_changes": [
-			{"address":"aws_instance.web","type":"aws_instance","name":"web","change":{"actions":["update"]}},
+			{"address":"aws_instance.web","type":"aws_instance","name":"web","provider_name":"registry.terraform.io/hashicorp/aws","change":{"actions":["update"]}},
 			{"address":"aws_s3_bucket.logs","type":"aws_s3_bucket","name":"logs","change":{"actions":["no-op"]}},
 			{"address":"aws_db_instance.db","type":"aws_db_instance","name":"db","change":{"actions":["delete","create"]}}
 		]
@@ -25,7 +25,7 @@ func TestParsePlanReturnsChangedResourcesAndTotals(t *testing.T) {
 	if len(changes) != 2 {
 		t.Fatalf("expected 2 changed resources, got %d", len(changes))
 	}
-	if changes[0].Address != "aws_instance.web" || changes[0].Actions[0] != "update" || changes[0].Remediation == "" || changes[0].ReconciliationHint == "" {
+	if changes[0].Address != "aws_instance.web" || changes[0].Actions[0] != "update" || changes[0].Remediation == "" || changes[0].ReconciliationHint == "" || changes[0].CloudProvider != "aws" {
 		t.Fatalf("unexpected first change: %#v", changes[0])
 	}
 	if changes[1].Address != "aws_db_instance.db" || len(changes[1].Actions) != 2 {

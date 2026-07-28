@@ -76,6 +76,18 @@ func TestRiskLevelAndSeverity(t *testing.T) {
 	}
 }
 
+func TestCloudProviderFor(t *testing.T) {
+	for _, test := range []struct{ provider, resourceType, want string }{
+		{"registry.terraform.io/hashicorp/aws", "aws_instance", "aws"},
+		{"registry.terraform.io/hashicorp/azurerm", "azurerm_linux_vm", "azure"},
+		{"registry.terraform.io/hashicorp/google", "google_compute_instance", "gcp"},
+	} {
+		if got := CloudProviderFor(test.provider, test.resourceType); got != test.want {
+			t.Fatalf("CloudProviderFor(%q, %q) = %q, want %q", test.provider, test.resourceType, got, test.want)
+		}
+	}
+}
+
 func TestShouldNotifySuppressesOnlyUnchangedDrift(t *testing.T) {
 	previous := DriftReport{Status: ScanStatusDriftDetected, ResourceChanges: []ResourceChange{{Address: "aws_instance.web", Actions: []string{"update"}, RiskLevel: "medium"}}}
 	if ShouldNotify(previous, previous) {

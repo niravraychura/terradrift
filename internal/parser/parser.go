@@ -12,10 +12,11 @@ type terraformPlan struct {
 }
 
 type terraformResourceChange struct {
-	Address string          `json:"address"`
-	Type    string          `json:"type"`
-	Name    string          `json:"name"`
-	Change  terraformChange `json:"change"`
+	Address      string          `json:"address"`
+	Type         string          `json:"type"`
+	Name         string          `json:"name"`
+	ProviderName string          `json:"provider_name"`
+	Change       terraformChange `json:"change"`
 }
 
 type terraformChange struct {
@@ -42,6 +43,8 @@ func ParsePlan(data []byte) ([]report.ResourceChange, int, error) {
 			Remediation:        report.RemediationForActions(resourceChange.Change.Actions),
 			ReconciliationHint: report.ReconciliationHintForActions(resourceChange.Change.Actions),
 			RiskLevel:          report.RiskLevelForActions(resourceChange.Change.Actions),
+			Provider:           resourceChange.ProviderName,
+			CloudProvider:      report.CloudProviderFor(resourceChange.ProviderName, resourceChange.Type),
 		})
 	}
 

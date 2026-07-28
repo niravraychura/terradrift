@@ -25,6 +25,8 @@ type ResourceChange struct {
 	CostImpact         string   `json:"cost_impact,omitempty"`
 	RiskLevel          string   `json:"risk_level,omitempty"`
 	Owner              string   `json:"owner,omitempty"`
+	Provider           string   `json:"provider,omitempty"`
+	CloudProvider      string   `json:"cloud_provider,omitempty"`
 	Ignored            bool     `json:"ignored,omitempty"`
 	IgnoreOwner        string   `json:"ignore_owner,omitempty"`
 	IgnoreReason       string   `json:"ignore_reason,omitempty"`

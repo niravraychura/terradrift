@@ -281,6 +281,8 @@ Each finding has a conservative action-based risk level: replacement is `critica
 
 Terraform-backed reports include the CLI version, selected provider versions, and initialized module key/source/version inventory. Local module directories are intentionally omitted.
 
+Each Terraform resource change is classified as `aws`, `azure`, or `gcp` from its provider metadata or resource type. Terraform value data, including account IDs, regions, tags, and potential secrets, is intentionally not parsed.
+
 Use exact-address `ignore_rules` for temporary, auditable exceptions. Each rule requires an owner, reason, and future RFC3339 expiry. Ignored findings stay visible in reports and dashboards but do not fail the scan.
 
 Route active findings by owner with `resource_owners` and `owner_webhooks`. Exact resource addresses override resource types; each owner webhook uses the same HTTPS-only webhook protections as normal notifications.

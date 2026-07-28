@@ -3,6 +3,7 @@ package report
 import (
 	"fmt"
 	"net/url"
+	"strings"
 )
 
 // RemediationForActions returns human-reviewed remediation guidance for Terraform drift actions.
@@ -23,6 +24,22 @@ func RemediationForActions(actions []string) string {
 		return "Review refreshed resource values and verify whether provider-side changes require Terraform configuration or state updates."
 	}
 	return "Review the drifted resource with the owning team before changing infrastructure or Terraform state."
+}
+
+// CloudProviderFor identifies supported cloud providers from Terraform metadata.
+func CloudProviderFor(provider string, resourceType string) string {
+	provider = strings.ToLower(provider)
+	resourceType = strings.ToLower(resourceType)
+	switch {
+	case strings.Contains(provider, "/aws") || strings.HasPrefix(resourceType, "aws_"):
+		return "aws"
+	case strings.Contains(provider, "/azurerm") || strings.HasPrefix(resourceType, "azurerm_"):
+		return "azure"
+	case strings.Contains(provider, "/google") || strings.HasPrefix(resourceType, "google_"):
+		return "gcp"
+	default:
+		return ""
+	}
 }
 
 // ReconciliationHintForActions returns review-only state reconciliation guidance.
