@@ -297,6 +297,8 @@ GITHUB_TOKEN="$GITHUB_TOKEN" terradrift scan --github-repository owner/repo --gi
 
 Set `github_issue_after` to create one GitHub issue when the same active drift fingerprint reaches that many consecutive scans of the same history root. It requires `github_repository`, `history_dir`, `GITHUB_TOKEN`, and a value of at least `2`.
 
+Upload a JSON report to a presigned HTTPS URL with `--artifact-url` or `artifact_url`. This supports cloud object-storage uploads without storing cloud credentials in TerraDrift. Artifact URLs use the same HTTPS, public-destination, no-proxy, and no-redirect protections as generic webhooks.
+
 ```json
 {
   "resource_owners": {

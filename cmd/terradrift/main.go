@@ -339,6 +339,7 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 	var githubRepository string
 	var githubPR int
 	var githubIssueAfter int
+	var artifactURL string
 
 	cmd := &cobra.Command{
 		Use:   "scan",
@@ -421,6 +422,9 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 				if !cmd.Flags().Changed("github-issue-after") {
 					githubIssueAfter = cfg.GitHubIssueAfter
 				}
+				if !cmd.Flags().Changed("artifact-url") {
+					artifactURL = cfg.ArtifactURL
+				}
 				if !cmd.Flags().Changed("failure-severity") {
 					failureSeverity = cfg.FailureSeverity
 				}
@@ -471,6 +475,15 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 			}
 			if err := writeScanReport(stdout, scanReport, parsedFormat); err != nil {
 				return err
+			}
+			if artifactURL != "" {
+				artifact, err := json.Marshal(scanReport)
+				if err != nil {
+					return fmt.Errorf("encode report artifact: %w", err)
+				}
+				if err := (notify.ArtifactUploader{URL: artifactURL}).Upload(cmd.Context(), artifact, "application/json"); err != nil {
+					return err
+				}
 			}
 			var historyEntries []history.Entry
 			var previousReport report.DriftReport
@@ -576,6 +589,7 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 	cmd.Flags().StringVar(&githubRepository, "github-repository", "", "GitHub repository for pull request summary (owner/repo)")
 	cmd.Flags().IntVar(&githubPR, "github-pr", 0, "GitHub pull request number for scan summary")
 	cmd.Flags().IntVar(&githubIssueAfter, "github-issue-after", 0, "create a GitHub issue after this many consecutive matching drift scans")
+	cmd.Flags().StringVar(&artifactURL, "artifact-url", "", "presigned HTTPS URL to upload the JSON report")
 	cmd.Flags().StringVar(&dashboardHTMLPath, "dashboard-html", "", "write a static HTML dashboard report to this path")
 	cmd.Flags().StringVar(&historyDir, "history-dir", "", "write JSON scan history to this directory and include recent history in dashboards")
 	cmd.Flags().StringVar(&policyCommand, "policy-command", "", "policy command to run with the scan report JSON on stdin")

@@ -76,7 +76,7 @@ This plan tracks security, performance, code quality, and feature work for Terra
 - [x] Add baseline and ignore rules with owners, reasons, expirations, and audit trails.
 - [x] Add severity gates for CI failure behavior.
 - [x] Add GitHub pull-request scan-result summaries for infrastructure repositories.
-- [ ] Add remote artifact upload for reports and dashboards with safe defaults.
+- [x] Add remote report artifact upload through presigned HTTPS URLs.
 - [x] Add named configuration profiles for development, staging, and production scans.
 - [x] Add workspace locks to prevent overlapping scans of the same Terraform root.
 - [x] Add provider-aware AWS, Azure, and GCP classification from Terraform metadata.
