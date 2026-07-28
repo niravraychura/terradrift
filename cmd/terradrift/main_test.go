@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/niravraychura/terradrift/internal/history"
 	"github.com/niravraychura/terradrift/internal/report"
+	"github.com/niravraychura/terradrift/internal/scanner"
 )
 
 func executeCommand(args ...string) (string, string, error) {
@@ -60,8 +62,33 @@ func TestScanAllLoadsRelativeManifestRoots(t *testing.T) {
 	if err := json.Unmarshal([]byte(stdout), &aggregate); err != nil {
 		t.Fatalf("expected aggregate JSON: %v", err)
 	}
-	if aggregate.TotalRoots != 2 || aggregate.FailedRoots != 0 || len(aggregate.Roots) != 2 {
+	if aggregate.Status != multiScanStatusComplete || aggregate.TotalRoots != 2 || aggregate.FailedRoots != 0 || len(aggregate.Roots) != 2 {
 		t.Fatalf("unexpected aggregate: %#v", aggregate)
+	}
+}
+
+func TestMultiScanStatus(t *testing.T) {
+	for _, test := range []struct {
+		total, drifted, failed int
+		want                   multiScanStatus
+	}{
+		{total: 2, want: multiScanStatusComplete},
+		{total: 2, drifted: 1, want: multiScanStatusDriftDetected},
+		{total: 2, failed: 1, want: multiScanStatusPartial},
+		{total: 2, failed: 2, want: multiScanStatusFailed},
+	} {
+		if got := multiScanStatusFor(test.total, test.drifted, test.failed); got != test.want {
+			t.Fatalf("status(%d, %d, %d) = %q, want %q", test.total, test.drifted, test.failed, got, test.want)
+		}
+	}
+}
+
+func TestScanAllReportsPartialOutcome(t *testing.T) {
+	valid := t.TempDir()
+	missing := filepath.Join(t.TempDir(), "missing")
+	aggregate := scanAll(context.Background(), []string{valid, missing}, scanner.Options{}, 1, false)
+	if aggregate.Status != multiScanStatusPartial || aggregate.FailedRoots != 1 {
+		t.Fatalf("expected partial aggregate, got %#v", aggregate)
 	}
 }
 

@@ -891,6 +891,7 @@ func writeScanReport(stdout io.Writer, scanReport report.DriftReport, format out
 }
 
 type multiScanReport struct {
+	Status                multiScanStatus `json:"status"`
 	Roots                 []multiScanRoot `json:"roots"`
 	TotalRoots            int             `json:"total_roots"`
 	DriftedRoots          int             `json:"drifted_roots"`
@@ -898,6 +899,15 @@ type multiScanReport struct {
 	TotalResourcesChecked int             `json:"total_resources_checked"`
 	TotalChangedResources int             `json:"total_changed_resources"`
 }
+
+type multiScanStatus string
+
+const (
+	multiScanStatusComplete      multiScanStatus = "complete"
+	multiScanStatusDriftDetected multiScanStatus = "drift_detected"
+	multiScanStatusPartial       multiScanStatus = "partial"
+	multiScanStatusFailed        multiScanStatus = "failed"
+)
 
 type multiScanRoot struct {
 	Directory string             `json:"directory"`
@@ -1043,7 +1053,21 @@ func scanAll(ctx context.Context, directories []string, options scanner.Options,
 			aggregate.DriftedRoots++
 		}
 	}
+	aggregate.Status = multiScanStatusFor(aggregate.TotalRoots, aggregate.DriftedRoots, aggregate.FailedRoots)
 	return aggregate
+}
+
+func multiScanStatusFor(totalRoots, driftedRoots, failedRoots int) multiScanStatus {
+	if failedRoots == totalRoots {
+		return multiScanStatusFailed
+	}
+	if failedRoots > 0 {
+		return multiScanStatusPartial
+	}
+	if driftedRoots > 0 {
+		return multiScanStatusDriftDetected
+	}
+	return multiScanStatusComplete
 }
 
 func writeMultiScanReport(stdout io.Writer, aggregate multiScanReport, format outputFormat) error {
@@ -1057,6 +1081,7 @@ func writeMultiScanReport(stdout io.Writer, aggregate multiScanReport, format ou
 	}
 	for _, line := range []string{
 		"TerraDrift multi-root scan complete",
+		fmt.Sprintf("Status: %s", aggregate.Status),
 		fmt.Sprintf("Roots scanned: %d", aggregate.TotalRoots),
 		fmt.Sprintf("Drifted roots: %d", aggregate.DriftedRoots),
 		fmt.Sprintf("Failed roots: %d", aggregate.FailedRoots),
