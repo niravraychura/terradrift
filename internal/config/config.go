@@ -28,6 +28,7 @@ type Config struct {
 	WebhookURL           string                     `json:"webhook_url"`
 	DashboardHTML        string                     `json:"dashboard_html"`
 	HistoryDir           string                     `json:"history_dir"`
+	HistoryRetention     int                        `json:"history_retention"`
 	PolicyCommand        string                     `json:"policy_command"`
 	PolicyArgs           []string                   `json:"policy_args"`
 	CostCommand          string                     `json:"cost_command"`

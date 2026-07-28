@@ -109,7 +109,8 @@ This plan tracks security, performance, code quality, and feature work for Terra
 - [x] Fail fast when Terraform-backed roots have no configuration.
 - [x] Document Terraform provider/plugin caching with `TF_PLUGIN_CACHE_DIR` and CI cache keys.
 - [ ] Parallelize independent post-scan enrichment and delivery work safely.
-- [ ] Add incremental scan manifests, history retention pruning, and optional compressed history artifacts.
+- [x] Add local history retention pruning.
+- [ ] Add incremental scan manifests and optional compressed history artifacts.
 - [ ] Normalize workspace and output paths once through a validated execution context.
 - [ ] Add typed option validation and typed errors across config, scan, notification, policy, and cost boundaries.
 - [x] Refresh stale package documentation for implemented behavior.

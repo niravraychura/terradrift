@@ -53,6 +53,21 @@ func TestWriteRejectsSymlinkDirectory(t *testing.T) {
 	}
 }
 
+func TestPruneKeepsNewestReports(t *testing.T) {
+	dir := t.TempDir()
+	for _, name := range []string{"1.json", "2.json"} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte("{}"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := Prune(dir, 1); err != nil {
+		t.Fatalf("prune: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "2.json")); err != nil {
+		t.Fatal("expected newest report")
+	}
+}
+
 func TestWriteStoresRedactedReportAsProvided(t *testing.T) {
 	dir := t.TempDir()
 	path, err := Write(dir, report.DriftReport{Status: report.ScanStatusNoDrift, Directory: "[REDACTED]"})

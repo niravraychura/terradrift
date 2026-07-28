@@ -390,6 +390,7 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 	var webhookURL string
 	var dashboardHTMLPath string
 	var historyDir string
+	var historyRetention int
 	var policyCommand string
 	var policyArgs []string
 	var costCommand string
@@ -464,6 +465,9 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 				}
 				if !cmd.Flags().Changed("history-dir") {
 					historyDir = cfg.HistoryDir
+				}
+				if !cmd.Flags().Changed("history-retention") {
+					historyRetention = cfg.HistoryRetention
 				}
 				if !cmd.Flags().Changed("policy-command") {
 					policyCommand = cfg.PolicyCommand
@@ -607,6 +611,11 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 				if _, err := history.Write(historyDir, scanReport); err != nil {
 					return err
 				}
+				if historyRetention > 0 {
+					if err := history.Prune(historyDir, historyRetention); err != nil {
+						return err
+					}
+				}
 				entries, err = history.LoadRecent(historyDir, 10)
 				if err != nil {
 					return err
@@ -701,6 +710,7 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 	cmd.Flags().StringArrayVar(&auditArgs, "audit-arg", nil, "audit command argument; repeat for multiple arguments")
 	cmd.Flags().StringVar(&dashboardHTMLPath, "dashboard-html", "", "write a static HTML dashboard report to this path")
 	cmd.Flags().StringVar(&historyDir, "history-dir", "", "write JSON scan history to this directory and include recent history in dashboards")
+	cmd.Flags().IntVar(&historyRetention, "history-retention", 0, "maximum history reports to retain (0 keeps all)")
 	cmd.Flags().StringVar(&policyCommand, "policy-command", "", "policy command to run with the scan report JSON on stdin")
 	cmd.Flags().StringArrayVar(&policyArgs, "policy-arg", nil, "policy command argument; repeat for multiple arguments")
 	cmd.Flags().StringVar(&costCommand, "cost-command", "", "cost command to enrich the scan report from JSON stdin/stdout")
