@@ -106,6 +106,8 @@ Terraform-backed scans create `.terradrift-scan.lock` in the selected root to pr
 
 The `terradrift init` command writes a starter `.terradrift.json` file with safe local defaults for repeated local or CI usage. Config files can also define optional scan settings such as `terraform_exec`, `terraform_bin`, `workspace_root`, `notify`, `slack_webhook_url`, `teams_webhook_url`, `webhook_url`, `dashboard_html`, `history_dir`, `policy_command`, `policy_args`, `cost_command`, `cost_args`, and `remediation_runbooks`; explicit CLI flags always take precedence.
 
+Use [`docs/terradrift.schema.json`](docs/terradrift.schema.json) as the JSON Schema reference for editor and CI validation.
+
 Use `profiles` for standalone development, staging, and production configurations. Select one with `--profile`; profile values do not inherit top-level settings.
 
 ```json
