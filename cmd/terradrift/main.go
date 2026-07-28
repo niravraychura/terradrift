@@ -42,6 +42,8 @@ const (
 	exitCodeDriftDetected = 2
 )
 
+const maxArtifactBytes = 1 << 20
+
 type outputFormat string
 
 const (
@@ -590,6 +592,9 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 				artifact, err := json.Marshal(scanReport)
 				if err != nil {
 					return fmt.Errorf("encode report artifact: %w", err)
+				}
+				if len(artifact) > maxArtifactBytes {
+					return fmt.Errorf("report artifact exceeds %d bytes", maxArtifactBytes)
 				}
 				if err := (notify.ArtifactUploader{URL: artifactURL}).Upload(cmd.Context(), artifact, "application/json"); err != nil {
 					return err
