@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"net"
+	"net/http"
 	"os"
 	"path/filepath"
 	"sort"
@@ -77,8 +79,109 @@ func newRootCommand(stdout, stderr io.Writer) *cobra.Command {
 	cmd.SetErr(stderr)
 	cmd.AddCommand(newScanCommand(stdout))
 	cmd.AddCommand(newScanAllCommand(stdout))
+	cmd.AddCommand(newServeCommand(stdout))
 	cmd.AddCommand(newInitCommand(stdout))
 	return cmd
+}
+
+func newServeCommand(stdout io.Writer) *cobra.Command {
+	var historyDir string
+	var listen string
+	var limit int
+	cmd := &cobra.Command{
+		Use:   "serve",
+		Short: "Serve local scan history over a read-only API",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateLocalListenAddress(listen); err != nil {
+				return err
+			}
+			if limit <= 0 {
+				return fmt.Errorf("limit must be greater than zero")
+			}
+			listener, err := net.Listen("tcp", listen)
+			if err != nil {
+				return fmt.Errorf("listen on %s: %w", listen, err)
+			}
+			server := &http.Server{Handler: newHistoryHandler(historyDir, limit), ReadHeaderTimeout: 5 * time.Second}
+			go func() {
+				<-cmd.Context().Done()
+				_ = server.Shutdown(context.Background())
+			}()
+			if _, err := fmt.Fprintf(stdout, "Serving scan history at http://%s\n", listener.Addr()); err != nil {
+				_ = listener.Close()
+				return fmt.Errorf("write server address: %w", err)
+			}
+			if err := server.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
+				return fmt.Errorf("serve scan history: %w", err)
+			}
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&historyDir, "history-dir", ".terradrift-history", "directory containing scan history")
+	cmd.Flags().StringVar(&listen, "listen", "127.0.0.1:8080", "loopback address to listen on")
+	cmd.Flags().IntVar(&limit, "limit", 50, "maximum reports to serve")
+	return cmd
+}
+
+func validateLocalListenAddress(address string) error {
+	host, _, err := net.SplitHostPort(address)
+	if err != nil {
+		return fmt.Errorf("parse listen address: %w", err)
+	}
+	if strings.EqualFold(host, "localhost") {
+		return nil
+	}
+	ip := net.ParseIP(host)
+	if ip == nil || !ip.IsLoopback() {
+		return fmt.Errorf("listen address must be loopback-only")
+	}
+	return nil
+}
+
+func newHistoryHandler(historyDir string, limit int) http.Handler {
+	load := func() ([]history.Entry, error) {
+		return history.LoadRecent(historyDir, limit)
+	}
+	mux := http.NewServeMux()
+	mux.HandleFunc("/reports", func(w http.ResponseWriter, request *http.Request) {
+		if request.Method != http.MethodGet {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		entries, err := load()
+		if err != nil {
+			http.Error(w, "load scan history", http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(entries); err != nil {
+			return
+		}
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, request *http.Request) {
+		if request.Method != http.MethodGet {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		if request.URL.Path != "/" {
+			http.NotFound(w, request)
+			return
+		}
+		entries, err := load()
+		if err != nil {
+			http.Error(w, "load scan history", http.StatusInternalServerError)
+			return
+		}
+		data := dashboard.Data{History: entries}
+		if len(entries) > 0 {
+			data.Current = entries[0].Report
+		}
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		if err := dashboard.RenderWithHistory(w, data); err != nil {
+			return
+		}
+	})
+	return mux
 }
 
 func newScanAllCommand(stdout io.Writer) *cobra.Command {

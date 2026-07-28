@@ -149,6 +149,14 @@ SARIF output is available for code-scanning dashboards. Each changed resource is
 
 Prometheus text output exposes scan status, duration, and resource counts. It deliberately omits directory and resource labels to avoid exposing local paths or creating unbounded label cardinality.
 
+Serve local scan history with a loopback-only API:
+
+```bash
+terradrift serve --history-dir .terradrift-history
+```
+
+`GET /reports` returns recent history as JSON and `GET /` renders an escaped dashboard. The server accepts only loopback listener addresses and has no write endpoints.
+
 Without `--terraform-exec`, TerraDrift emits a bootstrap no-drift report after validating the selected directory.
 
 ## Installation and local development

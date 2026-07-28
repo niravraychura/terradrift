@@ -4,11 +4,14 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/niravraychura/terradrift/internal/history"
 	"github.com/niravraychura/terradrift/internal/report"
 )
 
@@ -77,6 +80,27 @@ func TestDiscoverTerraformRootsHonorsPatterns(t *testing.T) {
 	}
 	if len(directories) != 1 || directories[0] != filepath.Join(root, "included") {
 		t.Fatalf("unexpected discovered roots: %#v", directories)
+	}
+}
+
+func TestHistoryHandlerServesReadOnlyReports(t *testing.T) {
+	historyDir := t.TempDir()
+	if _, err := history.Write(historyDir, report.DriftReport{Status: report.ScanStatusNoDrift}); err != nil {
+		t.Fatalf("write history fixture: %v", err)
+	}
+	handler := newHistoryHandler(historyDir, 10)
+
+	for _, path := range []string{"/reports", "/"} {
+		recorder := httptest.NewRecorder()
+		handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, path, nil))
+		if recorder.Code != http.StatusOK {
+			t.Fatalf("expected %s to succeed, got %d", path, recorder.Code)
+		}
+	}
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, "/reports", nil))
+	if recorder.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("expected writes to be rejected, got %d", recorder.Code)
 	}
 }
 
