@@ -35,6 +35,8 @@ type Config struct {
 	ResourceOwners       map[string]string          `json:"resource_owners"`
 	OwnerWebhooks        map[string]string          `json:"owner_webhooks"`
 	NotificationThrottle bool                       `json:"notification_throttle"`
+	GitHubRepository     string                     `json:"github_repository"`
+	GitHubPR             int                        `json:"github_pr"`
 	Profiles             map[string]json.RawMessage `json:"profiles,omitempty"`
 }
 

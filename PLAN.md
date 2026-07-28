@@ -75,7 +75,7 @@ This plan tracks security, performance, code quality, and feature work for Terra
 - [ ] Add cloud audit-event correlation for drift findings.
 - [x] Add baseline and ignore rules with owners, reasons, expirations, and audit trails.
 - [x] Add severity gates for CI failure behavior.
-- [ ] Add pull-request scan-result summaries for infrastructure repositories.
+- [x] Add GitHub pull-request scan-result summaries for infrastructure repositories.
 - [ ] Add remote artifact upload for reports and dashboards with safe defaults.
 - [x] Add named configuration profiles for development, staging, and production scans.
 - [x] Add workspace locks to prevent overlapping scans of the same Terraform root.

@@ -287,6 +287,12 @@ Route active findings by owner with `resource_owners` and `owner_webhooks`. Exac
 
 Set `notification_throttle` to `true` with `history_dir` to suppress unchanged active drift notifications. New, removed, or higher-risk findings still notify; the first scan always notifies.
 
+Post scan summaries to a GitHub pull request with `github_repository`, `github_pr`, and `GITHUB_TOKEN`. The token is read only from the environment and requires `pull-requests: write` permission.
+
+```bash
+GITHUB_TOKEN="$GITHUB_TOKEN" terradrift scan --github-repository owner/repo --github-pr 42
+```
+
 ```json
 {
   "resource_owners": {

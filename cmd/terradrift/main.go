@@ -336,6 +336,8 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 	var resourceOwners map[string]string
 	var ownerWebhooks map[string]string
 	var notificationThrottle bool
+	var githubRepository string
+	var githubPR int
 
 	cmd := &cobra.Command{
 		Use:   "scan",
@@ -409,6 +411,12 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 				resourceOwners = cfg.ResourceOwners
 				ownerWebhooks = cfg.OwnerWebhooks
 				notificationThrottle = cfg.NotificationThrottle
+				if !cmd.Flags().Changed("github-repository") {
+					githubRepository = cfg.GitHubRepository
+				}
+				if !cmd.Flags().Changed("github-pr") {
+					githubPR = cfg.GitHubPR
+				}
 				if !cmd.Flags().Changed("failure-severity") {
 					failureSeverity = cfg.FailureSeverity
 				}
@@ -417,6 +425,9 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 			parsedFormat, err := parseOutputFormat(format)
 			if err != nil {
 				return err
+			}
+			if (githubRepository == "") != (githubPR == 0) {
+				return fmt.Errorf("github-repository and github-pr must be set together")
 			}
 
 			scanOptions := scanner.Options{
@@ -489,6 +500,11 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 					return err
 				}
 			}
+			if githubRepository != "" && githubPR > 0 && shouldNotify {
+				if err := (notify.GitHubPRNotifier{Repository: githubRepository, Number: githubPR, Token: os.Getenv("GITHUB_TOKEN")}).Notify(cmd.Context(), scanReport); err != nil {
+					return err
+				}
+			}
 			for owner, webhookURL := range ownerWebhooks {
 				ownerReport := scanReport
 				ownerReport.ResourceChanges = nil
@@ -547,6 +563,8 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 	cmd.Flags().StringVar(&slackWebhookURL, "slack-webhook-url", "", "Slack incoming webhook URL")
 	cmd.Flags().StringVar(&teamsWebhookURL, "teams-webhook-url", "", "Microsoft Teams incoming webhook URL")
 	cmd.Flags().StringVar(&webhookURL, "webhook-url", "", "generic HTTPS webhook URL")
+	cmd.Flags().StringVar(&githubRepository, "github-repository", "", "GitHub repository for pull request summary (owner/repo)")
+	cmd.Flags().IntVar(&githubPR, "github-pr", 0, "GitHub pull request number for scan summary")
 	cmd.Flags().StringVar(&dashboardHTMLPath, "dashboard-html", "", "write a static HTML dashboard report to this path")
 	cmd.Flags().StringVar(&historyDir, "history-dir", "", "write JSON scan history to this directory and include recent history in dashboards")
 	cmd.Flags().StringVar(&policyCommand, "policy-command", "", "policy command to run with the scan report JSON on stdin")
