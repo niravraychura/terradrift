@@ -13,7 +13,10 @@ import (
 	"github.com/niravraychura/terradrift/internal/report"
 )
 
-const maxCostOutputBytes = 256 * 1024
+const (
+	maxCostInputBytes  = 1 << 20
+	maxCostOutputBytes = 256 * 1024
+)
 
 // Options configures a cost command invocation.
 type Options struct {
@@ -30,6 +33,9 @@ func Enrich(ctx context.Context, options Options, scanReport report.DriftReport)
 	payload, err := json.Marshal(scanReport)
 	if err != nil {
 		return scanReport, fmt.Errorf("encode cost input: %w", err)
+	}
+	if len(payload) > maxCostInputBytes {
+		return scanReport, fmt.Errorf("cost input exceeds %d bytes", maxCostInputBytes)
 	}
 	cmd := exec.CommandContext(ctx, command, options.Args...)
 	cmd.Stdin = bytes.NewReader(payload)

@@ -35,3 +35,10 @@ func TestEnrichRejectsInvalidJSON(t *testing.T) {
 		t.Fatalf("expected invalid JSON error, got %v", err)
 	}
 }
+
+func TestEnrichRejectsOversizedInput(t *testing.T) {
+	_, err := Enrich(context.Background(), Options{Command: "false"}, report.DriftReport{ErrorMessage: strings.Repeat("x", maxCostInputBytes)})
+	if err == nil || !strings.Contains(err.Error(), "cost input exceeds") {
+		t.Fatalf("expected oversized input error, got %v", err)
+	}
+}

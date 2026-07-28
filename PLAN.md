@@ -88,6 +88,7 @@ This plan tracks security, performance, code quality, and feature work for Terra
 - [x] Add external-command allowlists and trusted-path validation; use profiles for CI-safe presets.
 - [x] Bound notification response bodies.
 - [x] Bound config and history report reads and history writes.
+- [x] Bound report input sent to external policy, cost, and audit adapters.
 - [ ] Complete remaining report output/input size budgets.
 - [x] Redact `ErrorMessage` before JSON, history, dashboards, policy input, and notification delivery.
 - [x] Exclude Terraform plan values and sensitive marks from report parsing, with regression coverage.

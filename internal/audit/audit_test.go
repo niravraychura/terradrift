@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/niravraychura/terradrift/internal/report"
@@ -24,5 +25,12 @@ func TestEnrichAttachesEvents(t *testing.T) {
 	}
 	if len(scanReport.ResourceChanges[0].AuditEvents) != 1 || scanReport.ResourceChanges[0].AuditEvents[0].Actor != "alice" {
 		t.Fatalf("unexpected events: %#v", scanReport.ResourceChanges)
+	}
+}
+
+func TestEnrichRejectsOversizedInput(t *testing.T) {
+	_, err := Enrich(context.Background(), Options{Command: "false"}, report.DriftReport{ErrorMessage: strings.Repeat("x", maxInputBytes)})
+	if err == nil || !strings.Contains(err.Error(), "audit input exceeds") {
+		t.Fatalf("expected oversized input error, got %v", err)
 	}
 }

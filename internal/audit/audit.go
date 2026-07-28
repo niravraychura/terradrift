@@ -13,7 +13,10 @@ import (
 	"github.com/niravraychura/terradrift/internal/report"
 )
 
-const maxOutputBytes = 256 * 1024
+const (
+	maxInputBytes  = 1 << 20
+	maxOutputBytes = 256 * 1024
+)
 
 // Options configures an external cloud audit adapter.
 type Options struct {
@@ -29,6 +32,9 @@ func Enrich(ctx context.Context, options Options, scanReport report.DriftReport)
 	payload, err := json.Marshal(scanReport)
 	if err != nil {
 		return scanReport, fmt.Errorf("encode audit input: %w", err)
+	}
+	if len(payload) > maxInputBytes {
+		return scanReport, fmt.Errorf("audit input exceeds %d bytes", maxInputBytes)
 	}
 	cmd := exec.CommandContext(ctx, options.Command, options.Args...)
 	cmd.Stdin = bytes.NewReader(payload)

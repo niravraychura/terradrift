@@ -13,7 +13,10 @@ import (
 	"github.com/niravraychura/terradrift/internal/report"
 )
 
-const maxPolicyOutputBytes = 64 * 1024
+const (
+	maxPolicyInputBytes  = 1 << 20
+	maxPolicyOutputBytes = 64 * 1024
+)
 
 // Options configures a policy command invocation.
 type Options struct {
@@ -30,6 +33,9 @@ func Run(ctx context.Context, options Options, scanReport report.DriftReport) er
 	payload, err := json.Marshal(scanReport)
 	if err != nil {
 		return fmt.Errorf("encode policy input: %w", err)
+	}
+	if len(payload) > maxPolicyInputBytes {
+		return fmt.Errorf("policy input exceeds %d bytes", maxPolicyInputBytes)
 	}
 	cmd := exec.CommandContext(ctx, command, options.Args...)
 	cmd.Stdin = bytes.NewReader(payload)
