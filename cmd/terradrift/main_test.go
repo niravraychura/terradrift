@@ -125,6 +125,25 @@ func TestScanAcceptsTimeoutFlag(t *testing.T) {
 	}
 }
 
+func TestScanUsesConfiguredTerraformBinary(t *testing.T) {
+	_, _, err := executeCommand("scan", "-d", t.TempDir(), "--terraform-exec", "--terraform-bin", "tofu-not-installed")
+	if err == nil || !strings.Contains(err.Error(), "tofu-not-installed") {
+		t.Fatalf("expected configured Terraform binary error, got %v", err)
+	}
+}
+
+func TestScanUsesTerraformBinaryFromConfig(t *testing.T) {
+	path := filepath.Join(t.TempDir(), ".terradrift.json")
+	if err := os.WriteFile(path, []byte(`{"directory":".","terraform_exec":true,"terraform_bin":"tofu-from-config"}`), 0o600); err != nil {
+		t.Fatalf("write config fixture: %v", err)
+	}
+
+	_, _, err := executeCommand("scan", "--config", path)
+	if err == nil || !strings.Contains(err.Error(), "tofu-from-config") {
+		t.Fatalf("expected configured Terraform binary error, got %v", err)
+	}
+}
+
 func TestInitCreatesDefaultConfig(t *testing.T) {
 	path := filepath.Join(t.TempDir(), ".terradrift.json")
 	stdout, _, err := executeCommand("init", "--config", path)

@@ -15,6 +15,7 @@ type Config struct {
 	Timeout         string   `json:"timeout"`
 	RedactPaths     bool     `json:"redact_paths"`
 	TerraformExec   bool     `json:"terraform_exec"`
+	TerraformBin    string   `json:"terraform_bin"`
 	WorkspaceRoot   string   `json:"workspace_root"`
 	Notify          string   `json:"notify"`
 	SlackWebhookURL string   `json:"slack_webhook_url"`

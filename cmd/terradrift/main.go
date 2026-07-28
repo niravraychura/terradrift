@@ -92,6 +92,7 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 	var timeout time.Duration
 	var redactPaths bool
 	var terraformExec bool
+	var terraformBin string
 	var scanConfigPath string
 	var workspaceRoot string
 	var notifyTarget string
@@ -135,6 +136,9 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 				}
 				if !cmd.Flags().Changed("terraform-exec") {
 					terraformExec = cfg.TerraformExec
+				}
+				if !cmd.Flags().Changed("terraform-bin") {
+					terraformBin = cfg.TerraformBin
 				}
 				if !cmd.Flags().Changed("workspace-root") {
 					workspaceRoot = cfg.WorkspaceRoot
@@ -182,7 +186,7 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 				WorkspaceRoot: workspaceRoot,
 			}
 			if terraformExec {
-				scanOptions.Runner = terraform.NewCLIRunner("")
+				scanOptions.Runner = terraform.NewCLIRunner(terraformBin)
 			}
 
 			result, err := scanner.Scan(cmd.Context(), scanOptions)
@@ -241,6 +245,7 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 	cmd.Flags().DurationVar(&timeout, "timeout", scanner.DefaultTimeout, "maximum scan duration")
 	cmd.Flags().BoolVar(&redactPaths, "redact-paths", false, "redact local filesystem paths from scan output")
 	cmd.Flags().BoolVar(&terraformExec, "terraform-exec", false, "run Terraform init, refresh-only plan, and show -json")
+	cmd.Flags().StringVar(&terraformBin, "terraform-bin", "", "Terraform-compatible executable to run (default: terraform)")
 	cmd.Flags().StringVar(&scanConfigPath, "config", "", "optional TerraDrift config file to load")
 	cmd.Flags().StringVar(&workspaceRoot, "workspace-root", "", "require the Terraform directory to resolve inside this workspace root")
 	cmd.Flags().StringVar(&notifyTarget, "notify", "", "notification target: slack, teams, webhook")

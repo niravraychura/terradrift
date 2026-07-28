@@ -61,6 +61,7 @@ terradrift scan -d ./terraform/prod --output json
 terradrift scan -d ./terraform/prod --timeout 2m --redact-paths
 terradrift scan -d ./terraform/prod --workspace-root "$PWD"
 terradrift scan -d ./terraform/prod --terraform-exec --output json
+terradrift scan -d ./terraform/prod --terraform-exec --terraform-bin tofu
 terradrift scan --config .terradrift.json
 terradrift scan -d ./terraform/prod --notify slack --slack-webhook-url "$SLACK_WEBHOOK_URL"
 terradrift scan -d ./terraform/prod --dashboard-html terradrift-report.html
@@ -78,9 +79,9 @@ The `--timeout` flag applies a scan-level deadline to the current and future sca
 
 The `--workspace-root` flag evaluates symlinks and requires the selected Terraform directory to resolve inside the provided root, which is useful for constrained CI or hosted runner scenarios.
 
-By default, TerraDrift still emits the bootstrap no-drift report. Use `--terraform-exec` to run the Terraform CLI flow: `terraform init`, `terraform plan -refresh-only -detailed-exitcode`, and `terraform show -json`. This requires Terraform to be installed and available on `PATH`.
+By default, TerraDrift still emits the bootstrap no-drift report. Use `--terraform-exec` to run the Terraform-compatible CLI flow: `init`, `plan -refresh-only -detailed-exitcode`, and `show -json`. `--terraform-bin` selects the executable, defaulting to `terraform`; set it to `tofu` for OpenTofu. The executable must be available on `PATH`.
 
-The `terradrift init` command writes a starter `.terradrift.json` file with safe local defaults for repeated local or CI usage. Config files can also define optional scan settings such as `terraform_exec`, `workspace_root`, `notify`, `slack_webhook_url`, `teams_webhook_url`, `webhook_url`, `dashboard_html`, `history_dir`, `policy_command`, `policy_args`, `cost_command`, and `cost_args`; explicit CLI flags always take precedence.
+The `terradrift init` command writes a starter `.terradrift.json` file with safe local defaults for repeated local or CI usage. Config files can also define optional scan settings such as `terraform_exec`, `terraform_bin`, `workspace_root`, `notify`, `slack_webhook_url`, `teams_webhook_url`, `webhook_url`, `dashboard_html`, `history_dir`, `policy_command`, `policy_args`, `cost_command`, and `cost_args`; explicit CLI flags always take precedence.
 
 Slack notifications are available with `--notify slack --slack-webhook-url "$SLACK_WEBHOOK_URL"`. Microsoft Teams notifications are available with `--notify teams --teams-webhook-url "$TEAMS_WEBHOOK_URL"`. Generic HTTPS webhooks are available with `--notify webhook --webhook-url "$WEBHOOK_URL"`. Notification messages use concise summaries and avoid including local filesystem paths or webhook secrets.
 

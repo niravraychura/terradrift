@@ -13,12 +13,12 @@ import (
 
 const maxCommandOutputBytes = 1 << 20
 
-// CLIRunner executes Terraform commands through the terraform binary.
+// CLIRunner executes Terraform-compatible CLI commands.
 type CLIRunner struct {
 	Path string
 }
 
-// NewCLIRunner creates a Terraform CLI runner. Empty path defaults to terraform.
+// NewCLIRunner creates a Terraform-compatible CLI runner. Empty path defaults to terraform.
 func NewCLIRunner(path string) CLIRunner {
 	if path == "" {
 		path = "terraform"
