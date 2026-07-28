@@ -42,7 +42,10 @@ const (
 	exitCodeDriftDetected = 2
 )
 
-const maxArtifactBytes = 1 << 20
+const (
+	maxApprovalBytes = 64 * 1024
+	maxArtifactBytes = 1 << 20
+)
 
 type outputFormat string
 
@@ -70,6 +73,22 @@ func exitCodeForError(err error) int {
 		return exitCodeDriftDetected
 	}
 	return exitCodeFailure
+}
+
+func readLimitedFile(path string, maximum int) ([]byte, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = file.Close() }()
+	data, err := io.ReadAll(io.LimitReader(file, int64(maximum+1)))
+	if err != nil {
+		return nil, err
+	}
+	if len(data) > maximum {
+		return nil, fmt.Errorf("file exceeds %d bytes", maximum)
+	}
+	return data, nil
 }
 
 func newRootCommand(stdout, stderr io.Writer) *cobra.Command {
@@ -100,7 +119,7 @@ func newApproveCommand(stdout io.Writer) *cobra.Command {
 		Use:   "approve",
 		Short: "Create a review-only approval for a drift report",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			data, err := os.ReadFile(reportPath)
+			data, err := readLimitedFile(reportPath, maxArtifactBytes)
 			if err != nil {
 				return fmt.Errorf("read report %s: %w", reportPath, err)
 			}
@@ -569,7 +588,7 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 				scanReport = enrichedReport
 			}
 			if approvalFile != "" {
-				data, err := os.ReadFile(approvalFile)
+				data, err := readLimitedFile(approvalFile, maxApprovalBytes)
 				if err != nil {
 					return fmt.Errorf("read approval %s: %w", approvalFile, err)
 				}
