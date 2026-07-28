@@ -23,6 +23,7 @@ type ResourceChange struct {
 	ReconciliationHint string   `json:"reconciliation_hint,omitempty"`
 	RunbookURL         string   `json:"runbook_url,omitempty"`
 	CostImpact         string   `json:"cost_impact,omitempty"`
+	RiskLevel          string   `json:"risk_level,omitempty"`
 	Ignored            bool     `json:"ignored,omitempty"`
 	IgnoreOwner        string   `json:"ignore_owner,omitempty"`
 	IgnoreReason       string   `json:"ignore_reason,omitempty"`

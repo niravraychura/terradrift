@@ -42,6 +42,35 @@ func ReconciliationHintForActions(actions []string) string {
 	return "Review only: compare Terraform configuration, state, and the remote object before making changes."
 }
 
+// RiskLevelForActions assigns a conservative severity from Terraform actions.
+func RiskLevelForActions(actions []string) string {
+	if hasAction(actions, "delete") && hasAction(actions, "create") {
+		return "critical"
+	}
+	if hasAction(actions, "delete") {
+		return "high"
+	}
+	if hasAction(actions, "create") || hasAction(actions, "update") {
+		return "medium"
+	}
+	return "low"
+}
+
+// MeetsSeverity reports whether any active finding meets the requested threshold.
+func MeetsSeverity(scanReport DriftReport, threshold string) (bool, error) {
+	ranks := map[string]int{"low": 1, "medium": 2, "high": 3, "critical": 4}
+	thresholdRank, ok := ranks[threshold]
+	if !ok {
+		return false, fmt.Errorf("unsupported severity %q: low, medium, high, critical", threshold)
+	}
+	for _, change := range scanReport.ResourceChanges {
+		if !change.Ignored && ranks[change.RiskLevel] >= thresholdRank {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 // ApplyRunbooks attaches validated runbook URLs by resource type or type/action.
 func ApplyRunbooks(scanReport *DriftReport, runbooks map[string]string) error {
 	for i := range scanReport.ResourceChanges {

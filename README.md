@@ -269,6 +269,8 @@ Each changed resource includes conservative remediation guidance based on Terraf
 
 Reports also include review-only reconciliation hints for imports, moved blocks, and configuration updates. TerraDrift never runs state commands or applies infrastructure changes.
 
+Each finding has a conservative action-based risk level: replacement is `critical`, deletion `high`, creation or update `medium`, and other actions `low`. Use `--failure-severity high` or `failure_severity` in config to fail CI only for active drift at or above that threshold; leaving it empty preserves failure on any drift.
+
 Use exact-address `ignore_rules` for temporary, auditable exceptions. Each rule requires an owner, reason, and future RFC3339 expiry. Ignored findings stay visible in reports and dashboards but do not fail the scan.
 
 ```json

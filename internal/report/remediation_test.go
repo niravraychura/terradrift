@@ -65,3 +65,13 @@ func TestApplyIgnoreRulesRejectsExpiredRule(t *testing.T) {
 		t.Fatal("expected expired rule to be rejected")
 	}
 }
+
+func TestRiskLevelAndSeverity(t *testing.T) {
+	if RiskLevelForActions([]string{"delete", "create"}) != "critical" {
+		t.Fatal("expected replacement to be critical")
+	}
+	scanReport := DriftReport{ResourceChanges: []ResourceChange{{RiskLevel: "medium"}, {RiskLevel: "high", Ignored: true}}}
+	if meets, err := MeetsSeverity(scanReport, "high"); err != nil || meets {
+		t.Fatalf("expected ignored high risk to not meet gate: %v, %v", meets, err)
+	}
+}

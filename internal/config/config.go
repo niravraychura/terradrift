@@ -31,6 +31,7 @@ type Config struct {
 	CostArgs            []string                   `json:"cost_args"`
 	RemediationRunbooks map[string]string          `json:"remediation_runbooks"`
 	IgnoreRules         []report.IgnoreRule        `json:"ignore_rules"`
+	FailureSeverity     string                     `json:"failure_severity"`
 	Profiles            map[string]json.RawMessage `json:"profiles,omitempty"`
 }
 

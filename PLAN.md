@@ -61,7 +61,7 @@ This plan tracks security, performance, code quality, and feature work for Terra
 - [x] Add first-class OpenTofu binary selection, documentation, and tests.
 - [x] Ship OPA and Conftest policy-pack examples for high-risk drift.
 - [ ] Document adapters for Infracost and custom cost APIs.
-- [ ] Add risk scoring based on resource type, environment, action, tags, exposure, and cost.
+- [x] Add conservative action-based risk scoring.
 - [ ] Add ownership mapping and alert routing for resource addresses or tags.
 - [ ] Add notification throttling for unchanged drift with severity-based escalation.
 - [ ] Add optional GitHub issue creation for persistent drift findings.
@@ -74,7 +74,7 @@ This plan tracks security, performance, code quality, and feature work for Terra
 - [x] Add review-only state reconciliation hints for imports, moved blocks, and configuration updates.
 - [ ] Add cloud audit-event correlation for drift findings.
 - [x] Add baseline and ignore rules with owners, reasons, expirations, and audit trails.
-- [ ] Add severity gates for CI failure, notification, and ticket behavior.
+- [x] Add severity gates for CI failure behavior.
 - [ ] Add pull-request scan-result summaries for infrastructure repositories.
 - [ ] Add remote artifact upload for reports and dashboards with safe defaults.
 - [x] Add named configuration profiles for development, staging, and production scans.

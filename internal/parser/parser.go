@@ -41,6 +41,7 @@ func ParsePlan(data []byte) ([]report.ResourceChange, int, error) {
 			Actions:            append([]string(nil), resourceChange.Change.Actions...),
 			Remediation:        report.RemediationForActions(resourceChange.Change.Actions),
 			ReconciliationHint: report.ReconciliationHintForActions(resourceChange.Change.Actions),
+			RiskLevel:          report.RiskLevelForActions(resourceChange.Change.Actions),
 		})
 	}
 

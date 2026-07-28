@@ -295,6 +295,7 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 	var costArgs []string
 	var remediationRunbooks map[string]string
 	var ignoreRules []report.IgnoreRule
+	var failureSeverity string
 
 	cmd := &cobra.Command{
 		Use:   "scan",
@@ -365,6 +366,9 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 				}
 				remediationRunbooks = cfg.RemediationRunbooks
 				ignoreRules = cfg.IgnoreRules
+				if !cmd.Flags().Changed("failure-severity") {
+					failureSeverity = cfg.FailureSeverity
+				}
 			}
 
 			parsedFormat, err := parseOutputFormat(format)
@@ -433,6 +437,15 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 				}
 			}
 			if scanReport.Status == report.ScanStatusDriftDetected {
+				if failureSeverity != "" {
+					meets, err := report.MeetsSeverity(scanReport, failureSeverity)
+					if err != nil {
+						return err
+					}
+					if !meets {
+						return nil
+					}
+				}
 				return errDriftDetected
 			}
 			return nil
@@ -446,6 +459,7 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 	cmd.Flags().StringVar(&terraformBin, "terraform-bin", "", "Terraform-compatible executable to run (default: terraform)")
 	cmd.Flags().StringVar(&scanConfigPath, "config", "", "optional TerraDrift config file to load")
 	cmd.Flags().StringVar(&configProfile, "profile", "", "named config profile to load")
+	cmd.Flags().StringVar(&failureSeverity, "failure-severity", "", "minimum drift severity that fails the scan: low, medium, high, critical")
 	cmd.Flags().StringVar(&workspaceRoot, "workspace-root", "", "require the Terraform directory to resolve inside this workspace root")
 	cmd.Flags().StringVar(&notifyTarget, "notify", "", "notification target: slack, teams, webhook")
 	cmd.Flags().StringVar(&slackWebhookURL, "slack-webhook-url", "", "Slack incoming webhook URL")
