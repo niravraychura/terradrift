@@ -1,0 +1,15 @@
+{
+  "directory": "./terraform/prod",
+  "output": "json",
+  "timeout": "10m",
+  "terraform_exec": true,
+  "redact_paths": true,
+  "workspace_root": ".",
+  "notification_throttle": true,
+  "history_dir": ".terradrift-history",
+  "allowed_commands": ["conftest", "infracost-adapter", "audit-adapter"],
+  "policy_command": "conftest",
+  "policy_args": ["test", "-"],
+  "cost_command": "infracost-adapter",
+  "audit_command": "audit-adapter"
+}

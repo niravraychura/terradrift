@@ -108,6 +108,8 @@ The `terradrift init` command writes a starter `.terradrift.json` file with safe
 
 Use [`docs/terradrift.schema.json`](docs/terradrift.schema.json) as the JSON Schema reference for editor and CI validation.
 
+Supported local and CI configuration examples are in [`examples/config`](examples/config/README.md).
+
 Use `profiles` for standalone development, staging, and production configurations. Select one with `--profile`; profile values do not inherit top-level settings.
 
 ```json

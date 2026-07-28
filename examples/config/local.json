@@ -1,0 +1,8 @@
+{
+  "directory": "./terraform/dev",
+  "output": "table",
+  "timeout": "5m",
+  "terraform_exec": true,
+  "history_dir": ".terradrift-history",
+  "dashboard_html": "terradrift-dashboard.html"
+}
