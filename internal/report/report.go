@@ -7,12 +7,12 @@ import "time"
 type ScanStatus string
 
 const (
-	ScanStatusRunning       ScanStatus = "running"
-	ScanStatusNoDrift       ScanStatus = "no_drift"
-	ScanStatusDriftDetected ScanStatus = "drift_detected"
-	ScanStatusNoChanges     ScanStatus = "no_changes"
+	ScanStatusRunning         ScanStatus = "running"
+	ScanStatusNoDrift         ScanStatus = "no_drift"
+	ScanStatusDriftDetected   ScanStatus = "drift_detected"
+	ScanStatusNoChanges       ScanStatus = "no_changes"
 	ScanStatusChangesDetected ScanStatus = "changes_detected"
-	ScanStatusFailed        ScanStatus = "failed"
+	ScanStatusFailed          ScanStatus = "failed"
 )
 
 // ResourceChange describes a Terraform resource with a relevant plan change.

@@ -13,7 +13,7 @@ import (
 
 func TestParsePlanReturnsChangedResourcesAndTotals(t *testing.T) {
 	plan := []byte(`{
-		"prior_state":{"values":{"root_module":{"resources":[{"mode":"managed"},{"mode":"managed"},{"mode":"managed"}]}},
+		"prior_state":{"values":{"root_module":{"resources":[{"mode":"managed"},{"mode":"managed"},{"mode":"managed"}]}}},
 		"resource_changes": [
 			{"address":"aws_instance.web","type":"aws_instance","name":"web","provider_name":"registry.terraform.io/hashicorp/aws","change":{"actions":["update"]}},
 			{"address":"aws_s3_bucket.logs","type":"aws_s3_bucket","name":"logs","change":{"actions":["no-op"]}},
@@ -100,57 +100,57 @@ func TestParsePlanModeAndPriorStateSemantics(t *testing.T) {
 		wantExact  bool
 	}{
 		{
-			name: "refresh only reads resource drift",
-			mode: terraform.PlanModeRefreshOnly,
-			plan: `{"prior_state":{"values":{"root_module":{"resources":[{"mode":"managed"},{"mode":"managed"}]} }},"resource_drift":[{"address":"aws_instance.remote","mode":"managed","change":{"actions":["update"]}}],"resource_changes":[{"address":"aws_instance.config","mode":"managed","change":{"actions":["create"]}}]}`,
+			name:       "refresh only reads resource drift",
+			mode:       terraform.PlanModeRefreshOnly,
+			plan:       `{"prior_state":{"values":{"root_module":{"resources":[{"mode":"managed"},{"mode":"managed"}]} }},"resource_drift":[{"address":"aws_instance.remote","mode":"managed","change":{"actions":["update"]}}],"resource_changes":[{"address":"aws_instance.config","mode":"managed","change":{"actions":["create"]}}]}`,
 			wantChange: []string{"aws_instance.remote"}, wantTotal: 2, wantExact: true,
 		},
 		{
-			name: "refresh fallback supports older JSON",
-			mode: terraform.PlanModeRefreshOnly,
-			plan: `{"prior_state":{"values":{"root_module":{"resources":[]}}},"resource_changes":[{"address":"aws_instance.remote","mode":"managed","change":{"actions":["update"]}}]}`,
+			name:       "refresh fallback supports older JSON",
+			mode:       terraform.PlanModeRefreshOnly,
+			plan:       `{"prior_state":{"values":{"root_module":{"resources":[]}}},"resource_changes":[{"address":"aws_instance.remote","mode":"managed","change":{"actions":["update"]}}]}`,
 			wantChange: []string{"aws_instance.remote"}, wantExact: true,
 		},
 		{
-			name: "normal ignores resource drift",
-			mode: terraform.PlanModeNormal,
-			plan: `{"prior_state":{"values":{"root_module":{"resources":[{"mode":"managed"}]}}},"resource_drift":[{"address":"aws_instance.remote","mode":"managed","change":{"actions":["update"]}}],"resource_changes":[{"address":"aws_instance.config","mode":"managed","change":{"actions":["update"]}}]}`,
+			name:       "normal ignores resource drift",
+			mode:       terraform.PlanModeNormal,
+			plan:       `{"prior_state":{"values":{"root_module":{"resources":[{"mode":"managed"}]}}},"resource_drift":[{"address":"aws_instance.remote","mode":"managed","change":{"actions":["update"]}}],"resource_changes":[{"address":"aws_instance.config","mode":"managed","change":{"actions":["update"]}}]}`,
 			wantChange: []string{"aws_instance.config"}, wantTotal: 1, wantExact: true,
 		},
 		{
-			name: "nested count and for each instances",
-			mode: terraform.PlanModeRefreshOnly,
-			plan: `{"prior_state":{"values":{"root_module":{"resources":[{"address":"aws_instance.counted[0]","mode":"managed"},{"address":"data.aws_region.current","mode":"data"}],"child_modules":[{"resources":[{"address":"module.child.aws_instance.counted[1]","mode":"managed"},{"address":"module.child.aws_instance.each[\"blue\"]","mode":"managed"}],"child_modules":[{"resources":[{"address":"module.child.module.nested.aws_instance.each[\"green\"]","mode":"managed"}]}]}]}}},"resource_drift":[]}`,
+			name:      "nested count and for each instances",
+			mode:      terraform.PlanModeRefreshOnly,
+			plan:      `{"prior_state":{"values":{"root_module":{"resources":[{"address":"aws_instance.counted[0]","mode":"managed"},{"address":"data.aws_region.current","mode":"data"}],"child_modules":[{"resources":[{"address":"module.child.aws_instance.counted[1]","mode":"managed"},{"address":"module.child.aws_instance.each[\"blue\"]","mode":"managed"}],"child_modules":[{"resources":[{"address":"module.child.module.nested.aws_instance.each[\"green\"]","mode":"managed"}]}]}]}}},"resource_drift":[]}`,
 			wantTotal: 4, wantExact: true,
 		},
 		{
-			name: "no op data read and imports",
-			mode: terraform.PlanModeNormal,
-			plan: `{"prior_state":{"values":{"root_module":{"resources":[{"mode":"managed"}]}}},"resource_changes":[{"address":"aws_instance.noop","mode":"managed","change":{"actions":["no-op"]}},{"address":"data.aws_region.current","mode":"data","change":{"actions":["read"]}},{"address":"aws_instance.read","mode":"managed","change":{"actions":["read"]}},{"address":"aws_instance.imported","mode":"managed","action_reason":"import","change":{"actions":["create"]}}]}`,
+			name:       "no op data read and imports",
+			mode:       terraform.PlanModeNormal,
+			plan:       `{"prior_state":{"values":{"root_module":{"resources":[{"mode":"managed"}]}}},"resource_changes":[{"address":"aws_instance.noop","mode":"managed","change":{"actions":["no-op"]}},{"address":"data.aws_region.current","mode":"data","change":{"actions":["read"]}},{"address":"aws_instance.read","mode":"managed","change":{"actions":["read"]}},{"address":"aws_instance.imported","mode":"managed","action_reason":"import","change":{"actions":["create"]}}]}`,
 			wantChange: []string{"aws_instance.imported"}, wantTotal: 1, wantExact: true,
 		},
 		{
-			name: "missing prior state is estimated",
-			mode: terraform.PlanModeRefreshOnly,
-			plan: `{"resource_drift":[],"resource_changes":[{"address":"aws_instance.one","mode":"managed","change":{"actions":["no-op"]}},{"address":"data.aws_region.current","mode":"data","change":{"actions":["read"]}}]}`,
+			name:      "missing prior state is estimated",
+			mode:      terraform.PlanModeRefreshOnly,
+			plan:      `{"resource_drift":[],"resource_changes":[{"address":"aws_instance.one","mode":"managed","change":{"actions":["no-op"]}},{"address":"data.aws_region.current","mode":"data","change":{"actions":["read"]}}]}`,
 			wantTotal: 1, wantExact: false,
 		},
 		{
-			name: "null prior state is estimated",
-			mode: terraform.PlanModeNormal,
-			plan: `{"prior_state":null,"resource_changes":[{"address":"aws_instance.one","mode":"managed","change":{"actions":["update"]}}]}`,
+			name:       "null prior state is estimated",
+			mode:       terraform.PlanModeNormal,
+			plan:       `{"prior_state":null,"resource_changes":[{"address":"aws_instance.one","mode":"managed","change":{"actions":["update"]}}]}`,
 			wantChange: []string{"aws_instance.one"}, wantTotal: 1, wantExact: false,
 		},
 		{
-			name: "null optional module sections are safe",
-			mode: terraform.PlanModeRefreshOnly,
-			plan: `{"prior_state":{"values":{"root_module":{"resources":null,"child_modules":null}}},"resource_drift":[]}`,
+			name:      "null optional module sections are safe",
+			mode:      terraform.PlanModeRefreshOnly,
+			plan:      `{"prior_state":{"values":{"root_module":{"resources":null,"child_modules":null}}},"resource_drift":[]}`,
 			wantTotal: 0, wantExact: true,
 		},
 		{
-			name: "empty prior state is exact",
-			mode: terraform.PlanModeRefreshOnly,
-			plan: `{"prior_state":{"values":{"root_module":{"resources":[]}}},"resource_drift":[]}`,
+			name:      "empty prior state is exact",
+			mode:      terraform.PlanModeRefreshOnly,
+			plan:      `{"prior_state":{"values":{"root_module":{"resources":[]}}},"resource_drift":[]}`,
 			wantTotal: 0, wantExact: true,
 		},
 	}

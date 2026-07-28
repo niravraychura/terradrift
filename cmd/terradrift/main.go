@@ -1184,11 +1184,11 @@ type multiScanReport struct {
 type multiScanStatus string
 
 const (
-	multiScanStatusComplete      multiScanStatus = "complete"
-	multiScanStatusDriftDetected multiScanStatus = "drift_detected"
+	multiScanStatusComplete        multiScanStatus = "complete"
+	multiScanStatusDriftDetected   multiScanStatus = "drift_detected"
 	multiScanStatusChangesDetected multiScanStatus = "changes_detected"
-	multiScanStatusPartial       multiScanStatus = "partial"
-	multiScanStatusFailed        multiScanStatus = "failed"
+	multiScanStatusPartial         multiScanStatus = "partial"
+	multiScanStatusFailed          multiScanStatus = "failed"
 )
 
 type multiScanRoot struct {

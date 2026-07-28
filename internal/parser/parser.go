@@ -10,10 +10,10 @@ import (
 )
 
 type terraformPlan struct {
-	ResourceChanges json.RawMessage              `json:"resource_changes"`
-	ResourceDrift   json.RawMessage              `json:"resource_drift"`
-	OutputChanges   map[string]terraformChange   `json:"output_changes"`
-	PriorState      *terraformState               `json:"prior_state"`
+	ResourceChanges json.RawMessage            `json:"resource_changes"`
+	ResourceDrift   json.RawMessage            `json:"resource_drift"`
+	OutputChanges   map[string]terraformChange `json:"output_changes"`
+	PriorState      *terraformState            `json:"prior_state"`
 }
 
 type terraformState struct {
