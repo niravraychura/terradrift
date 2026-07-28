@@ -81,7 +81,66 @@ func newRootCommand(stdout, stderr io.Writer) *cobra.Command {
 	cmd.AddCommand(newScanAllCommand(stdout))
 	cmd.AddCommand(newDashboardIndexCommand(stdout))
 	cmd.AddCommand(newServeCommand(stdout))
+	cmd.AddCommand(newApproveCommand(stdout))
 	cmd.AddCommand(newInitCommand(stdout))
+	return cmd
+}
+
+func newApproveCommand(stdout io.Writer) *cobra.Command {
+	var reportPath string
+	var owner string
+	var reason string
+	var expiresAt string
+	var output string
+	cmd := &cobra.Command{
+		Use:   "approve",
+		Short: "Create a review-only approval for a drift report",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			data, err := os.ReadFile(reportPath)
+			if err != nil {
+				return fmt.Errorf("read report %s: %w", reportPath, err)
+			}
+			var scanReport report.DriftReport
+			if err := json.Unmarshal(data, &scanReport); err != nil {
+				return fmt.Errorf("parse report %s: %w", reportPath, err)
+			}
+			approval, err := report.NewApproval(scanReport, owner, reason, expiresAt)
+			if err != nil {
+				return err
+			}
+			if output == "" {
+				output = reportPath + ".approval.json"
+			}
+			data, err = json.MarshalIndent(approval, "", "  ")
+			if err != nil {
+				return fmt.Errorf("encode approval: %w", err)
+			}
+			data = append(data, '\n')
+			file, err := os.OpenFile(output, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+			if err != nil {
+				return fmt.Errorf("create approval %s: %w", output, err)
+			}
+			if _, err := file.Write(data); err != nil {
+				_ = file.Close()
+				return fmt.Errorf("write approval %s: %w", output, err)
+			}
+			if err := file.Close(); err != nil {
+				return fmt.Errorf("close approval %s: %w", output, err)
+			}
+			_, err = fmt.Fprintf(stdout, "Created approval: %s\n", output)
+			return err
+		},
+	}
+	cmd.Flags().StringVar(&reportPath, "report", "", "JSON drift report to approve")
+	cmd.Flags().StringVar(&owner, "owner", "", "approver identity")
+	cmd.Flags().StringVar(&reason, "reason", "", "approval reason")
+	cmd.Flags().StringVar(&expiresAt, "expires-at", "", "approval expiry in RFC3339 format")
+	cmd.Flags().StringVar(&output, "output", "", "approval artifact path")
+	for _, name := range []string{"report", "owner", "reason", "expires-at"} {
+		if err := cmd.MarkFlagRequired(name); err != nil {
+			panic(err)
+		}
+	}
 	return cmd
 }
 
@@ -340,6 +399,7 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 	var githubPR int
 	var githubIssueAfter int
 	var artifactURL string
+	var approvalFile string
 
 	cmd := &cobra.Command{
 		Use:   "scan",
@@ -470,6 +530,20 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 			if err := report.ApplyRunbooks(&scanReport, remediationRunbooks); err != nil {
 				return err
 			}
+			if approvalFile != "" {
+				data, err := os.ReadFile(approvalFile)
+				if err != nil {
+					return fmt.Errorf("read approval %s: %w", approvalFile, err)
+				}
+				var approval report.Approval
+				if err := json.Unmarshal(data, &approval); err != nil {
+					return fmt.Errorf("parse approval %s: %w", approvalFile, err)
+				}
+				if err := report.VerifyApproval(scanReport, approval); err != nil {
+					return err
+				}
+				scanReport.Approval = &approval
+			}
 			if redactPaths {
 				scanReport.Directory = "[REDACTED]"
 			}
@@ -590,6 +664,7 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 	cmd.Flags().IntVar(&githubPR, "github-pr", 0, "GitHub pull request number for scan summary")
 	cmd.Flags().IntVar(&githubIssueAfter, "github-issue-after", 0, "create a GitHub issue after this many consecutive matching drift scans")
 	cmd.Flags().StringVar(&artifactURL, "artifact-url", "", "presigned HTTPS URL to upload the JSON report")
+	cmd.Flags().StringVar(&approvalFile, "approval-file", "", "review-only approval artifact to attach to the report")
 	cmd.Flags().StringVar(&dashboardHTMLPath, "dashboard-html", "", "write a static HTML dashboard report to this path")
 	cmd.Flags().StringVar(&historyDir, "history-dir", "", "write JSON scan history to this directory and include recent history in dashboards")
 	cmd.Flags().StringVar(&policyCommand, "policy-command", "", "policy command to run with the scan report JSON on stdin")

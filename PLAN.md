@@ -70,7 +70,7 @@ This plan tracks security, performance, code quality, and feature work for Terra
 - [x] Add Prometheus metrics for scan status, duration, resource counts, and failures.
 - [x] Add a static dashboard index across roots and historical trends.
 - [x] Add configurable remediation runbook URLs by resource type and action.
-- [ ] Add a human approval workflow for remediation suggestions.
+- [x] Add a human approval workflow for remediation suggestions.
 - [x] Add review-only state reconciliation hints for imports, moved blocks, and configuration updates.
 - [ ] Add cloud audit-event correlation for drift findings.
 - [x] Add baseline and ignore rules with owners, reasons, expirations, and audit trails.

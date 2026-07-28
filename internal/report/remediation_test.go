@@ -98,3 +98,16 @@ func TestShouldNotifySuppressesOnlyUnchangedDrift(t *testing.T) {
 		t.Fatal("expected risk escalation to notify")
 	}
 }
+
+func TestApprovalMatchesActiveDrift(t *testing.T) {
+	scanReport := DriftReport{Status: ScanStatusDriftDetected, ResourceChanges: []ResourceChange{{Address: "aws_instance.web", Actions: []string{"update"}}}}
+	approval, err := NewApproval(scanReport, "platform", "approved maintenance", time.Now().Add(time.Hour).UTC().Format(time.RFC3339))
+	if err != nil || approval.Owner != "platform" {
+		t.Fatalf("create approval: %#v, %v", approval, err)
+	}
+	changed := scanReport
+	changed.ResourceChanges = []ResourceChange{{Address: "aws_instance.web", Actions: []string{"delete"}}}
+	if err := VerifyApproval(changed, approval); err == nil {
+		t.Fatal("expected mismatched approval to fail")
+	}
+}

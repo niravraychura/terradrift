@@ -299,6 +299,14 @@ Set `github_issue_after` to create one GitHub issue when the same active drift f
 
 Upload a JSON report to a presigned HTTPS URL with `--artifact-url` or `artifact_url`. This supports cloud object-storage uploads without storing cloud credentials in TerraDrift. Artifact URLs use the same HTTPS, public-destination, no-proxy, and no-redirect protections as generic webhooks.
 
+Create a review-only approval artifact for a JSON drift report, then attach it to later scan output with `--approval-file`. Approvals are bound to the active drift fingerprint and expiry; they never apply Terraform or modify state.
+
+```bash
+terradrift approve --report report.json --owner platform-team \
+  --reason "approved maintenance" --expires-at 2026-08-01T00:00:00Z
+terradrift scan --approval-file report.json.approval.json
+```
+
 ```json
 {
   "resource_owners": {

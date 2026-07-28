@@ -61,4 +61,5 @@ type DriftReport struct {
 	TerraformVersion      string            `json:"terraform_version,omitempty"`
 	ProviderVersions      map[string]string `json:"provider_versions,omitempty"`
 	Modules               []ModuleInventory `json:"modules,omitempty"`
+	Approval              *Approval         `json:"approval,omitempty"`
 }

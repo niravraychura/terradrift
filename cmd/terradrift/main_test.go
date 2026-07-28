@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/niravraychura/terradrift/internal/history"
 	"github.com/niravraychura/terradrift/internal/report"
@@ -120,6 +121,26 @@ func TestDashboardIndexWritesHistory(t *testing.T) {
 	}
 	if !strings.Contains(string(data), "terraform/prod") {
 		t.Fatalf("expected dashboard index to contain history, got %q", data)
+	}
+}
+
+func TestApproveCreatesSecureArtifact(t *testing.T) {
+	reportPath := filepath.Join(t.TempDir(), "report.json")
+	data, err := json.Marshal(report.DriftReport{Status: report.ScanStatusDriftDetected, ResourceChanges: []report.ResourceChange{{Address: "aws_instance.web", Actions: []string{"update"}}}})
+	if err != nil {
+		t.Fatalf("encode report fixture: %v", err)
+	}
+	if err := os.WriteFile(reportPath, data, 0o600); err != nil {
+		t.Fatalf("write report fixture: %v", err)
+	}
+	approvalPath := filepath.Join(t.TempDir(), "approval.json")
+	_, _, err = executeCommand("approve", "--report", reportPath, "--owner", "platform", "--reason", "approved maintenance", "--expires-at", time.Now().Add(time.Hour).UTC().Format(time.RFC3339), "--output", approvalPath)
+	if err != nil {
+		t.Fatalf("create approval: %v", err)
+	}
+	info, err := os.Stat(approvalPath)
+	if err != nil || info.Mode().Perm() != 0o600 {
+		t.Fatalf("expected secure approval artifact, info=%v err=%v", info, err)
 	}
 }
 
