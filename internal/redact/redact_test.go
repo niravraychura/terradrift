@@ -6,10 +6,10 @@ import (
 )
 
 func TestStringRedactsSensitiveAssignments(t *testing.T) {
-	input := "token=abc123 password:super-secret api_key=key123 authorization=BearerValue client_secret=client-secret harmless=value"
+	input := "token=abc123 password:super-secret api_key=key123 authorization=BearerValue client_secret=client-secret harmless=value\nAuthorization: Bearer bearer-secret\nAuthorization: Basic basic-secret"
 	got := String(input)
 
-	for _, leaked := range []string{"abc123", "super-secret", "key123", "BearerValue", "client-secret"} {
+	for _, leaked := range []string{"abc123", "super-secret", "key123", "BearerValue", "bearer-secret", "basic-secret", "client-secret"} {
 		if strings.Contains(got, leaked) {
 			t.Fatalf("expected %q to be redacted from %q", leaked, got)
 		}

@@ -9,7 +9,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/terradr
 FROM alpine:3.24
 RUN addgroup -S terradrift && adduser -S -G terradrift terradrift
 RUN apk --no-cache add ca-certificates
-# Terraform will be included when command execution is implemented.
+# Terraform is intentionally not bundled; provide a trusted binary for --terraform-exec.
 COPY --from=builder /out/terradrift /usr/local/bin/terradrift
 USER terradrift:terradrift
 ENTRYPOINT ["/usr/local/bin/terradrift"]

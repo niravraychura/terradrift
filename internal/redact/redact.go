@@ -11,6 +11,7 @@ import (
 const replacement = "[REDACTED]"
 
 var sensitiveAssignmentPattern = regexp.MustCompile(`(?i)(authorization|api[_-]?key|access[_-]?token|auth[_-]?token|client[_-]?secret|password|secret|token)(\s*[=:]\s*)([^\s,;&]+)`)
+var authorizationHeaderPattern = regexp.MustCompile(`(?i)(authorization\s*:\s*)[^\r\n]+`)
 
 // String removes common secret patterns from a string while preserving enough
 // surrounding context to keep diagnostic messages useful.
@@ -21,6 +22,7 @@ func String(value string) string {
 }
 
 func redactSensitiveAssignments(value string) string {
+	value = authorizationHeaderPattern.ReplaceAllString(value, `${1}`+replacement)
 	return sensitiveAssignmentPattern.ReplaceAllString(value, `${1}${2}`+replacement)
 }
 
