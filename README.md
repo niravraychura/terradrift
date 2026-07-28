@@ -60,6 +60,7 @@ terradrift scan -d ./terraform/prod
 terradrift scan -d ./terraform/prod --output json
 terradrift scan -d ./terraform/prod --output junit
 terradrift scan -d ./terraform/prod --output sarif
+terradrift scan -d ./terraform/prod --output prometheus
 terradrift scan-all --manifest terraform-roots.txt --concurrency 4 --output json
 terradrift scan -d ./terraform/prod --timeout 2m --redact-paths
 terradrift scan -d ./terraform/prod --workspace-root "$PWD"
@@ -145,6 +146,8 @@ JSON output is available for automation:
 JUnit XML output is available for CI test reporting. A detected drift result is reported as one failing `terradrift` test case.
 
 SARIF output is available for code-scanning dashboards. Each changed resource is emitted as an error-level `terradrift.drift` result without a local filesystem location.
+
+Prometheus text output exposes scan status, duration, and resource counts. It deliberately omits directory and resource labels to avoid exposing local paths or creating unbounded label cardinality.
 
 Without `--terraform-exec`, TerraDrift emits a bootstrap no-drift report after validating the selected directory.
 

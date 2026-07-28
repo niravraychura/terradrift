@@ -191,6 +191,19 @@ func TestWriteScanReportSARIF(t *testing.T) {
 	}
 }
 
+func TestWriteScanReportPrometheus(t *testing.T) {
+	var output bytes.Buffer
+	err := writeScanReport(&output, report.DriftReport{Status: report.ScanStatusDriftDetected, TotalResourcesChecked: 4, TotalChangedResources: 2}, outputFormatPrometheus)
+	if err != nil {
+		t.Fatalf("expected Prometheus output to succeed: %v", err)
+	}
+	for _, want := range []string{"# TYPE terradrift_scan_status gauge", `terradrift_scan_status{status="drift_detected"} 1`, "terradrift_resources_checked 4", "terradrift_resources_changed 2"} {
+		if !strings.Contains(output.String(), want) {
+			t.Fatalf("expected Prometheus output to contain %q, got %q", want, output.String())
+		}
+	}
+}
+
 func TestScanAcceptsTimeoutFlag(t *testing.T) {
 	_, _, err := executeCommand("scan", "-d", t.TempDir(), "--timeout", "1s")
 	if err != nil {

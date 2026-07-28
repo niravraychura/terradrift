@@ -41,10 +41,11 @@ const (
 type outputFormat string
 
 const (
-	outputFormatTable outputFormat = "table"
-	outputFormatJSON  outputFormat = "json"
-	outputFormatJUnit outputFormat = "junit"
-	outputFormatSARIF outputFormat = "sarif"
+	outputFormatTable      outputFormat = "table"
+	outputFormatJSON       outputFormat = "json"
+	outputFormatJUnit      outputFormat = "junit"
+	outputFormatSARIF      outputFormat = "sarif"
+	outputFormatPrometheus outputFormat = "prometheus"
 )
 
 func main() {
@@ -330,7 +331,7 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVarP(&directory, "directory", "d", ".", "Terraform directory to scan")
-	cmd.Flags().StringVarP(&format, "output", "o", string(outputFormatTable), "output format: table, json, junit, sarif")
+	cmd.Flags().StringVarP(&format, "output", "o", string(outputFormatTable), "output format: table, json, junit, sarif, prometheus")
 	cmd.Flags().DurationVar(&timeout, "timeout", scanner.DefaultTimeout, "maximum scan duration")
 	cmd.Flags().BoolVar(&redactPaths, "redact-paths", false, "redact local filesystem paths from scan output")
 	cmd.Flags().BoolVar(&terraformExec, "terraform-exec", false, "run Terraform init, refresh-only plan, and show -json")
@@ -382,10 +383,10 @@ func sendNotification(ctx context.Context, target string, slackWebhookURL string
 func parseOutputFormat(format string) (outputFormat, error) {
 	normalized := strings.ToLower(strings.TrimSpace(format))
 	switch outputFormat(normalized) {
-	case outputFormatTable, outputFormatJSON, outputFormatJUnit, outputFormatSARIF:
+	case outputFormatTable, outputFormatJSON, outputFormatJUnit, outputFormatSARIF, outputFormatPrometheus:
 		return outputFormat(normalized), nil
 	default:
-		return "", fmt.Errorf("unsupported output format %q; supported values: table, json, junit, sarif", format)
+		return "", fmt.Errorf("unsupported output format %q; supported values: table, json, junit, sarif, prometheus", format)
 	}
 }
 
@@ -429,6 +430,34 @@ func writeScanReport(stdout io.Writer, scanReport report.DriftReport, format out
 			return fmt.Errorf("write scan output: %w", err)
 		}
 		return nil
+	case outputFormatPrometheus:
+		duration := scanReport.CompletedAt.Sub(scanReport.StartedAt).Seconds()
+		failures := 0
+		if scanReport.Status == report.ScanStatusFailed {
+			failures = 1
+		}
+		for _, line := range []string{
+			"# HELP terradrift_scan_status Scan result status.",
+			"# TYPE terradrift_scan_status gauge",
+			fmt.Sprintf("terradrift_scan_status{status=%q} 1", scanReport.Status),
+			"# HELP terradrift_scan_duration_seconds Scan duration in seconds.",
+			"# TYPE terradrift_scan_duration_seconds gauge",
+			fmt.Sprintf("terradrift_scan_duration_seconds %g", duration),
+			"# HELP terradrift_resources_checked Resources checked by the scan.",
+			"# TYPE terradrift_resources_checked gauge",
+			fmt.Sprintf("terradrift_resources_checked %d", scanReport.TotalResourcesChecked),
+			"# HELP terradrift_resources_changed Resources with detected drift.",
+			"# TYPE terradrift_resources_changed gauge",
+			fmt.Sprintf("terradrift_resources_changed %d", scanReport.TotalChangedResources),
+			"# HELP terradrift_scan_failures Failed scans.",
+			"# TYPE terradrift_scan_failures gauge",
+			fmt.Sprintf("terradrift_scan_failures %d", failures),
+		} {
+			if _, err := fmt.Fprintln(stdout, line); err != nil {
+				return fmt.Errorf("write scan output: %w", err)
+			}
+		}
+		return nil
 	case outputFormatTable:
 		if _, err := fmt.Fprintln(stdout, "TerraDrift scan initialized"); err != nil {
 			return fmt.Errorf("write scan output: %w", err)
@@ -447,7 +476,7 @@ func writeScanReport(stdout io.Writer, scanReport report.DriftReport, format out
 		}
 		return nil
 	default:
-		return fmt.Errorf("unsupported output format %q; supported values: table, json, junit, sarif", format)
+		return fmt.Errorf("unsupported output format %q; supported values: table, json, junit, sarif, prometheus", format)
 	}
 }
 
