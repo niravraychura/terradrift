@@ -31,6 +31,7 @@ func TestWebhookNotifierSendsRedactedPayload(t *testing.T) {
 
 	err := notifier.Notify(context.Background(), report.DriftReport{
 		Status:                report.ScanStatusDriftDetected,
+		PlanMode:              "refresh-only",
 		Directory:             "/secret/local/path",
 		TotalResourcesChecked: 8,
 		TotalChangedResources: 3,
@@ -45,7 +46,7 @@ func TestWebhookNotifierSendsRedactedPayload(t *testing.T) {
 	if err := json.Unmarshal([]byte(body), &payload); err != nil {
 		t.Fatalf("expected webhook JSON, got %v: %q", err, body)
 	}
-	if payload.Status != report.ScanStatusDriftDetected || payload.TotalChangedResources != 3 || payload.TotalResourcesChecked != 8 {
+	if payload.Status != report.ScanStatusDriftDetected || payload.PlanMode != "refresh-only" || payload.TotalChangedResources != 3 || payload.TotalResourcesChecked != 8 {
 		t.Fatalf("unexpected webhook payload: %#v", payload)
 	}
 }

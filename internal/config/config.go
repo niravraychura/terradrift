@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/niravraychura/terradrift/internal/report"
+	"github.com/niravraychura/terradrift/internal/terraform"
 	"github.com/niravraychura/terradrift/internal/validation"
 )
 
@@ -27,6 +28,7 @@ type Config struct {
 	RedactPaths          bool                       `json:"redact_paths"`
 	TerraformExec        bool                       `json:"terraform_exec"`
 	TerraformBin         string                     `json:"terraform_bin"`
+	PlanMode             string                     `json:"plan_mode"`
 	WorkspaceRoot        string                     `json:"workspace_root"`
 	Notify               string                     `json:"notify"`
 	SlackWebhookURL      string                     `json:"slack_webhook_url"`
@@ -61,7 +63,7 @@ type Config struct {
 
 // Default returns a safe bootstrap configuration.
 func Default() Config {
-	return Config{Directory: ".", Output: "table", Timeout: "5m", RedactPaths: false}
+	return Config{Directory: ".", Output: "table", Timeout: "5m", RedactPaths: false, PlanMode: string(terraform.PlanModeRefreshOnly)}
 }
 
 // Load reads a TerraDrift JSON configuration file.
@@ -148,6 +150,9 @@ func (cfg Config) Validate() error {
 	}
 	if cfg.HistoryRetention < 0 {
 		return validation.New("config history_retention", fmt.Errorf("must not be negative"))
+	}
+	if _, err := terraform.ParsePlanMode(cfg.PlanMode); err != nil {
+		return validation.New("config plan_mode", err)
 	}
 	if cfg.GitHubPR < 0 || cfg.GitHubIssueAfter < 0 {
 		return validation.New("config GitHub numbers", fmt.Errorf("must not be negative"))

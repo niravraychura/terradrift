@@ -3,6 +3,7 @@
   "output": "table",
   "timeout": "5m",
   "terraform_exec": true,
+  "plan_mode": "refresh-only",
   "history_dir": ".terradrift-history",
   "dashboard_html": "terradrift-dashboard.html"
 }

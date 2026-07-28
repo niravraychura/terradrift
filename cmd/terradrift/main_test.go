@@ -78,6 +78,26 @@ func TestScanAllLoadsRelativeManifestRoots(t *testing.T) {
 	}
 }
 
+func TestScanAllAcceptsNormalPlanMode(t *testing.T) {
+	root := t.TempDir()
+	directory := filepath.Join(root, "production")
+	if err := os.Mkdir(directory, 0o700); err != nil {
+		t.Fatalf("create root: %v", err)
+	}
+	manifest := filepath.Join(root, "roots.txt")
+	if err := os.WriteFile(manifest, []byte("production\n"), 0o600); err != nil {
+		t.Fatalf("write manifest: %v", err)
+	}
+	stdout, _, err := executeCommand("scan-all", "--manifest", manifest, "--plan-mode", "normal", "--output", "json")
+	if err != nil {
+		t.Fatalf("scan-all: %v", err)
+	}
+	var aggregate multiScanReport
+	if err := json.Unmarshal([]byte(stdout), &aggregate); err != nil || len(aggregate.Roots) != 1 || aggregate.Roots[0].Report.PlanMode != "normal" || aggregate.Roots[0].Report.Status != report.ScanStatusNoChanges {
+		t.Fatalf("unexpected normal scan-all report: %#v, err=%v", aggregate, err)
+	}
+}
+
 func TestMultiScanStatus(t *testing.T) {
 	for _, test := range []struct {
 		total, drifted, failed int
@@ -88,9 +108,15 @@ func TestMultiScanStatus(t *testing.T) {
 		{total: 2, failed: 1, want: multiScanStatusPartial},
 		{total: 2, failed: 2, want: multiScanStatusFailed},
 	} {
-		if got := multiScanStatusFor(test.total, test.drifted, test.failed); got != test.want {
+		if got := multiScanStatusFor(test.total, test.drifted, 0, test.failed); got != test.want {
 			t.Fatalf("status(%d, %d, %d) = %q, want %q", test.total, test.drifted, test.failed, got, test.want)
 		}
+	}
+}
+
+func TestMultiScanStatusReportsNormalChanges(t *testing.T) {
+	if got := multiScanStatusFor(1, 0, 1, 0); got != multiScanStatusChangesDetected {
+		t.Fatalf("expected normal changes status, got %q", got)
 	}
 }
 
@@ -237,10 +263,17 @@ func TestScanHelpIncludesSafetyFlags(t *testing.T) {
 	if err != nil {
 		t.Fatalf("show scan help: %v", err)
 	}
-	for _, flag := range []string{"--terraform-exec", "--redact-paths", "--workspace-root", "--audit-command", "--approval-file"} {
+	for _, flag := range []string{"--terraform-exec", "--plan-mode", "--redact-paths", "--workspace-root", "--audit-command", "--approval-file"} {
 		if !strings.Contains(stdout, flag) {
 			t.Fatalf("expected scan help to contain %q", flag)
 		}
+	}
+}
+
+func TestScanAllHelpIncludesPlanMode(t *testing.T) {
+	stdout, _, err := executeCommand("scan-all", "--help")
+	if err != nil || !strings.Contains(stdout, "--plan-mode") {
+		t.Fatalf("expected scan-all plan mode help, stdout=%q err=%v", stdout, err)
 	}
 }
 
@@ -374,6 +407,17 @@ func TestScanValidDirectoryJSONOutput(t *testing.T) {
 	}
 	if scanReport.ResourceChanges == nil {
 		t.Fatal("expected resource changes to be an empty slice, got nil")
+	}
+}
+
+func TestScanNormalModeJSONOutput(t *testing.T) {
+	stdout, _, err := executeCommand("scan", "-d", t.TempDir(), "--plan-mode", "normal", "--output", "json")
+	if err != nil {
+		t.Fatalf("scan: %v", err)
+	}
+	var scanReport report.DriftReport
+	if err := json.Unmarshal([]byte(stdout), &scanReport); err != nil || scanReport.PlanMode != "normal" || scanReport.Status != report.ScanStatusNoChanges {
+		t.Fatalf("unexpected normal report: %#v, err=%v", scanReport, err)
 	}
 }
 
@@ -536,6 +580,19 @@ func TestScanLoadsConfigProfile(t *testing.T) {
 	}
 }
 
+func TestScanLoadsNormalPlanModeFromProfile(t *testing.T) {
+	directory := t.TempDir()
+	path := filepath.Join(t.TempDir(), ".terradrift.json")
+	if err := os.WriteFile(path, []byte(`{"profiles":{"production":{"directory":"`+filepath.ToSlash(directory)+`","output":"json","plan_mode":"normal"}}}`), 0o600); err != nil {
+		t.Fatalf("write config fixture: %v", err)
+	}
+	stdout, _, err := executeCommand("scan", "--config", path, "--profile", "production")
+	var scanReport report.DriftReport
+	if err != nil || json.Unmarshal([]byte(stdout), &scanReport) != nil || scanReport.PlanMode != "normal" || scanReport.Status != report.ScanStatusNoChanges {
+		t.Fatalf("unexpected profile report: %q, err=%v", stdout, err)
+	}
+}
+
 func TestScanLoadsExtendedConfigFile(t *testing.T) {
 	dir := t.TempDir()
 	dashboardPath := filepath.Join(t.TempDir(), "configured-dashboard.html")
@@ -688,6 +745,13 @@ func TestScanRejectsUnsupportedOutputFormat(t *testing.T) {
 	_, _, err := executeCommand("scan", "--output", "xml")
 	if err == nil || !strings.Contains(err.Error(), "unsupported output format") {
 		t.Fatalf("expected unsupported output format error, got %v", err)
+	}
+}
+
+func TestScanRejectsInvalidPlanMode(t *testing.T) {
+	_, _, err := executeCommand("scan", "--plan-mode", "apply")
+	if err == nil || !strings.Contains(err.Error(), "unsupported plan mode") {
+		t.Fatalf("expected invalid plan mode error, got %v", err)
 	}
 }
 

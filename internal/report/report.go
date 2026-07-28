@@ -10,10 +10,12 @@ const (
 	ScanStatusRunning       ScanStatus = "running"
 	ScanStatusNoDrift       ScanStatus = "no_drift"
 	ScanStatusDriftDetected ScanStatus = "drift_detected"
+	ScanStatusNoChanges     ScanStatus = "no_changes"
+	ScanStatusChangesDetected ScanStatus = "changes_detected"
 	ScanStatusFailed        ScanStatus = "failed"
 )
 
-// ResourceChange describes a Terraform resource with detected drift.
+// ResourceChange describes a Terraform resource with a relevant plan change.
 type ResourceChange struct {
 	Address            string       `json:"address"`
 	Type               string       `json:"type"`
@@ -64,13 +66,15 @@ type AuditEvent struct {
 	Summary    string `json:"summary"`
 }
 
-// DriftReport captures the domain result of a Terraform drift scan.
+// DriftReport captures the domain result of a Terraform scan.
 type DriftReport struct {
 	ScanID                string            `json:"scan_id"`
 	RootID                string            `json:"root_id,omitempty"`
 	Status                ScanStatus        `json:"status"`
 	Directory             string            `json:"directory"`
+	PlanMode              string            `json:"plan_mode"`
 	TotalResourcesChecked int               `json:"total_resources_checked"`
+	ResourcesCheckedExact bool              `json:"resources_checked_exact"`
 	TotalChangedResources int               `json:"total_changed_resources"`
 	ResourceChanges       []ResourceChange  `json:"resource_changes"`
 	OutputChanges         []OutputChange    `json:"output_changes,omitempty"`
@@ -81,4 +85,9 @@ type DriftReport struct {
 	ProviderVersions      map[string]string `json:"provider_versions,omitempty"`
 	Modules               []ModuleInventory `json:"modules,omitempty"`
 	Approval              *Approval         `json:"approval,omitempty"`
+}
+
+// HasChanges reports whether a completed scan contains active findings.
+func HasChanges(status ScanStatus) bool {
+	return status == ScanStatusDriftDetected || status == ScanStatusChangesDetected
 }

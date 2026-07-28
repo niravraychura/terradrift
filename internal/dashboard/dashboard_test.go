@@ -51,7 +51,7 @@ func TestRenderWithHistoryIncludesTrend(t *testing.T) {
 	if err != nil {
 		t.Fatalf("render dashboard: %v", err)
 	}
-	if !strings.Contains(output.String(), "1 drifted and 1 failed scans across 2 recent scans") {
+	if !strings.Contains(output.String(), "1 drifted, 0 with configuration changes, and 1 failed scans across 2 recent scans") {
 		t.Fatalf("expected trend summary, got %q", output.String())
 	}
 }

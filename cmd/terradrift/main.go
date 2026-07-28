@@ -35,6 +35,7 @@ import (
 
 var (
 	errDriftDetected   = errors.New("drift detected")
+	errChangesDetected = errors.New("changes detected")
 	errMultiScanFailed = errors.New("one or more scans failed")
 )
 
@@ -73,7 +74,7 @@ func main() {
 }
 
 func exitCodeForError(err error) int {
-	if errors.Is(err, errDriftDetected) {
+	if errors.Is(err, errDriftDetected) || errors.Is(err, errChangesDetected) {
 		return exitCodeDriftDetected
 	}
 	return exitCodeFailure
@@ -328,6 +329,7 @@ func newScanAllCommand(stdout io.Writer) *cobra.Command {
 	var workspaceRoot string
 	var redactPaths bool
 	var incrementalState string
+	var planMode string
 
 	cmd := &cobra.Command{
 		Use:   "scan-all",
@@ -370,7 +372,11 @@ func newScanAllCommand(stdout io.Writer) *cobra.Command {
 				return fmt.Errorf("concurrency must be greater than zero")
 			}
 
-			options := scanner.Options{Timeout: timeout, WorkspaceRoot: workspaceRoot}
+			mode, err := terraform.ParsePlanMode(planMode)
+			if err != nil {
+				return err
+			}
+			options := scanner.Options{Timeout: timeout, WorkspaceRoot: workspaceRoot, PlanMode: mode}
 			options, err = scanner.PrepareOptions(options)
 			if err != nil {
 				return err
@@ -393,6 +399,9 @@ func newScanAllCommand(stdout io.Writer) *cobra.Command {
 			if aggregate.DriftedRoots > 0 {
 				return errDriftDetected
 			}
+			if aggregate.ChangedRoots > 0 {
+				return errChangesDetected
+			}
 			return nil
 		},
 	}
@@ -404,6 +413,7 @@ func newScanAllCommand(stdout io.Writer) *cobra.Command {
 	cmd.Flags().DurationVar(&timeout, "timeout", scanner.DefaultTimeout, "maximum scan duration per root")
 	cmd.Flags().IntVar(&concurrency, "concurrency", 4, "maximum concurrent scans")
 	cmd.Flags().BoolVar(&terraformExec, "terraform-exec", false, "run Terraform-compatible scans")
+	cmd.Flags().StringVar(&planMode, "plan-mode", string(terraform.PlanModeRefreshOnly), "plan mode: refresh-only (remote drift) or normal (configuration reconciliation)")
 	cmd.Flags().StringVar(&terraformBin, "terraform-bin", "", "Terraform-compatible executable to run (default: terraform)")
 	cmd.Flags().StringVar(&workspaceRoot, "workspace-root", "", "require roots to resolve inside this workspace root")
 	cmd.Flags().BoolVar(&redactPaths, "redact-paths", false, "redact local filesystem paths from scan output")
@@ -480,6 +490,7 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 	var trustedCommandDirs []string
 	var auditLogPath string
 	var historyCompressed bool
+	var planMode string
 
 	cmd := &cobra.Command{
 		Use:   "scan",
@@ -493,7 +504,7 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 				if auditLogPath == "" {
 					return
 				}
-				event := auditlog.Event{Event: "scan_completed", ScanID: auditReport.ScanID, Status: string(auditReport.Status), Workspace: filepath.Base(auditReport.Directory), Config: filepath.Base(scanConfigPath), Profile: configProfile, TerraformVersion: auditReport.TerraformVersion, Commands: auditCommandNames(terraformExec, terraformBin, costCommand, policyCommand, auditCommand)}
+				event := auditlog.Event{Event: "scan_completed", ScanID: auditReport.ScanID, Status: string(auditReport.Status), PlanMode: auditReport.PlanMode, Workspace: filepath.Base(auditReport.Directory), Config: filepath.Base(scanConfigPath), Profile: configProfile, TerraformVersion: auditReport.TerraformVersion, Commands: auditCommandNames(terraformExec, terraformBin, costCommand, policyCommand, auditCommand)}
 				if runErr != nil {
 					event.Event = "scan_failed"
 					event.Error = runErr.Error()
@@ -528,6 +539,9 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 				}
 				if !cmd.Flags().Changed("terraform-bin") {
 					terraformBin = cfg.TerraformBin
+				}
+				if !cmd.Flags().Changed("plan-mode") {
+					planMode = cfg.PlanMode
 				}
 				if !cmd.Flags().Changed("workspace-root") {
 					workspaceRoot = cfg.WorkspaceRoot
@@ -636,10 +650,15 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 				*path = normalized
 			}
 
+			mode, err := terraform.ParsePlanMode(planMode)
+			if err != nil {
+				return err
+			}
 			scanOptions := scanner.Options{
 				Directory:     directory,
 				Timeout:       timeout,
 				WorkspaceRoot: workspaceRoot,
+				PlanMode:      mode,
 			}
 			scanOptions, err = scanner.PrepareOptions(scanOptions)
 			if err != nil {
@@ -763,6 +782,9 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 				}
 				return errDriftDetected
 			}
+			if scanReport.Status == report.ScanStatusChangesDetected {
+				return errChangesDetected
+			}
 			return nil
 		},
 	}
@@ -770,8 +792,9 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 	cmd.Flags().StringVarP(&format, "output", "o", string(outputFormatTable), "output format: table, json, junit, sarif, prometheus")
 	cmd.Flags().DurationVar(&timeout, "timeout", scanner.DefaultTimeout, "maximum scan duration")
 	cmd.Flags().BoolVar(&redactPaths, "redact-paths", false, "redact local filesystem paths from scan output")
-	cmd.Flags().BoolVar(&terraformExec, "terraform-exec", false, "run Terraform init, refresh-only plan, and show -json")
+	cmd.Flags().BoolVar(&terraformExec, "terraform-exec", false, "run Terraform init, plan, and show -json")
 	cmd.Flags().StringVar(&terraformBin, "terraform-bin", "", "Terraform-compatible executable to run (default: terraform)")
+	cmd.Flags().StringVar(&planMode, "plan-mode", string(terraform.PlanModeRefreshOnly), "plan mode: refresh-only (remote drift) or normal (configuration reconciliation)")
 	cmd.Flags().StringVar(&scanConfigPath, "config", "", "optional TerraDrift config file to load")
 	cmd.Flags().StringVar(&configProfile, "profile", "", "named config profile to load")
 	cmd.Flags().StringVar(&failureSeverity, "failure-severity", "", "minimum drift severity that fails the scan: low, medium, high, critical")
@@ -1055,7 +1078,7 @@ func writeScanReport(stdout io.Writer, scanReport report.DriftReport, format out
 		return nil
 	case outputFormatJUnit:
 		suite := junitTestSuite{Name: "terradrift", Tests: 1, TestCases: []junitTestCase{{Name: "scan", ClassName: "terradrift"}}}
-		if scanReport.Status == report.ScanStatusDriftDetected {
+		if report.HasChanges(scanReport.Status) {
 			suite.Failures = 1
 			suite.TestCases[0].Failure = &junitFailure{Message: fmt.Sprintf("%d resources changed", scanReport.TotalChangedResources)}
 		}
@@ -1067,12 +1090,16 @@ func writeScanReport(stdout io.Writer, scanReport report.DriftReport, format out
 		}
 		return nil
 	case outputFormatSARIF:
+		ruleID, ruleName, messagePrefix := "terradrift.drift", "Terraform drift detected", "Terraform drift"
+		if scanReport.Status == report.ScanStatusChangesDetected {
+			ruleID, ruleName, messagePrefix = "terradrift.change", "Terraform changes detected", "Terraform configuration change"
+		}
 		results := make([]sarifResult, 0, len(scanReport.ResourceChanges))
 		for _, change := range scanReport.ResourceChanges {
 			if change.Ignored {
 				continue
 			}
-			results = append(results, sarifResult{RuleID: "terradrift.drift", Level: "error", Message: sarifMessage{Text: fmt.Sprintf("Terraform drift: %s", change.Address)}})
+			results = append(results, sarifResult{RuleID: ruleID, Level: "error", Message: sarifMessage{Text: fmt.Sprintf("%s: %s", messagePrefix, change.Address)}})
 		}
 		encoder := json.NewEncoder(stdout)
 		encoder.SetIndent("", "  ")
@@ -1080,7 +1107,7 @@ func writeScanReport(stdout io.Writer, scanReport report.DriftReport, format out
 			Schema:  "https://json.schemastore.org/sarif-2.1.0.json",
 			Version: "2.1.0",
 			Runs: []sarifRun{{
-				Tool:    sarifTool{Driver: sarifDriver{Name: "TerraDrift", Rules: []sarifRule{{ID: "terradrift.drift", Name: "Terraform drift detected"}}}},
+				Tool:    sarifTool{Driver: sarifDriver{Name: "TerraDrift", Rules: []sarifRule{{ID: ruleID, Name: ruleName}}}},
 				Results: results,
 			}},
 		}); err != nil {
@@ -1103,7 +1130,7 @@ func writeScanReport(stdout io.Writer, scanReport report.DriftReport, format out
 			"# HELP terradrift_resources_checked Resources checked by the scan.",
 			"# TYPE terradrift_resources_checked gauge",
 			fmt.Sprintf("terradrift_resources_checked %d", scanReport.TotalResourcesChecked),
-			"# HELP terradrift_resources_changed Resources with detected drift.",
+			"# HELP terradrift_resources_changed Resources changed by the scan.",
 			"# TYPE terradrift_resources_changed gauge",
 			fmt.Sprintf("terradrift_resources_changed %d", scanReport.TotalChangedResources),
 			"# HELP terradrift_scan_failures Failed scans.",
@@ -1120,6 +1147,9 @@ func writeScanReport(stdout io.Writer, scanReport report.DriftReport, format out
 			return fmt.Errorf("write scan output: %w", err)
 		}
 		if _, err := fmt.Fprintf(stdout, "Status: %s\n", scanReport.Status); err != nil {
+			return fmt.Errorf("write scan output: %w", err)
+		}
+		if _, err := fmt.Fprintf(stdout, "Plan mode: %s\n", scanReport.PlanMode); err != nil {
 			return fmt.Errorf("write scan output: %w", err)
 		}
 		if _, err := fmt.Fprintf(stdout, "Scan ID: %s\n", scanReport.ScanID); err != nil {
@@ -1145,6 +1175,7 @@ type multiScanReport struct {
 	Roots                 []multiScanRoot `json:"roots"`
 	TotalRoots            int             `json:"total_roots"`
 	DriftedRoots          int             `json:"drifted_roots"`
+	ChangedRoots          int             `json:"changed_roots"`
 	FailedRoots           int             `json:"failed_roots"`
 	TotalResourcesChecked int             `json:"total_resources_checked"`
 	TotalChangedResources int             `json:"total_changed_resources"`
@@ -1155,6 +1186,7 @@ type multiScanStatus string
 const (
 	multiScanStatusComplete      multiScanStatus = "complete"
 	multiScanStatusDriftDetected multiScanStatus = "drift_detected"
+	multiScanStatusChangesDetected multiScanStatus = "changes_detected"
 	multiScanStatusPartial       multiScanStatus = "partial"
 	multiScanStatusFailed        multiScanStatus = "failed"
 )
@@ -1394,13 +1426,15 @@ func scanAll(ctx context.Context, directories []string, options scanner.Options,
 		aggregate.TotalChangedResources += root.Report.TotalChangedResources
 		if root.Report.Status == report.ScanStatusDriftDetected {
 			aggregate.DriftedRoots++
+		} else if root.Report.Status == report.ScanStatusChangesDetected {
+			aggregate.ChangedRoots++
 		}
 	}
-	aggregate.Status = multiScanStatusFor(aggregate.TotalRoots, aggregate.DriftedRoots, aggregate.FailedRoots)
+	aggregate.Status = multiScanStatusFor(aggregate.TotalRoots, aggregate.DriftedRoots, aggregate.ChangedRoots, aggregate.FailedRoots)
 	return aggregate
 }
 
-func multiScanStatusFor(totalRoots, driftedRoots, failedRoots int) multiScanStatus {
+func multiScanStatusFor(totalRoots, driftedRoots, changedRoots, failedRoots int) multiScanStatus {
 	if failedRoots == totalRoots {
 		return multiScanStatusFailed
 	}
@@ -1409,6 +1443,9 @@ func multiScanStatusFor(totalRoots, driftedRoots, failedRoots int) multiScanStat
 	}
 	if driftedRoots > 0 {
 		return multiScanStatusDriftDetected
+	}
+	if changedRoots > 0 {
+		return multiScanStatusChangesDetected
 	}
 	return multiScanStatusComplete
 }
@@ -1427,6 +1464,7 @@ func writeMultiScanReport(stdout io.Writer, aggregate multiScanReport, format ou
 		fmt.Sprintf("Status: %s", aggregate.Status),
 		fmt.Sprintf("Roots scanned: %d", aggregate.TotalRoots),
 		fmt.Sprintf("Drifted roots: %d", aggregate.DriftedRoots),
+		fmt.Sprintf("Changed roots: %d", aggregate.ChangedRoots),
 		fmt.Sprintf("Failed roots: %d", aggregate.FailedRoots),
 		fmt.Sprintf("Resources checked: %d", aggregate.TotalResourcesChecked),
 		fmt.Sprintf("Changed resources: %d", aggregate.TotalChangedResources),

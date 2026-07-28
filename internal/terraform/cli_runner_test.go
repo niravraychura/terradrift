@@ -26,17 +26,48 @@ fi
 	}
 }
 
-func TestCLIRunnerPlanRefreshOnlyReturnsDetailedExitCode(t *testing.T) {
+func TestCLIRunnerPlanReturnsDetailedExitCode(t *testing.T) {
 	runner := NewCLIRunner(writeTerraformStub(t, `#!/bin/sh
 exit 2
 `))
 
-	exitCode, err := runner.PlanRefreshOnly(context.Background(), t.TempDir(), "plan.tfplan")
+	exitCode, err := runner.Plan(context.Background(), t.TempDir(), "plan.tfplan", PlanModeRefreshOnly)
 	if err != nil {
 		t.Fatalf("expected detailed exit code without command error, got %v", err)
 	}
 	if exitCode != 2 {
 		t.Fatalf("expected exit code 2, got %d", exitCode)
+	}
+}
+
+func TestCLIRunnerPlanUsesModeArguments(t *testing.T) {
+	for _, test := range []struct {
+		mode PlanMode
+		want string
+	}{
+		{PlanModeRefreshOnly, "plan -refresh-only -detailed-exitcode -out plan.tfplan"},
+		{PlanModeNormal, "plan -detailed-exitcode -out plan.tfplan"},
+	} {
+		t.Run(string(test.mode), func(t *testing.T) {
+			runner := NewCLIRunner(writeTerraformStub(t, `#!/bin/sh
+printf '%s' "$*" > "$TERRADRIFT_ARGS"
+`))
+			argsPath := filepath.Join(t.TempDir(), "args")
+			t.Setenv("TERRADRIFT_ARGS", argsPath)
+			if _, err := runner.Plan(context.Background(), t.TempDir(), "plan.tfplan", test.mode); err != nil {
+				t.Fatalf("plan: %v", err)
+			}
+			data, err := os.ReadFile(argsPath)
+			if err != nil || string(data) != test.want {
+				t.Fatalf("arguments = %q, err=%v, want %q", data, err, test.want)
+			}
+		})
+	}
+}
+
+func TestParsePlanModeRejectsInvalidValue(t *testing.T) {
+	if _, err := ParsePlanMode("apply"); err == nil {
+		t.Fatal("expected invalid mode error")
 	}
 }
 

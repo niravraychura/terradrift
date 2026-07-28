@@ -24,14 +24,14 @@ func TestWriteDefaultAndLoad(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load config: %v", err)
 	}
-	if cfg.Directory != "." || cfg.Output != "table" || cfg.Timeout != "5m" || cfg.RedactPaths || cfg.TerraformExec || cfg.TerraformBin != "" || cfg.WorkspaceRoot != "" || cfg.Notify != "" || cfg.SlackWebhookURL != "" || cfg.TeamsWebhookURL != "" || cfg.WebhookURL != "" || cfg.DashboardHTML != "" || cfg.HistoryDir != "" || cfg.PolicyCommand != "" || cfg.PolicyArgs != nil || cfg.CostCommand != "" || cfg.CostArgs != nil || cfg.RemediationRunbooks != nil || cfg.Profiles != nil {
+	if cfg.Directory != "." || cfg.Output != "table" || cfg.Timeout != "5m" || cfg.PlanMode != "refresh-only" || cfg.RedactPaths || cfg.TerraformExec || cfg.TerraformBin != "" || cfg.WorkspaceRoot != "" || cfg.Notify != "" || cfg.SlackWebhookURL != "" || cfg.TeamsWebhookURL != "" || cfg.WebhookURL != "" || cfg.DashboardHTML != "" || cfg.HistoryDir != "" || cfg.PolicyCommand != "" || cfg.PolicyArgs != nil || cfg.CostCommand != "" || cfg.CostArgs != nil || cfg.RemediationRunbooks != nil || cfg.Profiles != nil {
 		t.Fatalf("unexpected config: %#v", cfg)
 	}
 }
 
 func TestLoadProfile(t *testing.T) {
 	path := filepath.Join(t.TempDir(), DefaultPath)
-	data := []byte(`{"profiles":{"production":{"directory":"./prod","output":"json","terraform_exec":true}}}`)
+	data := []byte(`{"profiles":{"production":{"directory":"./prod","output":"json","terraform_exec":true,"plan_mode":"normal"}}}`)
 	if err := os.WriteFile(path, data, 0o600); err != nil {
 		t.Fatalf("write config fixture: %v", err)
 	}
@@ -40,7 +40,7 @@ func TestLoadProfile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load profile: %v", err)
 	}
-	if cfg.Directory != "./prod" || cfg.Output != "json" || !cfg.TerraformExec {
+	if cfg.Directory != "./prod" || cfg.Output != "json" || !cfg.TerraformExec || cfg.PlanMode != "normal" {
 		t.Fatalf("unexpected profile: %#v", cfg)
 	}
 }
@@ -88,6 +88,16 @@ func TestLoadRejectsInvalidValues(t *testing.T) {
 	}
 	if _, err := Load(path); err == nil {
 		t.Fatal("expected invalid config value to fail")
+	}
+}
+
+func TestLoadRejectsInvalidPlanMode(t *testing.T) {
+	path := filepath.Join(t.TempDir(), DefaultPath)
+	if err := os.WriteFile(path, []byte(`{"plan_mode":"apply"}`), 0o600); err != nil {
+		t.Fatalf("write config fixture: %v", err)
+	}
+	if _, err := Load(path); err == nil {
+		t.Fatal("expected invalid plan mode to fail")
 	}
 }
 

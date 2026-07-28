@@ -3,6 +3,7 @@
   "output": "json",
   "timeout": "10m",
   "terraform_exec": true,
+  "plan_mode": "refresh-only",
   "redact_paths": true,
   "workspace_root": ".",
   "notification_throttle": true,
