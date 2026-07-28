@@ -64,7 +64,7 @@ This plan tracks security, performance, code quality, and feature work for Terra
 - [ ] Add ownership mapping and alert routing for resource addresses or tags.
 - [ ] Add notification throttling for unchanged drift with severity-based escalation.
 - [ ] Add optional GitHub issue creation for persistent drift findings.
-- [ ] Add SARIF output for code-scanning dashboards.
+- [x] Add SARIF output for code-scanning dashboards.
 - [x] Add JUnit XML output for CI test reporting.
 - [ ] Add Prometheus metrics for scan status, duration, resource counts, and failures.
 - [ ] Add a static dashboard index across roots and historical trends.

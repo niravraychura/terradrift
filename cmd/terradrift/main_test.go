@@ -131,6 +131,21 @@ func TestWriteScanReportJUnit(t *testing.T) {
 	}
 }
 
+func TestWriteScanReportSARIF(t *testing.T) {
+	var output bytes.Buffer
+	err := writeScanReport(&output, report.DriftReport{ResourceChanges: []report.ResourceChange{{Address: "aws_instance.web"}}}, outputFormatSARIF)
+	if err != nil {
+		t.Fatalf("expected SARIF output to succeed: %v", err)
+	}
+	var log sarifLog
+	if err := json.Unmarshal(output.Bytes(), &log); err != nil {
+		t.Fatalf("expected valid SARIF JSON: %v", err)
+	}
+	if log.Version != "2.1.0" || len(log.Runs) != 1 || len(log.Runs[0].Results) != 1 || log.Runs[0].Results[0].Message.Text != "Terraform drift: aws_instance.web" {
+		t.Fatalf("unexpected SARIF log: %#v", log)
+	}
+}
+
 func TestScanAcceptsTimeoutFlag(t *testing.T) {
 	_, _, err := executeCommand("scan", "-d", t.TempDir(), "--timeout", "1s")
 	if err != nil {

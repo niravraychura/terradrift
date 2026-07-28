@@ -37,6 +37,7 @@ const (
 	outputFormatTable outputFormat = "table"
 	outputFormatJSON  outputFormat = "json"
 	outputFormatJUnit outputFormat = "junit"
+	outputFormatSARIF outputFormat = "sarif"
 )
 
 func main() {
@@ -243,7 +244,7 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVarP(&directory, "directory", "d", ".", "Terraform directory to scan")
-	cmd.Flags().StringVarP(&format, "output", "o", string(outputFormatTable), "output format: table, json, junit")
+	cmd.Flags().StringVarP(&format, "output", "o", string(outputFormatTable), "output format: table, json, junit, sarif")
 	cmd.Flags().DurationVar(&timeout, "timeout", scanner.DefaultTimeout, "maximum scan duration")
 	cmd.Flags().BoolVar(&redactPaths, "redact-paths", false, "redact local filesystem paths from scan output")
 	cmd.Flags().BoolVar(&terraformExec, "terraform-exec", false, "run Terraform init, refresh-only plan, and show -json")
@@ -294,10 +295,10 @@ func sendNotification(ctx context.Context, target string, slackWebhookURL string
 func parseOutputFormat(format string) (outputFormat, error) {
 	normalized := strings.ToLower(strings.TrimSpace(format))
 	switch outputFormat(normalized) {
-	case outputFormatTable, outputFormatJSON, outputFormatJUnit:
+	case outputFormatTable, outputFormatJSON, outputFormatJUnit, outputFormatSARIF:
 		return outputFormat(normalized), nil
 	default:
-		return "", fmt.Errorf("unsupported output format %q; supported values: table, json, junit", format)
+		return "", fmt.Errorf("unsupported output format %q; supported values: table, json, junit, sarif", format)
 	}
 }
 
@@ -323,6 +324,24 @@ func writeScanReport(stdout io.Writer, scanReport report.DriftReport, format out
 			return fmt.Errorf("write scan output: %w", err)
 		}
 		return nil
+	case outputFormatSARIF:
+		results := make([]sarifResult, 0, len(scanReport.ResourceChanges))
+		for _, change := range scanReport.ResourceChanges {
+			results = append(results, sarifResult{RuleID: "terradrift.drift", Level: "error", Message: sarifMessage{Text: fmt.Sprintf("Terraform drift: %s", change.Address)}})
+		}
+		encoder := json.NewEncoder(stdout)
+		encoder.SetIndent("", "  ")
+		if err := encoder.Encode(sarifLog{
+			Schema:  "https://json.schemastore.org/sarif-2.1.0.json",
+			Version: "2.1.0",
+			Runs: []sarifRun{{
+				Tool:    sarifTool{Driver: sarifDriver{Name: "TerraDrift", Rules: []sarifRule{{ID: "terradrift.drift", Name: "Terraform drift detected"}}}},
+				Results: results,
+			}},
+		}); err != nil {
+			return fmt.Errorf("write scan output: %w", err)
+		}
+		return nil
 	case outputFormatTable:
 		if _, err := fmt.Fprintln(stdout, "TerraDrift scan initialized"); err != nil {
 			return fmt.Errorf("write scan output: %w", err)
@@ -341,7 +360,7 @@ func writeScanReport(stdout io.Writer, scanReport report.DriftReport, format out
 		}
 		return nil
 	default:
-		return fmt.Errorf("unsupported output format %q; supported values: table, json, junit", format)
+		return fmt.Errorf("unsupported output format %q; supported values: table, json, junit, sarif", format)
 	}
 }
 
@@ -365,4 +384,39 @@ type junitTestCase struct {
 
 type junitFailure struct {
 	Message string `xml:"message,attr"`
+}
+
+type sarifLog struct {
+	Schema  string     `json:"$schema"`
+	Version string     `json:"version"`
+	Runs    []sarifRun `json:"runs"`
+}
+
+type sarifRun struct {
+	Tool    sarifTool     `json:"tool"`
+	Results []sarifResult `json:"results"`
+}
+
+type sarifTool struct {
+	Driver sarifDriver `json:"driver"`
+}
+
+type sarifDriver struct {
+	Name  string      `json:"name"`
+	Rules []sarifRule `json:"rules"`
+}
+
+type sarifRule struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
+type sarifResult struct {
+	RuleID  string       `json:"ruleId"`
+	Level   string       `json:"level"`
+	Message sarifMessage `json:"message"`
+}
+
+type sarifMessage struct {
+	Text string `json:"text"`
 }
