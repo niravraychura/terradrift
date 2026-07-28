@@ -1,6 +1,7 @@
 package config
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -66,7 +67,7 @@ func LoadProfile(path string, profile string) (Config, error) {
 		return Config{}, fmt.Errorf("read config %s: %w", path, err)
 	}
 	cfg := Default()
-	if err := json.Unmarshal(data, &cfg); err != nil {
+	if err := decode(data, &cfg); err != nil {
 		return Config{}, fmt.Errorf("parse config %s: %w", path, err)
 	}
 	if profile == "" {
@@ -77,10 +78,16 @@ func LoadProfile(path string, profile string) (Config, error) {
 		return Config{}, fmt.Errorf("config profile %q not found in %s", profile, path)
 	}
 	cfg = Default()
-	if err := json.Unmarshal(data, &cfg); err != nil {
+	if err := decode(data, &cfg); err != nil {
 		return Config{}, fmt.Errorf("parse config profile %q in %s: %w", profile, path, err)
 	}
 	return cfg, nil
+}
+
+func decode(data []byte, target any) error {
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	return decoder.Decode(target)
 }
 
 // WriteDefault writes the default configuration to path without overwriting existing files.
