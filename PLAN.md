@@ -26,6 +26,7 @@ This plan tracks security, performance, code quality, and feature work for Terra
 - [x] Avoid buffering unbounded Terraform stdout/stderr in memory.
 - [x] Keep plan parsing focused on the fields needed for drift reports.
 - [x] Add large-plan parser fixtures or benchmarks once JSON parsing exists.
+- [ ] Add benchmark tests for report rendering, redaction, and history loading with synthetic large reports.
 - [x] Revisit Makefile formatting implementation if repository size grows significantly.
 
 ## Code quality plan
@@ -34,6 +35,7 @@ This plan tracks security, performance, code quality, and feature work for Terra
 - [x] Add typed scan outcomes so CLI exit codes can cleanly distinguish no drift, drift detected, and scan failure.
 - [x] Decide whether `scan` should accept any directory or require at least one `.tf` file, then update docs/tests accordingly.
 - [x] Add clear package boundaries for Terraform execution, plan parsing, reporting, and notification delivery.
+- [ ] Thread a context-aware logger through scan operations instead of relying only on global slog state.
 
 ## Feature plan
 
