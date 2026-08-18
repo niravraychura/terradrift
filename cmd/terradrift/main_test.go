@@ -233,7 +233,11 @@ func TestMultiScanStatusReportsNormalChanges(t *testing.T) {
 func TestScanAllReportsPartialOutcome(t *testing.T) {
 	valid := t.TempDir()
 	missing := filepath.Join(t.TempDir(), "missing")
-	aggregate := scanAll(context.Background(), []manifestRoot{{Directory: valid}, {Directory: missing}}, scanner.Options{}, rootDefaults{PlanMode: "refresh-only"}, 1, false, "", nil, "", nil, deliveryOptions{})
+	aggregate := scanAll(context.Background(), scanAllParams{
+		Specs:       []manifestRoot{{Directory: valid}, {Directory: missing}},
+		Defaults:    rootDefaults{PlanMode: "refresh-only"},
+		Concurrency: 1,
+	})
 	if aggregate.Status != multiScanStatusPartial || aggregate.FailedRoots != 1 {
 		t.Fatalf("expected partial aggregate, got %#v", aggregate)
 	}
@@ -891,7 +895,10 @@ func TestScanAllHelpIncludesDeliveryFlags(t *testing.T) {
 	if err != nil {
 		t.Fatalf("scan-all help: %v", err)
 	}
-	for _, flag := range []string{"--history-dir", "--notify", "--policy-command", "--cost-command", "--workspace", "--var-file", "--config"} {
+	for _, flag := range []string{
+		"--history-dir", "--notify", "--policy-command", "--cost-command", "--workspace", "--var-file", "--config",
+		"--github-repository", "--github-pr", "--github-issue-after", "--artifact-url", "--approval-file", "--audit-log",
+	} {
 		if !strings.Contains(stdout, flag) {
 			t.Fatalf("expected scan-all help to contain %q", flag)
 		}
@@ -1061,14 +1068,119 @@ func TestScanAllFinalizeWritesHistoryUnderConcurrency(t *testing.T) {
 	}
 }
 
-func TestScanAllHelpIncludesFailureSeverityAndSubset(t *testing.T) {
+func TestEnrichAndFinalizeRootAppliesIgnoreAndOwners(t *testing.T) {
+	scanReport := report.DriftReport{
+		Status:                report.ScanStatusDriftDetected,
+		TotalChangedResources: 1,
+		ResourceChanges: []report.ResourceChange{
+			{Address: "aws_s3_bucket.logs", Type: "aws_s3_bucket"},
+		},
+	}
+	params := scanAllParams{
+		Enrichment: reportEnrichmentOptions{
+			IgnoreRules: []report.IgnoreRule{{
+				Address:   "aws_s3_bucket.logs",
+				Owner:     "platform",
+				Reason:    "temporary exception for test",
+				ExpiresAt: time.Now().UTC().Add(24 * time.Hour).Format(time.RFC3339),
+			}},
+			ResourceOwners: map[string]string{"aws_s3_bucket": "storage-team"},
+		},
+	}
+	if err := enrichAndFinalizeRoot(context.Background(), &scanReport, params); err != nil {
+		t.Fatalf("enrichAndFinalizeRoot: %v", err)
+	}
+	if scanReport.Status != report.ScanStatusNoDrift {
+		t.Fatalf("expected ignore to clear drift, got %s", scanReport.Status)
+	}
+	if !scanReport.ResourceChanges[0].Ignored {
+		t.Fatal("expected resource to be ignored")
+	}
+	if scanReport.ResourceChanges[0].Owner != "storage-team" {
+		t.Fatalf("expected type owner, got %q", scanReport.ResourceChanges[0].Owner)
+	}
+}
+
+func TestScanAllWritesAuditLog(t *testing.T) {
+	root := t.TempDir()
+	directory := filepath.Join(root, "development")
+	if err := os.Mkdir(directory, 0o700); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	manifest := filepath.Join(root, "roots.txt")
+	if err := os.WriteFile(manifest, []byte("development\n"), 0o600); err != nil {
+		t.Fatalf("manifest: %v", err)
+	}
+	auditLog := filepath.Join(t.TempDir(), "audit.jsonl")
+	_, _, err := executeCommand(
+		"scan-all", "--manifest", manifest, "--output", "json", "--concurrency", "1",
+		"--audit-log", auditLog,
+	)
+	if err != nil {
+		t.Fatalf("scan-all: %v", err)
+	}
+	data, err := os.ReadFile(auditLog)
+	if err != nil {
+		t.Fatalf("read audit log: %v", err)
+	}
+	if !strings.Contains(string(data), `"event":"scan_completed"`) {
+		t.Fatalf("expected audit event, got %s", data)
+	}
+}
+
+func TestScanAllRequiresGitHubToken(t *testing.T) {
+	t.Setenv("GITHUB_TOKEN", "")
+	root := t.TempDir()
+	manifest := filepath.Join(root, "roots.txt")
+	if err := os.WriteFile(manifest, []byte("development\n"), 0o600); err != nil {
+		t.Fatalf("manifest: %v", err)
+	}
+	_, _, err := executeCommand(
+		"scan-all", "--manifest", manifest, "--output", "json",
+		"--github-repository", "example/terradrift", "--github-pr", "1",
+	)
+	if err == nil || !strings.Contains(err.Error(), "GITHUB_TOKEN") {
+		t.Fatalf("expected GITHUB_TOKEN error, got %v", err)
+	}
+}
+
+func TestScanAllLoadsAllowedCommandsFromConfig(t *testing.T) {
+	root := t.TempDir()
+	if err := os.Mkdir(filepath.Join(root, "development"), 0o700); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	manifest := filepath.Join(root, "roots.txt")
+	if err := os.WriteFile(manifest, []byte("development\n"), 0o600); err != nil {
+		t.Fatalf("manifest: %v", err)
+	}
+	configPath := filepath.Join(root, ".terradrift.json")
+	configBody := `{
+  "output": "json",
+  "allowed_commands": ["/usr/local/bin/conftest"],
+  "policy_command": "true"
+}`
+	if err := os.WriteFile(configPath, []byte(configBody), 0o600); err != nil {
+		t.Fatalf("config: %v", err)
+	}
+	_, _, err := executeCommand("scan-all", "--manifest", manifest, "--config", configPath)
+	if err == nil || !strings.Contains(err.Error(), "not allowed") {
+		t.Fatalf("expected allowlist rejection for policy command, got %v", err)
+	}
+}
+
+func TestScanAllHelpIncludesFailureSeverityAndDeliveryParity(t *testing.T) {
 	stdout, _, err := executeCommand("scan-all", "--help")
 	if err != nil {
 		t.Fatalf("help: %v", err)
 	}
-	for _, needle := range []string{"--failure-severity", "Delivery subset", "Not yet supported"} {
+	for _, needle := range []string{"--failure-severity", "Delivery matches scan", "ignore/baseline"} {
 		if !strings.Contains(stdout, needle) {
 			t.Fatalf("expected help to contain %q, got %q", needle, stdout)
+		}
+	}
+	for _, stale := range []string{"Delivery subset", "Not yet supported"} {
+		if strings.Contains(stdout, stale) {
+			t.Fatalf("did not expect outdated help text %q", stale)
 		}
 	}
 }

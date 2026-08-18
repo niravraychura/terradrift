@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - `terradrift --version` / `-v` (release builds inject the tag via `-ldflags`)
+- `scan-all` delivery parity with `scan`: ignore/baseline, owners/runbooks, approvals, GitHub PR/issue, artifact upload, audit-log, notification throttle, and config allowlists
 
 ## [0.1.0] - 2026-08-19
 
