@@ -1,0 +1,14 @@
+---
+description: TerraDrift Go CLI conventions — fail-closed I/O, policy gate, attribute defaults
+globs: "**/*.go"
+alwaysApply: false
+---
+
+# Go CLI conventions
+
+- Prefer existing packages under `cmd/terradrift` and `internal/`; do not add parallel frameworks.
+- Fail closed on truncated adapter/policy I/O and size limits (`internal/ioutil` patterns).
+- Policy is a **publish gate**: run before history/notify/artifacts persist; never invoke a shell implicitly for `--policy-command`.
+- Attribute **paths** always; values paths-only unless `--attribute-values`; keep sensitive values redacted.
+- External HTTP (webhooks, GitHub, artifacts): timeouts and SSRF-safe clients — see `SECURITY.md`.
+- Deeper design: `docs/ARCHITECTURE.md`. Trust boundary: `SECURITY.md`.

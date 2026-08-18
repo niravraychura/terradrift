@@ -1,0 +1,13 @@
+# CODEOWNERS
+
+# Default maintainer for sensitive packaging and release surfaces.
+# https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+/.github/ @niravraychura
+/SECURITY.md @niravraychura
+/docs/RELEASE.md @niravraychura
+/docs/GITHUB_PRODUCT_SETUP.md @niravraychura
+/Dockerfile @niravraychura
+/CHANGELOG.md @niravraychura
+/AGENTS.md @niravraychura
+/.cursor/ @niravraychura
