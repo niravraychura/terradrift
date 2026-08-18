@@ -73,6 +73,8 @@ Do not commit cloud credentials, webhook URLs, or `GITHUB_TOKEN` values. Keep th
 ### Supply chain and CI
 
 - User-facing and CI workflows pin third-party GitHub Actions to immutable SHAs.
+- GitHub **secret scanning** and **push protection** are enabled for this public repository.
+- **CodeQL** runs via `.github/workflows/codeql.yml` (PRs, pushes to `main`/`dev`, weekly); findings appear under Security → Code scanning.
 - Releases produce checksums, SBOM, provenance, and image scanning as configured in repository workflows.
 - Prefer pinned Terraform/OpenTofu and committed `.terraform.lock.hcl`; TerraDrift init uses `-lockfile=readonly` and does not upgrade providers.
 
