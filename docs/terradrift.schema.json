@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "TerraDrift configuration",
+  "type": "object",
+  "properties": {
+    "directory": { "type": "string" },
+    "output": { "enum": ["table", "json", "junit", "sarif", "prometheus"] },
+    "timeout": { "type": "string" },
+    "redact_paths": { "type": "boolean" },
+    "terraform_exec": { "type": "boolean" },
+    "terraform_bin": { "type": "string" },
+    "plan_mode": { "enum": ["refresh-only", "normal"] },
+    "workspace_root": { "type": "string" },
+    "notify": { "enum": ["slack", "teams", "webhook"] },
+    "slack_webhook_url": { "type": "string" },
+    "teams_webhook_url": { "type": "string" },
+    "webhook_url": { "type": "string" },
+    "webhook_ca_cert": { "type": "string" },
+    "dashboard_html": { "type": "string" },
+    "history_dir": { "type": "string" },
+    "history_retention": { "type": "integer", "minimum": 0 },
+    "history_compressed": { "type": "boolean" },
+    "audit_log": { "type": "string" },
+    "policy_command": { "type": "string" },
+    "policy_args": { "type": "array", "items": { "type": "string" } },
+    "cost_command": { "type": "string" },
+    "cost_args": { "type": "array", "items": { "type": "string" } },
+    "audit_command": { "type": "string" },
+    "audit_args": { "type": "array", "items": { "type": "string" } },
+    "allowed_commands": { "type": "array", "items": { "type": "string" } },
+    "trusted_command_dirs": { "type": "array", "items": { "type": "string" } },
+    "remediation_runbooks": { "type": "object", "additionalProperties": { "type": "string" } },
+    "baseline_rules": { "$ref": "#/properties/ignore_rules" },
+    "failure_severity": { "enum": ["low", "medium", "high", "critical"] },
+    "resource_owners": { "type": "object", "additionalProperties": { "type": "string" } },
+    "owner_webhooks": { "type": "object", "additionalProperties": { "type": "string" } },
+    "notification_throttle": { "type": "boolean" },
+    "github_repository": { "type": "string" },
+    "github_pr": { "type": "integer", "minimum": 1 },
+    "github_issue_after": { "type": "integer", "minimum": 2 },
+    "artifact_url": { "type": "string" },
+    "attribute_values": { "type": "boolean" },
+    "workspace": { "type": "string" },
+    "var_files": { "type": "array", "items": { "type": "string" } },
+    "vars": { "type": "array", "items": { "type": "string" } },
+    "ignore_rules": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["address", "owner", "reason", "expires_at"],
+        "properties": {
+          "address": { "type": "string" }, "owner": { "type": "string" },
+          "reason": { "type": "string" }, "expires_at": { "type": "string", "format": "date-time" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "profiles": { "type": "object", "additionalProperties": { "$ref": "#" } }
+  },
+  "additionalProperties": false
+}
