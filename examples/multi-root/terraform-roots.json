@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "roots": [
+    {
+      "directory": "terraform/dev",
+      "profile": "development",
+      "plan_mode": "refresh-only",
+      "var_files": ["dev.tfvars"]
+    },
+    {
+      "directory": "terraform/prod",
+      "profile": "production",
+      "plan_mode": "refresh-only",
+      "workspace": "prod",
+      "var_files": ["prod.tfvars"]
+    }
+  ]
+}

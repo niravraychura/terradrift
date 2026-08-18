@@ -1,0 +1,14 @@
+{
+  "status": "drift_detected",
+  "directory": "terraform/prod",
+  "total_resources_checked": 1,
+  "total_changed_resources": 1,
+  "resource_changes": [
+    {
+      "address": "aws_instance.web",
+      "type": "aws_instance",
+      "name": "web",
+      "actions": ["delete", "create"]
+    }
+  ]
+}
