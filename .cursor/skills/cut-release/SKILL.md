@@ -25,10 +25,12 @@ git push origin vX.Y.Z
 
 5. **Verify** — watch `.github/workflows/release.yml` for that tag; confirm GitHub Release assets (archives, checksums, SBOM) and GHCR image.
 6. **Back-merge** — if `main` is ahead of `dev` (promotion merge commit), PR `main` → `dev` and merge after CI.
+7. **Milestone** — if an open GitHub milestone exists for this version, **close** it after the release succeeds. Do not create empty milestones for future versions.
 
 ## Rules
 
 - Never rewrite or move a published release tag.
 - Pre-1.0: breaking CLI/JSON → call out in CHANGELOG; prefer MINOR bump.
 - Hotfix on `main` → patch tag, then back-merge to `dev`.
+- No dummy milestones (see `.cursor/rules/github-milestones.mdc`).
 - Report PR URLs, tag, release URL, and CI/release conclusion in the final reply.

@@ -1,14 +1,16 @@
 # Roadmap
 
-High-level product direction for TerraDrift. Detailed engineering work lives in [PLAN.md](../PLAN.md). Version buckets live as GitHub **Milestones** (`v0.1.0`, `v0.2.0`, `v1.0.0`). Triage uses a single GitHub **Project** board.
+High-level product direction for TerraDrift. Detailed engineering work lives in [PLAN.md](../PLAN.md). Triage uses a single GitHub **Project** board.
 
-## Near term
+**Milestones:** create a GitHub milestone only when there is real work to attach (issues/PRs). Do not keep empty version placeholders. Shipped releases close their milestone (see `.cursor/rules/github-milestones.mdc`).
 
-| Milestone | Intent |
-|-----------|--------|
-| **v0.1.0** | First public tagged CLI release with documented install and release process |
-| **v0.2.0** | Product polish after first release (UX, docs, scan-all / CI examples as needed) |
-| **v1.0.0** | Stability promise for CLI flags and published JSON consumers rely on |
+## Near term (intent — not empty GitHub milestones)
+
+| Version | Intent |
+|---------|--------|
+| **v0.1.0** | Shipped — first public tagged CLI release |
+| **v0.2.0** | Product polish after first release (UX, docs, scan-all / CI examples as needed) — open a milestone when work starts |
+| **v1.0.0** | Stability promise for CLI flags and published JSON consumers rely on — open a milestone when work starts |
 
 ## Out of scope (for now)
 

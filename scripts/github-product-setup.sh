@@ -26,19 +26,8 @@ create_label "dependencies" "0366d6" "Dependency updates"
 create_label "release" "c2e0c6" "Release or versioning work"
 
 echo "==> Milestones"
-ensure_milestone() {
-  local title="$1" desc="$2"
-  if gh api "$API/milestones" --jq '.[].title' 2>/dev/null | grep -Fxq "$title"; then
-    echo "    exists: $title"
-  else
-    gh api --method POST "$API/milestones" -f title="$title" -f description="$desc" -f state=open >/dev/null
-    echo "    created: $title"
-  fi
-}
-
-ensure_milestone "v0.1.0" "First public tagged CLI release"
-ensure_milestone "v0.2.0" "Next product slice after 0.1"
-ensure_milestone "v1.0.0" "CLI/JSON stability promise"
+echo "    skip: do not create empty milestones (see .cursor/rules/github-milestones.mdc)"
+echo "    create a milestone only when attaching real issues/PRs; close when the tag ships"
 
 echo "==> Repository topics + Discussions + private vuln reporting"
 gh api --method PATCH "$API" \
