@@ -80,7 +80,11 @@ terradrift init --directory ./terraform/prod --terraform-exec --redact-paths --h
 
 If `--directory` is omitted, TerraDrift scans the current working directory.
 
-`scan-all` accepts a **text** or **JSON** manifest. Text manifests list one Terraform root per line (blank lines and `#` comments ignored; relative roots resolve from the manifest directory). JSON manifests use `version: 1` and may set per-root `profile`, `plan_mode`, `workspace`, `var_files`, and `vars` so mono-repos are not forced into one global flag set. Named `profile` values require `--config`. It runs roots with bounded concurrency and emits aggregate table or JSON output. `--incremental-state` is opt-in and retries only roots that previously drifted or failed; omit it for full coverage. Delivery flags matching `scan` are supported per root: `--history-dir`, `--dashboard-html`, `--notify` (plus webhook URL flags), `--policy-command`, `--cost-command`, and `--audit-command`. Policy runs as a publish gate before that root's history, dashboard, and notifications. Concurrent roots serialize history/dashboard writes; a shared `--dashboard-html` path is overwritten by the last successful root.
+`scan-all` accepts a **text** or **JSON** manifest. Text manifests list one Terraform root per line (blank lines and `#` comments ignored; relative roots resolve from the manifest directory). JSON manifests use `version: 1` and may set per-root `profile`, `plan_mode`, `workspace`, `var_files`, and `vars` so mono-repos are not forced into one global flag set. Named `profile` values require `--config`. It runs roots with bounded concurrency and emits aggregate table or JSON output. `--incremental-state` is opt-in and retries only roots that previously drifted or failed; omit it for full coverage.
+
+**`scan-all` delivery subset (production-usable):** `--history-dir`, `--dashboard-html`, `--notify` (plus webhook URL flags), `--policy-command`, `--cost-command`, `--audit-command`, `--attribute-values`, workspace/var-file defaults, and `--failure-severity` (gates exit code `2` for refresh-only drift the same way as `scan`). Policy runs as a publish gate before that root's history, dashboard, and notifications. Concurrent roots serialize history/dashboard writes.
+
+**Not on `scan-all` yet** (use `terradrift scan` per root): baselines/owners/runbooks, GitHub PR/issue summaries, `--artifact-url`, `--audit-log`, notification throttle, approvals. Prefer `terradrift dashboard-index` for multi-root HTML; a shared `--dashboard-html` path is overwritten by the last successful root (and warns when `concurrency > 1`).
 
 Build a static cross-root dashboard index from recent history:
 
@@ -292,7 +296,20 @@ Build the image:
 make docker-build
 ```
 
-The current runtime image intentionally does not install Terraform. To use `--terraform-exec` in Docker, build a derived image that installs Terraform or mount/provide a trusted Terraform binary on `PATH`. Pin Terraform, provider, and module versions in CI for repeatable drift results.
+The current runtime image intentionally does not install Terraform. To use `--terraform-exec` in Docker, build a derived image that installs Terraform or OpenTofu, or mount a trusted binary on `PATH`. Example derived image:
+
+```dockerfile
+FROM ghcr.io/niravraychura/terradrift:latest
+USER root
+RUN apk --no-cache add curl unzip \
+  && curl -fsSLo /tmp/terraform.zip https://releases.hashicorp.com/terraform/1.10.5/terraform_1.10.5_linux_amd64.zip \
+  && unzip /tmp/terraform.zip -d /usr/local/bin \
+  && rm /tmp/terraform.zip \
+  && chmod 0755 /usr/local/bin/terraform
+USER terradrift:terradrift
+```
+
+Pin TerraDrift, Terraform/OpenTofu, provider, and module versions in CI for repeatable drift results. Do not bake cloud credentials into the image.
 
 ## Releases
 
@@ -384,7 +401,7 @@ terradrift scan --approval-file report.json.approval.json
 
 Correlate drift with CloudTrail, Azure Activity Log, or GCP Audit Log through `--audit-command`; see [audit adapter guidance](docs/AUDIT_ADAPTERS.md).
 
-For CI, set absolute `allowed_commands` and `trusted_command_dirs` in a profile. Resolved commands, including bare names, must be under a trusted directory; commands containing shell syntax are rejected.
+For CI, set absolute `allowed_commands` and `trusted_command_dirs` in a profile (see `examples/config/ci.json`). Resolved commands, including bare names, must be under a trusted directory; commands containing shell syntax are rejected. Empty allowlists mean **local trust only**—fine on a laptop, unsafe for shared CI without pinning both fields.
 
 ```json
 {

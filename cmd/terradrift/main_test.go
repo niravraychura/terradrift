@@ -17,6 +17,8 @@ import (
 	"github.com/niravraychura/terradrift/internal/config"
 	"github.com/niravraychura/terradrift/internal/history"
 	"github.com/niravraychura/terradrift/internal/ioutil"
+	"github.com/niravraychura/terradrift/internal/notify"
+	"github.com/niravraychura/terradrift/internal/parser"
 	"github.com/niravraychura/terradrift/internal/report"
 	"github.com/niravraychura/terradrift/internal/scanner"
 	"github.com/niravraychura/terradrift/internal/terraform"
@@ -961,5 +963,121 @@ func TestExitCodeConstants(t *testing.T) {
 func TestExitCodeForDriftDetected(t *testing.T) {
 	if got := exitCodeForError(errDriftDetected); got != exitCodeDriftDetected {
 		t.Fatalf("expected drift exit code %d, got %d", exitCodeDriftDetected, got)
+	}
+}
+
+func TestSecretFixturesNeverLeakIntoDeliveryChannels(t *testing.T) {
+	secret := "fixture-redaction-probe-v1"
+	plan := []byte(`{
+		"resource_changes":[{
+			"address":"aws_db_instance.main",
+			"type":"aws_db_instance",
+			"name":"main",
+			"mode":"managed",
+			"change":{
+				"actions":["update"],
+				"before":{"password":"` + secret + `","db_conn_str":"` + secret + `","idle_timeout":60},
+				"after":{"password":"` + secret + `-2","db_conn_str":"` + secret + `-2","idle_timeout":120}
+			}
+		}]
+	}`)
+	changes, _, checked, exact, err := parser.ParsePlan(plan, terraform.PlanModeRefreshOnly)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	scanReport := report.DriftReport{
+		ScanID: "test", Status: report.ScanStatusDriftDetected, Directory: "terraform/prod",
+		PlanMode: string(terraform.PlanModeRefreshOnly), TotalResourcesChecked: checked,
+		ResourcesCheckedExact: exact, TotalChangedResources: len(changes), ResourceChanges: changes,
+	}
+	encoded, err := json.Marshal(scanReport)
+	if err != nil {
+		t.Fatalf("marshal live report: %v", err)
+	}
+	if strings.Contains(string(encoded), secret) {
+		t.Fatalf("secret leaked into live JSON: %s", encoded)
+	}
+	persisted := report.WithoutAttributeValues(scanReport)
+	historyDir := t.TempDir()
+	if _, err := history.Write(historyDir, persisted); err != nil {
+		t.Fatalf("history write: %v", err)
+	}
+	matches, err := filepath.Glob(filepath.Join(historyDir, "*.json"))
+	if err != nil || len(matches) != 1 {
+		t.Fatalf("history files: %v %#v", err, matches)
+	}
+	data, err := os.ReadFile(matches[0])
+	if err != nil {
+		t.Fatalf("read history: %v", err)
+	}
+	if strings.Contains(string(data), secret) {
+		t.Fatalf("secret leaked into history: %s", data)
+	}
+	message := notify.RedactedNotificationMessage(persisted)
+	if strings.Contains(message, secret) {
+		t.Fatalf("secret leaked into notification: %s", message)
+	}
+}
+
+func TestScanAllFinalizeWritesHistoryUnderConcurrency(t *testing.T) {
+	root := t.TempDir()
+	for _, name := range []string{"development", "production"} {
+		if err := os.Mkdir(filepath.Join(root, name), 0o700); err != nil {
+			t.Fatalf("mkdir: %v", err)
+		}
+	}
+	manifest := filepath.Join(root, "roots.txt")
+	if err := os.WriteFile(manifest, []byte("development\nproduction\n"), 0o600); err != nil {
+		t.Fatalf("manifest: %v", err)
+	}
+	historyDir := filepath.Join(t.TempDir(), "history")
+	_, _, err := executeCommand(
+		"scan-all", "--manifest", manifest, "--output", "json", "--concurrency", "2",
+		"--history-dir", historyDir,
+		"--policy-command", "true",
+	)
+	if err != nil {
+		t.Fatalf("scan-all: %v", err)
+	}
+	entries, err := os.ReadDir(historyDir)
+	if err != nil {
+		t.Fatalf("read history: %v", err)
+	}
+	if len(entries) != 2 {
+		t.Fatalf("expected 2 history files, got %d", len(entries))
+	}
+}
+
+func TestScanAllHelpIncludesFailureSeverityAndSubset(t *testing.T) {
+	stdout, _, err := executeCommand("scan-all", "--help")
+	if err != nil {
+		t.Fatalf("help: %v", err)
+	}
+	for _, needle := range []string{"--failure-severity", "Delivery subset", "Not yet supported"} {
+		if !strings.Contains(stdout, needle) {
+			t.Fatalf("expected help to contain %q, got %q", needle, stdout)
+		}
+	}
+}
+
+func TestMultiScanMeetsSeverity(t *testing.T) {
+	aggregate := multiScanReport{Roots: []multiScanRoot{
+		{Report: report.DriftReport{Status: report.ScanStatusDriftDetected, ResourceChanges: []report.ResourceChange{{RiskLevel: "medium"}}}},
+		{Report: report.DriftReport{Status: report.ScanStatusDriftDetected, ResourceChanges: []report.ResourceChange{{RiskLevel: "critical"}}}},
+	}}
+	meets, err := multiScanMeetsSeverity(aggregate, "high")
+	if err != nil || !meets {
+		t.Fatalf("expected high threshold to match critical finding: meets=%v err=%v", meets, err)
+	}
+	meets, err = multiScanMeetsSeverity(aggregate, "critical")
+	if err != nil || !meets {
+		t.Fatalf("expected critical threshold to match: meets=%v err=%v", meets, err)
+	}
+	lowOnly := multiScanReport{Roots: []multiScanRoot{
+		{Report: report.DriftReport{Status: report.ScanStatusDriftDetected, ResourceChanges: []report.ResourceChange{{RiskLevel: "medium"}}}},
+	}}
+	meets, err = multiScanMeetsSeverity(lowOnly, "high")
+	if err != nil || meets {
+		t.Fatalf("expected medium drift below high threshold: meets=%v err=%v", meets, err)
 	}
 }

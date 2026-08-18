@@ -109,6 +109,16 @@ func TestSecureWebhookClientFromCA(t *testing.T) {
 	if err != nil || client == nil {
 		t.Fatalf("expected empty CA path to succeed: %v", err)
 	}
+	if client.Timeout != webhookHTTPTimeout {
+		t.Fatalf("timeout = %v, want %v", client.Timeout, webhookHTTPTimeout)
+	}
+	transport, ok := client.Transport.(*http.Transport)
+	if !ok {
+		t.Fatalf("expected *http.Transport, got %T", client.Transport)
+	}
+	if transport.TLSHandshakeTimeout != webhookTLSHandshakeTimeout || transport.ResponseHeaderTimeout != webhookResponseHeaderTimeout {
+		t.Fatalf("unexpected transport timeouts: tls=%v header=%v", transport.TLSHandshakeTimeout, transport.ResponseHeaderTimeout)
+	}
 	if _, err := secureWebhookClientFromCA(filepath.Join(t.TempDir(), "missing.pem")); err == nil {
 		t.Fatal("expected missing CA file to fail")
 	}
@@ -145,7 +155,7 @@ func TestSecureWebhookClientFromCA(t *testing.T) {
 	if err != nil || withCA == nil {
 		t.Fatalf("expected CA client: %v", err)
 	}
-	transport, ok := withCA.Transport.(*http.Transport)
+	transport, ok = withCA.Transport.(*http.Transport)
 	if !ok || transport.TLSClientConfig == nil || transport.TLSClientConfig.RootCAs == nil {
 		t.Fatal("expected TLS RootCAs to be configured")
 	}

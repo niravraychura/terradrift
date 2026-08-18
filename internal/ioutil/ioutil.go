@@ -34,6 +34,33 @@ func (buffer *LimitedBuffer) Write(p []byte) (int, error) {
 	return originalLen, err
 }
 
+// LimitedWriter forwards writes to W until Remaining bytes are consumed.
+// Further bytes are discarded and Truncated is set; Write still reports success
+// for the full input length so command pipes keep draining.
+type LimitedWriter struct {
+	W         io.Writer
+	Remaining int64
+	Truncated bool
+}
+
+// Write implements io.Writer.
+func (writer *LimitedWriter) Write(p []byte) (int, error) {
+	originalLen := len(p)
+	if writer.Remaining <= 0 {
+		if len(p) > 0 {
+			writer.Truncated = true
+		}
+		return originalLen, nil
+	}
+	if int64(len(p)) > writer.Remaining {
+		p = p[:writer.Remaining]
+		writer.Truncated = true
+	}
+	written, err := writer.W.Write(p)
+	writer.Remaining -= int64(written)
+	return originalLen, err
+}
+
 // ReadLimitedFile reads a file and rejects contents larger than maximum bytes.
 func ReadLimitedFile(path string, maximum int64) ([]byte, error) {
 	file, err := os.Open(path)

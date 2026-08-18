@@ -4,28 +4,12 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"sort"
 
 	"github.com/niravraychura/terradrift/internal/report"
 	"github.com/niravraychura/terradrift/internal/terraform"
 )
-
-type terraformPlan struct {
-	ResourceChanges json.RawMessage            `json:"resource_changes"`
-	ResourceDrift   json.RawMessage            `json:"resource_drift"`
-	OutputChanges   map[string]terraformChange `json:"output_changes"`
-	// PriorState is kept as RawMessage so full resource Values are not retained
-	// beyond the lightweight mode-only count pass (see countPriorState).
-	PriorState json.RawMessage `json:"prior_state"`
-}
-
-// priorStateCountModule decodes only mode/structure needed for managed-resource counts.
-type priorStateCountModule struct {
-	Resources []struct {
-		Mode string `json:"mode"`
-	} `json:"resources"`
-	ChildModules []priorStateCountModule `json:"child_modules"`
-}
 
 type terraformResourceChange struct {
 	Address      string          `json:"address"`
@@ -53,51 +37,110 @@ type terraformChange struct {
 // OpenTofu JSON renderers can omit that field, so only then do we fall back to
 // resource_changes. Prior-state inventory is exact when its root module exists;
 // otherwise resource_changes supplies a clearly marked estimate.
+//
+// Parsing is token-streamed: unused top-level fields (configuration, planned_values,
+// etc.) and prior_state resource value blobs are skipped without materializing them.
 func ParsePlan(data []byte, mode terraform.PlanMode) ([]report.ResourceChange, []report.OutputChange, int, bool, error) {
+	return ParsePlanReader(bytes.NewReader(data), mode)
+}
+
+// ParsePlanReader is the streaming entry point for terraform show -json output.
+func ParsePlanReader(reader io.Reader, mode terraform.PlanMode) ([]report.ResourceChange, []report.OutputChange, int, bool, error) {
 	mode, err := terraform.ParsePlanMode(string(mode))
 	if err != nil {
 		return nil, nil, 0, false, err
 	}
-	var plan terraformPlan
-	if err := json.Unmarshal(data, &plan); err != nil {
+	decoder := json.NewDecoder(reader)
+	token, err := decoder.Token()
+	if err != nil {
 		return nil, nil, 0, false, fmt.Errorf("parse terraform plan JSON: %w", err)
 	}
-
-	resourceChanges, err := decodeResourceChanges(plan.ResourceChanges)
-	if err != nil {
-		return nil, nil, 0, false, err
+	if token != json.Delim('{') {
+		return nil, nil, 0, false, fmt.Errorf("parse terraform plan JSON: expected object")
 	}
-	selected := resourceChanges
-	if mode == terraform.PlanModeRefreshOnly && plan.ResourceDrift != nil {
-		selected, err = decodeResourceChanges(plan.ResourceDrift)
+
+	var resourceChanges []terraformResourceChange
+	var resourceDrift []terraformResourceChange
+	var haveResourceDrift bool
+	var outputChanges map[string]terraformChange
+	priorTotal := 0
+	priorExact := false
+
+	for decoder.More() {
+		keyToken, err := decoder.Token()
+		if err != nil {
+			return nil, nil, 0, false, fmt.Errorf("parse terraform plan JSON: %w", err)
+		}
+		key, ok := keyToken.(string)
+		if !ok {
+			return nil, nil, 0, false, fmt.Errorf("parse terraform plan JSON: expected object key")
+		}
+		switch key {
+		case "resource_changes":
+			resourceChanges, err = decodeResourceChangesArray(decoder)
+		case "resource_drift":
+			haveResourceDrift = true
+			resourceDrift, err = decodeResourceChangesArray(decoder)
+		case "output_changes":
+			err = decoder.Decode(&outputChanges)
+			if err != nil {
+				err = fmt.Errorf("parse terraform output changes: %w", err)
+			}
+		case "prior_state":
+			priorTotal, priorExact, err = countPriorStateFromDecoder(decoder)
+		default:
+			err = skipValue(decoder)
+		}
 		if err != nil {
 			return nil, nil, 0, false, err
 		}
 	}
+	if _, err := decoder.Token(); err != nil {
+		return nil, nil, 0, false, fmt.Errorf("parse terraform plan JSON: %w", err)
+	}
+
+	selected := resourceChanges
+	if mode == terraform.PlanModeRefreshOnly && haveResourceDrift {
+		selected = resourceDrift
+	}
 	changes := relevantChanges(selected)
 	sort.Slice(changes, func(i, j int) bool { return changes[i].Address < changes[j].Address })
 
-	outputChanges := make([]report.OutputChange, 0, len(plan.OutputChanges))
-	for name, outputChange := range plan.OutputChanges {
+	outputs := make([]report.OutputChange, 0, len(outputChanges))
+	for name, outputChange := range outputChanges {
 		if isNoOp(outputChange.Actions) {
 			continue
 		}
-		outputChanges = append(outputChanges, report.OutputChange{Name: name, Actions: append([]string(nil), outputChange.Actions...)})
+		outputs = append(outputs, report.OutputChange{Name: name, Actions: append([]string(nil), outputChange.Actions...)})
 	}
-	sort.Slice(outputChanges, func(i, j int) bool { return outputChanges[i].Name < outputChanges[j].Name })
+	sort.Slice(outputs, func(i, j int) bool { return outputs[i].Name < outputs[j].Name })
 
-	if total, exact := countPriorState(plan.PriorState); exact {
-		return changes, outputChanges, total, true, nil
+	if priorExact {
+		return changes, outputs, priorTotal, true, nil
 	}
-	return changes, outputChanges, countManagedResources(resourceChanges), false, nil
+	return changes, outputs, countManagedResources(resourceChanges), false, nil
 }
 
-func decodeResourceChanges(data json.RawMessage) ([]terraformResourceChange, error) {
-	if len(data) == 0 || string(data) == "null" {
+func decodeResourceChangesArray(decoder *json.Decoder) ([]terraformResourceChange, error) {
+	token, err := decoder.Token()
+	if err != nil {
+		return nil, fmt.Errorf("parse terraform resource changes: %w", err)
+	}
+	if token == nil {
 		return nil, nil
 	}
-	var changes []terraformResourceChange
-	if err := json.Unmarshal(data, &changes); err != nil {
+	if token != json.Delim('[') {
+		return nil, fmt.Errorf("parse terraform resource changes: expected array")
+	}
+	changes := make([]terraformResourceChange, 0)
+	for decoder.More() {
+		var change terraformResourceChange
+		if err := decoder.Decode(&change); err != nil {
+			return nil, fmt.Errorf("parse terraform resource changes: %w", err)
+		}
+		changes = append(changes, change)
+	}
+	if _, err := decoder.Token(); err != nil {
 		return nil, fmt.Errorf("parse terraform resource changes: %w", err)
 	}
 	return changes, nil
@@ -126,36 +169,257 @@ func relevantChanges(source []terraformResourceChange) []report.ResourceChange {
 	return changes
 }
 
-func countPriorState(data json.RawMessage) (int, bool) {
-	trimmed := bytes.TrimSpace(data)
-	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {
-		return 0, false
+func countPriorStateFromDecoder(decoder *json.Decoder) (int, bool, error) {
+	token, err := decoder.Token()
+	if err != nil {
+		return 0, false, err
 	}
-	var state struct {
-		Values *struct {
-			RootModule *priorStateCountModule `json:"root_module"`
-		} `json:"values"`
+	if token == nil {
+		return 0, false, nil
 	}
-	if err := json.Unmarshal(trimmed, &state); err != nil {
-		return 0, false
+	if token != json.Delim('{') {
+		if err := skipValueAfterToken(decoder, token); err != nil {
+			return 0, false, err
+		}
+		return 0, false, nil
 	}
-	if state.Values == nil || state.Values.RootModule == nil {
-		return 0, false
+
+	total := 0
+	exact := false
+	for decoder.More() {
+		keyToken, err := decoder.Token()
+		if err != nil {
+			return 0, false, err
+		}
+		key, _ := keyToken.(string)
+		if key == "values" {
+			total, exact, err = countPriorValuesFromDecoder(decoder)
+			if err != nil {
+				return 0, false, err
+			}
+			continue
+		}
+		if err := skipValue(decoder); err != nil {
+			return 0, false, err
+		}
 	}
-	return countModule(*state.Values.RootModule), true
+	if _, err := decoder.Token(); err != nil {
+		return 0, false, err
+	}
+	return total, exact, nil
 }
 
-func countModule(module priorStateCountModule) int {
+func countPriorValuesFromDecoder(decoder *json.Decoder) (int, bool, error) {
+	token, err := decoder.Token()
+	if err != nil {
+		return 0, false, err
+	}
+	if token == nil {
+		return 0, false, nil
+	}
+	if token != json.Delim('{') {
+		if err := skipValueAfterToken(decoder, token); err != nil {
+			return 0, false, err
+		}
+		return 0, false, nil
+	}
+
 	total := 0
-	for _, resource := range module.Resources {
-		if resource.Mode != "data" {
+	exact := false
+	for decoder.More() {
+		keyToken, err := decoder.Token()
+		if err != nil {
+			return 0, false, err
+		}
+		key, _ := keyToken.(string)
+		if key == "root_module" {
+			count, err := countModuleFromDecoder(decoder)
+			if err != nil {
+				return 0, false, err
+			}
+			total = count
+			exact = true
+			continue
+		}
+		if err := skipValue(decoder); err != nil {
+			return 0, false, err
+		}
+	}
+	if _, err := decoder.Token(); err != nil {
+		return 0, false, err
+	}
+	return total, exact, nil
+}
+
+func countModuleFromDecoder(decoder *json.Decoder) (int, error) {
+	token, err := decoder.Token()
+	if err != nil {
+		return 0, err
+	}
+	if token == nil {
+		return 0, nil
+	}
+	if token != json.Delim('{') {
+		return 0, skipValueAfterToken(decoder, token)
+	}
+
+	total := 0
+	for decoder.More() {
+		keyToken, err := decoder.Token()
+		if err != nil {
+			return 0, err
+		}
+		key, _ := keyToken.(string)
+		switch key {
+		case "resources":
+			count, err := countResourcesArrayFromDecoder(decoder)
+			if err != nil {
+				return 0, err
+			}
+			total += count
+		case "child_modules":
+			count, err := countChildModulesArrayFromDecoder(decoder)
+			if err != nil {
+				return 0, err
+			}
+			total += count
+		default:
+			if err := skipValue(decoder); err != nil {
+				return 0, err
+			}
+		}
+	}
+	if _, err := decoder.Token(); err != nil {
+		return 0, err
+	}
+	return total, nil
+}
+
+func countResourcesArrayFromDecoder(decoder *json.Decoder) (int, error) {
+	token, err := decoder.Token()
+	if err != nil {
+		return 0, err
+	}
+	if token == nil {
+		return 0, nil
+	}
+	if token != json.Delim('[') {
+		return 0, skipValueAfterToken(decoder, token)
+	}
+	total := 0
+	for decoder.More() {
+		mode, err := resourceModeFromDecoder(decoder)
+		if err != nil {
+			return 0, err
+		}
+		if mode != "data" {
 			total++
 		}
 	}
-	for _, child := range module.ChildModules {
-		total += countModule(child)
+	if _, err := decoder.Token(); err != nil {
+		return 0, err
 	}
-	return total
+	return total, nil
+}
+
+func countChildModulesArrayFromDecoder(decoder *json.Decoder) (int, error) {
+	token, err := decoder.Token()
+	if err != nil {
+		return 0, err
+	}
+	if token == nil {
+		return 0, nil
+	}
+	if token != json.Delim('[') {
+		return 0, skipValueAfterToken(decoder, token)
+	}
+	total := 0
+	for decoder.More() {
+		count, err := countModuleFromDecoder(decoder)
+		if err != nil {
+			return 0, err
+		}
+		total += count
+	}
+	if _, err := decoder.Token(); err != nil {
+		return 0, err
+	}
+	return total, nil
+}
+
+func resourceModeFromDecoder(decoder *json.Decoder) (string, error) {
+	token, err := decoder.Token()
+	if err != nil {
+		return "", err
+	}
+	if token != json.Delim('{') {
+		if err := skipValueAfterToken(decoder, token); err != nil {
+			return "", err
+		}
+		return "", nil
+	}
+	mode := ""
+	for decoder.More() {
+		keyToken, err := decoder.Token()
+		if err != nil {
+			return "", err
+		}
+		key, _ := keyToken.(string)
+		if key == "mode" {
+			modeToken, err := decoder.Token()
+			if err != nil {
+				return "", err
+			}
+			mode, _ = modeToken.(string)
+			continue
+		}
+		if err := skipValue(decoder); err != nil {
+			return "", err
+		}
+	}
+	if _, err := decoder.Token(); err != nil {
+		return "", err
+	}
+	return mode, nil
+}
+
+// skipValue discards the next JSON value from decoder without retaining it.
+func skipValue(decoder *json.Decoder) error {
+	token, err := decoder.Token()
+	if err != nil {
+		return err
+	}
+	return skipValueAfterToken(decoder, token)
+}
+
+func skipValueAfterToken(decoder *json.Decoder, token json.Token) error {
+	delim, ok := token.(json.Delim)
+	if !ok {
+		return nil
+	}
+	switch delim {
+	case '{':
+		for decoder.More() {
+			if _, err := decoder.Token(); err != nil {
+				return err
+			}
+			if err := skipValue(decoder); err != nil {
+				return err
+			}
+		}
+		_, err := decoder.Token()
+		return err
+	case '[':
+		for decoder.More() {
+			if err := skipValue(decoder); err != nil {
+				return err
+			}
+		}
+		_, err := decoder.Token()
+		return err
+	default:
+		return fmt.Errorf("unexpected JSON delimiter %q", delim)
+	}
 }
 
 func countManagedResources(resources []terraformResourceChange) int {

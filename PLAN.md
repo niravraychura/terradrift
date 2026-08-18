@@ -288,3 +288,51 @@ Product and UX gaps beyond hardening. Do **not** start these until the Next hard
 4. Actionable notifications
 5. Per-root manifest settings
 6. UX/DX doc and progress polish
+
+## Post-review backlog
+
+Residual security, resilience, quality, coverage, and product-honesty work from the full-codebase review after the hardening and product Musts above. Prefer this order. Mark `[x]` only when code, tests, and docs are done.
+
+**Clarification — attribute heuristics:** This does **not** mean reporting fewer changed attributes. TerraDrift must still list every changed attribute **path**. Heuristics only decide whether **old → new values** are shown, redacted, or summarized. Paths-only persistence (history / notify / policy / artifacts unless `--attribute-values`) already limits secret leakage into automation; expanding heuristics mainly hardens **stdout / table / live JSON**.
+
+### P1 — Security and resilience
+
+- [x] Add independent HTTP client timeouts (and TLS/handshake bounds where practical) for Slack, Teams, generic webhook, and artifact upload clients — match the GitHub notifier posture so delivery cannot hang for the full scan timeout (`internal/notify`).
+- [x] Expand attribute **value** redaction heuristics in `internal/parser/diff.go` for unmarked secret-like names (and keep blob summaries). Still always emit paths. Add fixtures for novel names that should redact.
+- [x] Add a regression test proving secret fixtures never appear in history JSON, policy stdin, or notification payloads (and remain redacted in stdout when heuristic/mark rules apply).
+- [x] Close the `scan-all` vs `scan` honesty gap for CI: either wire `--failure-severity` (and document remaining gaps), or document the production-usable delivery **subset** loudly in README/`scan-all --help` (severity, baselines/owners, GitHub PR/issue, artifact upload, audit-log, throttle, approvals).
+
+### P1 — Correctness
+
+- [x] When `--terraform-exec` is set on `scan-all`, set `RequireTerraformFiles` (same fail-fast as `scan`) so empty/non-Terraform dirs fail before a deep Terraform error.
+
+### P2 — Test coverage and code quality
+
+- [x] Add dedicated unit tests for `internal/report` ignore/baseline, notification throttle, and approval helpers (today mostly covered only via CLI).
+- [x] Add a concurrent `scan-all` finalize smoke test (history + policy publish gate under workers) so multi-root delivery regressions are caught.
+- [x] Prefer CI/example profiles that set both `allowed_commands` and `trusted_command_dirs` (warn or document that empty allowlists mean local trust only).
+- [x] Optional cleanup: share Terraform `limitedWriter` with `internal/ioutil.LimitedBuffer` if it reduces drift without behavior change.
+
+### P3 — Ops and UX polish
+
+- [x] Stale local-lock guidance or PID liveness check (crash left `.terradrift.lock`; keep Redis/Postgres out of scope).
+- [x] Reduce shared `--dashboard-html` overwrite trap on `scan-all` (per-root paths, or steer users to `dashboard-index` only).
+- [x] Document a production Docker path that bundles Terraform/OpenTofu (image today expects Terraform on PATH / mounted).
+
+### Performance (only if real large plans hurt)
+
+- [x] True streaming / token decode of `terraform show -json` to avoid holding full show-JSON in memory. Current selective decode + 32 MiB caps are enough for most repos — chase only with evidence.
+
+### Still out of scope
+
+Same as above: SaaS/`serve` auth, distributed locks, auto-apply/state mutation, more chat adapters, embedded OPA/Infracost, large TUI/React rewrite.
+
+### Suggested implementation order
+
+1. Notify/artifact HTTP timeouts
+2. Attribute heuristic expansion + secret non-leak regression
+3. `scan-all` severity gate **or** loud subset docs + `RequireTerraformFiles`
+4. Report unit tests + concurrent finalize smoke
+5. CI allowlist docs/presets
+6. Stale-lock / dashboard-html / Docker docs polish
+7. Streaming plan decode only if needed

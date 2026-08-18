@@ -7,7 +7,7 @@ import (
 )
 
 func TestWithoutAttributeValuesClearsBeforeAfter(t *testing.T) {
-	secret := "super-secret-password-value"
+	secret := "fixture-redaction-probe-v2"
 	input := DriftReport{
 		Status: ScanStatusDriftDetected,
 		ResourceChanges: []ResourceChange{{

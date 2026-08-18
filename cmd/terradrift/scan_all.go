@@ -59,6 +59,7 @@ func newScanAllCommand(stdout io.Writer) *cobra.Command {
 	var varFiles []string
 	var vars []string
 	var scanConfigPath string
+	var failureSeverity string
 
 	cmd := &cobra.Command{
 		Use:   "scan-all",
@@ -66,7 +67,17 @@ func newScanAllCommand(stdout io.Writer) *cobra.Command {
 		Long: `Scan multiple Terraform roots from a text or JSON manifest, or by discovery.
 
 Text manifests list one root directory per line. JSON manifests (version 1) can set
-per-root profile, plan_mode, workspace, var_files, and vars. Named profiles require --config.`,
+per-root profile, plan_mode, workspace, var_files, and vars. Named profiles require --config.
+
+Delivery subset (production-usable): history, dashboard HTML, notifications (slack/teams/webhook),
+policy publish gate, cost/audit enrichment, attribute-values, workspace/var-file defaults,
+and --failure-severity for drift exit gating.
+
+Not yet supported on scan-all (use terradrift scan per root): baselines/owners/runbooks,
+GitHub PR/issue summaries, --artifact-url, --audit-log, notification throttle, approvals.
+
+Prefer terradrift dashboard-index for multi-root HTML. A shared --dashboard-html path is
+overwritten by the last successful root when concurrency > 1.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if (manifest == "") == (discover == "") {
 				return fmt.Errorf("provide exactly one of --manifest or --discover")
@@ -150,6 +161,7 @@ per-root profile, plan_mode, workspace, var_files, and vars. Named profiles requ
 				return err
 			}
 			if terraformExec {
+				options.RequireTerraformFiles = true
 				runner := terraform.NewCLIRunner(terraformBin)
 				runner.Workspace = terraformWorkspace
 				runner.VarFiles = append([]string(nil), varFiles...)
@@ -157,6 +169,9 @@ per-root profile, plan_mode, workspace, var_files, and vars. Named profiles requ
 				options.Runner = runner
 			} else {
 				_, _ = fmt.Fprintln(cmd.ErrOrStderr(), "warning: bootstrap report only; pass --terraform-exec for a real drift scan")
+			}
+			if dashboardHTMLPath != "" && concurrency > 1 {
+				_, _ = fmt.Fprintln(cmd.ErrOrStderr(), "warning: shared --dashboard-html is overwritten by the last successful root; prefer terradrift dashboard-index for multi-root views")
 			}
 			delivery := deliveryOptions{
 				AttributeValues:   attributeValues,
@@ -193,7 +208,16 @@ per-root profile, plan_mode, workspace, var_files, and vars. Named profiles requ
 				return fmt.Errorf("%w: %d roots", errMultiScanFailed, aggregate.FailedRoots)
 			}
 			if aggregate.DriftedRoots > 0 {
-				return errDriftDetected
+				if failureSeverity == "" {
+					return errDriftDetected
+				}
+				meets, err := multiScanMeetsSeverity(aggregate, failureSeverity)
+				if err != nil {
+					return err
+				}
+				if meets {
+					return errDriftDetected
+				}
 			}
 			if aggregate.ChangedRoots > 0 {
 				return errChangesDetected
@@ -219,7 +243,7 @@ per-root profile, plan_mode, workspace, var_files, and vars. Named profiles requ
 	cmd.Flags().StringVar(&historyDir, "history-dir", "", "write per-root JSON scan history to this directory")
 	cmd.Flags().IntVar(&historyRetention, "history-retention", 0, "maximum history reports to retain (0 keeps all)")
 	cmd.Flags().BoolVar(&historyCompressed, "history-compressed", false, "store history reports as gzip-compressed JSON")
-	cmd.Flags().StringVar(&dashboardHTMLPath, "dashboard-html", "", "write the last successful root dashboard HTML to this path")
+	cmd.Flags().StringVar(&dashboardHTMLPath, "dashboard-html", "", "write last successful root dashboard HTML (prefer dashboard-index for multi-root)")
 	cmd.Flags().StringVar(&notifyTarget, "notify", "", "notification target: slack, teams, webhook")
 	cmd.Flags().StringVar(&slackWebhookURL, "slack-webhook-url", "", "Slack incoming webhook URL")
 	cmd.Flags().StringVar(&teamsWebhookURL, "teams-webhook-url", "", "Microsoft Teams incoming webhook URL")
@@ -236,7 +260,24 @@ per-root profile, plan_mode, workspace, var_files, and vars. Named profiles requ
 	cmd.Flags().StringArrayVar(&varFiles, "var-file", nil, "default Terraform -var-file path; repeatable (overridable per root)")
 	cmd.Flags().StringArrayVar(&vars, "var", nil, "default Terraform -var assignment; repeatable (overridable per root)")
 	cmd.Flags().StringVar(&scanConfigPath, "config", "", "config file used to resolve per-root profile names")
+	cmd.Flags().StringVar(&failureSeverity, "failure-severity", "", "minimum drift severity that fails the multi-root scan: low, medium, high, critical")
 	return cmd
+}
+
+func multiScanMeetsSeverity(aggregate multiScanReport, threshold string) (bool, error) {
+	for _, root := range aggregate.Roots {
+		if root.Error != "" || root.Report.Status != report.ScanStatusDriftDetected {
+			continue
+		}
+		meets, err := report.MeetsSeverity(root.Report, threshold)
+		if err != nil {
+			return false, err
+		}
+		if meets {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 type multiScanReport struct {

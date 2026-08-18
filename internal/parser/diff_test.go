@@ -134,6 +134,43 @@ func TestAttributeChangesRedactConnectionString(t *testing.T) {
 	}
 }
 
+func TestAttributeChangesRedactNovelSecretNames(t *testing.T) {
+	secret := "fixture-redaction-probe-v1"
+	plan := []byte(`{
+		"resource_changes":[{
+			"address":"aws_db_instance.main",
+			"type":"aws_db_instance",
+			"name":"main",
+			"mode":"managed",
+			"change":{
+				"actions":["update"],
+				"before":{"db_conn_str":"` + secret + `","master_key":"` + secret + `","idle_timeout":60},
+				"after":{"db_conn_str":"` + secret + `-2","master_key":"` + secret + `-2","idle_timeout":120}
+			}
+		}]
+	}`)
+	changes, _, _, _, err := ParsePlan(plan, terraform.PlanModeNormal)
+	if err != nil || len(changes) != 1 {
+		t.Fatalf("parse plan: %#v err=%v", changes, err)
+	}
+	attrs := map[string]report.AttributeChange{}
+	for _, attr := range changes[0].AttributeChanges {
+		attrs[attr.Path] = attr
+	}
+	if got := attrs["db_conn_str"]; got.Before != "[REDACTED]" || got.After != "[REDACTED]" {
+		t.Fatalf("db_conn_str = %#v", got)
+	}
+	if got := attrs["master_key"]; got.Before != "[REDACTED]" || got.After != "[REDACTED]" {
+		t.Fatalf("master_key = %#v", got)
+	}
+	if got := attrs["idle_timeout"]; got.Before != "60" || got.After != "120" {
+		t.Fatalf("idle_timeout should remain visible: %#v", got)
+	}
+	if encoded := string(mustMarshal(t, changes)); strings.Contains(encoded, secret) {
+		t.Fatalf("secret leaked into parse output: %s", encoded)
+	}
+}
+
 func TestAttributeChangesSummarizeLargeBlobs(t *testing.T) {
 	blob := strings.Repeat("a", 4128)
 	plan := []byte(`{

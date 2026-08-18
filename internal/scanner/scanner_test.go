@@ -243,6 +243,17 @@ func TestScanWithRunnerRejectsExistingLock(t *testing.T) {
 	}
 }
 
+func TestStaleLockGuidanceDetectsMissingProcess(t *testing.T) {
+	path := filepath.Join(t.TempDir(), scanLockFilename)
+	if err := os.WriteFile(path, []byte("999999"), 0o600); err != nil {
+		t.Fatalf("write lock: %v", err)
+	}
+	guidance := staleLockGuidance(path)
+	if !strings.Contains(guidance, "999999") {
+		t.Fatalf("expected pid in guidance, got %q", guidance)
+	}
+}
+
 func TestScanWithRunnerReturnsFailedOutcomeForPlanError(t *testing.T) {
 	runner := &fakeRunner{planExit: 1}
 
