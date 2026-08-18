@@ -8,6 +8,8 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/niravraychura/terradrift/internal/ioutil"
 )
 
 func TestCLIRunnerShowJSONCapturesOutput(t *testing.T) {
@@ -147,19 +149,19 @@ printf '%s' "$*" > "$TERRADRIFT_ARGS"
 }
 
 func TestLimitedWriterMarksTruncation(t *testing.T) {
-	writer := &limitedWriter{w: io.Discard, n: 1}
-	if _, err := writer.Write([]byte("ab")); err != nil || !writer.truncated {
+	writer := &ioutil.LimitedWriter{W: io.Discard, Remaining: 1}
+	if _, err := writer.Write([]byte("ab")); err != nil || !writer.Truncated {
 		t.Fatalf("expected truncation, err=%v", err)
 	}
 }
 
 func TestLimitedWriterMarksTruncationAfterExactLimit(t *testing.T) {
-	writer := &limitedWriter{w: io.Discard, n: 1}
-	if _, err := writer.Write([]byte("a")); err != nil || writer.truncated {
-		t.Fatalf("expected exact limit to succeed, err=%v truncated=%t", err, writer.truncated)
+	writer := &ioutil.LimitedWriter{W: io.Discard, Remaining: 1}
+	if _, err := writer.Write([]byte("a")); err != nil || writer.Truncated {
+		t.Fatalf("expected exact limit to succeed, err=%v truncated=%t", err, writer.Truncated)
 	}
-	if _, err := writer.Write([]byte("b")); err != nil || !writer.truncated {
-		t.Fatalf("expected subsequent output to mark truncation, err=%v truncated=%t", err, writer.truncated)
+	if _, err := writer.Write([]byte("b")); err != nil || !writer.Truncated {
+		t.Fatalf("expected subsequent output to mark truncation, err=%v truncated=%t", err, writer.Truncated)
 	}
 }
 

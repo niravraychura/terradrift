@@ -1,6 +1,7 @@
 package parser
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -208,6 +209,43 @@ func TestCountPriorStateIgnoresResourceValues(t *testing.T) {
 	}
 	if !exact || total != 2 {
 		t.Fatalf("expected exact managed count 2, got total=%d exact=%t", total, exact)
+	}
+}
+
+func TestParsePlanSkipsUnusedTopLevelFields(t *testing.T) {
+	huge := strings.Repeat("y", 20000)
+	plan := []byte(`{
+		"format_version":"1.2",
+		"configuration":{"root_module":{"blob":` + mustQuoteJSON(huge) + `}},
+		"planned_values":{"root_module":{"resources":[{"values":{"blob":` + mustQuoteJSON(huge) + `}}]}},
+		"prior_state":{"values":{"root_module":{"resources":[{"mode":"managed"},{"mode":"managed"}]}}},
+		"resource_drift":[{"address":"aws_instance.web","type":"aws_instance","name":"web","mode":"managed","change":{"actions":["update"],"before":{"idle_timeout":60},"after":{"idle_timeout":120}}}],
+		"resource_changes":[{"address":"aws_instance.other","mode":"managed","change":{"actions":["create"]}}]
+	}`)
+	changes, _, total, exact, err := ParsePlan(plan, terraform.PlanModeRefreshOnly)
+	if err != nil {
+		t.Fatalf("parse plan: %v", err)
+	}
+	if !exact || total != 2 {
+		t.Fatalf("expected exact count 2, got total=%d exact=%t", total, exact)
+	}
+	if len(changes) != 1 || changes[0].Address != "aws_instance.web" {
+		t.Fatalf("expected drift-only change, got %#v", changes)
+	}
+	if len(changes[0].AttributeChanges) == 0 {
+		t.Fatal("expected attribute diffs for drifted resource")
+	}
+}
+
+func TestParsePlanReaderMatchesParsePlan(t *testing.T) {
+	plan := []byte(`{"prior_state":{"values":{"root_module":{"resources":[{"mode":"managed"}]}}},"resource_changes":[{"address":"aws_instance.web","type":"aws_instance","name":"web","mode":"managed","change":{"actions":["update"]}}]}`)
+	aChanges, aOutputs, aTotal, aExact, aErr := ParsePlan(plan, terraform.PlanModeNormal)
+	bChanges, bOutputs, bTotal, bExact, bErr := ParsePlanReader(bytes.NewReader(plan), terraform.PlanModeNormal)
+	if aErr != nil || bErr != nil {
+		t.Fatalf("parse errors: %v %v", aErr, bErr)
+	}
+	if aTotal != bTotal || aExact != bExact || len(aChanges) != len(bChanges) || len(aOutputs) != len(bOutputs) {
+		t.Fatalf("mismatch ParsePlan vs Reader: %#v vs totals %d/%d exact %t/%t", aChanges, aTotal, bTotal, aExact, bExact)
 	}
 }
 

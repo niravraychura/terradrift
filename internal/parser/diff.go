@@ -287,13 +287,26 @@ func summarizeBytes(size int) string {
 func sensitivePath(path string) bool {
 	lower := strings.ToLower(path)
 	for _, marker := range []string{
-		"password", "secret", "token", "private_key", "access_key",
-		"secret_string", "api_key", "client_secret", "credentials",
-		"connection_string", "database_url", "db_url", "db_password",
+		"password", "passwd", "secret", "token", "private_key", "access_key",
+		"secret_string", "api_key", "apikey", "client_secret", "credentials",
+		"connection_string", "database_url", "db_url", "db_password", "db_conn",
+		"conn_str", "jdbc", "mongodb_uri", "postgres_url", "mysql_url",
 		"user_data", "private_key_pem", "auth_token", "bearer", "oauth",
-		"smtp_password", "aws_access_key_id",
+		"smtp_password", "aws_access_key_id", "session_token", "refresh_token",
+		"id_token", "shared_secret", "encryption_key", "master_key", "sas_token",
+		"certificate_pem", "ssh_private", "tls_private", "kubeconfig",
+		"redis_password", "passphrase", "cloud_credential",
 	} {
 		if strings.Contains(lower, marker) {
+			return true
+		}
+	}
+	segment := lower
+	if idx := strings.LastIndex(lower, "."); idx >= 0 {
+		segment = lower[idx+1:]
+	}
+	for _, suffix := range []string{"_key", "_secret", "_token", "_password", "_passwd", "_credential", "_credentials"} {
+		if strings.HasSuffix(segment, suffix) {
 			return true
 		}
 	}

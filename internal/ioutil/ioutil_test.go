@@ -2,6 +2,7 @@ package ioutil
 
 import (
 	"bytes"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -30,6 +31,13 @@ func TestLimitedBufferMarksTruncationOnExactThenExtra(t *testing.T) {
 	}
 	if _, err := writer.Write([]byte("c")); err != nil || !writer.Truncated {
 		t.Fatalf("expected truncation after budget exhausted: err=%v truncated=%t", err, writer.Truncated)
+	}
+}
+
+func TestLimitedWriterMarksTruncation(t *testing.T) {
+	writer := &LimitedWriter{W: io.Discard, Remaining: 1}
+	if _, err := writer.Write([]byte("ab")); err != nil || !writer.Truncated {
+		t.Fatalf("expected truncation, err=%v truncated=%t", err, writer.Truncated)
 	}
 }
 
