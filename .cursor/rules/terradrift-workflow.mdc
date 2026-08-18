@@ -1,0 +1,33 @@
+---
+description: TerraDrift branch, release, docs, and secret-safety defaults for every session
+alwaysApply: true
+---
+
+# TerraDrift workflow
+
+## Git
+
+- Feature work: branch from `dev`, open PRs into **`dev`** (not `main`).
+- Releases: promote `dev` → `main` when CI is green, then annotated `v*` tag on `main` per `docs/RELEASE.md`.
+- Do not force-push shared branches or rewrite published release tags.
+
+## Docs ownership
+
+- Forward product intent: `docs/ROADMAP.md`
+- Release policy: `docs/RELEASE.md`
+- Packaging summary: `docs/GITHUB_PRODUCT_SETUP.md` (full checklist in `docs/archive/`)
+- Completed engineering ledger: `docs/archive/PLAN-v0.1.md` (root `PLAN.md` is a stub only)
+- Prefer editing these over inventing parallel process docs
+
+## Safety
+
+- No credentials, Terraform state, plan files, webhook URLs, or realistic secret-like fixtures in the repo
+- Use synthetic placeholders only (e.g. `REDACTED_TEST_VALUE`, `https://example.test/hook`)
+- Security issues → private advisory path in `SECURITY.md`, never public exploit write-ups
+
+## Agents
+
+- Follow root `AGENTS.md` and `CONTRIBUTING.md`
+- Always apply **Ponytail** (`.cursor/rules/ponytail.mdc`) — simplest solution that works
+- Apply engineering quality + verify-before-done rules on every change
+- Match existing Go and docs style; keep changes focused

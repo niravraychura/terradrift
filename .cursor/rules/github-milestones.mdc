@@ -1,0 +1,21 @@
+---
+description: GitHub milestones — only real version buckets with attached work; no empty dummies
+alwaysApply: true
+---
+
+# GitHub milestones
+
+Empty milestones with zero issues/PRs are noise. Prefer roadmap docs over placeholder version buckets.
+
+## Rules
+
+- **Do not create** a milestone until there is at least one real issue or PR to attach (or the user explicitly opens one for an imminent release train).
+- **Do attach** feature/bug PRs and issues to the active open milestone when one exists and the work ships in that version.
+- **Close** a milestone when its tag ships (e.g. after `vX.Y.Z`); do not leave shipped milestones open.
+- **Delete** empty open milestones; do not keep open placeholders “for later” with no work.
+- Version **intent** (what v0.2 / v1.0 mean) lives in `docs/ROADMAP.md` until real work exists.
+- Triage board = GitHub Project; historical engineering detail = `docs/archive/PLAN-v0.1.md`; milestones = version buckets for scheduled work only.
+
+## When cutting a release
+
+Use `.cursor/skills/cut-release`: close the milestone for that version after the tag/release succeeds.
