@@ -80,7 +80,7 @@ terradrift init --directory ./terraform/prod --terraform-exec --redact-paths --h
 
 If `--directory` is omitted, TerraDrift scans the current working directory.
 
-`scan-all` reads one Terraform root per line from a manifest. Blank lines and `#` comments are ignored, and relative roots resolve from the manifest's directory. It runs roots with bounded concurrency and emits aggregate table or JSON output. `--incremental-state` is opt-in and retries only roots that previously drifted or failed; omit it for full coverage. Delivery flags matching `scan` are supported per root: `--history-dir`, `--dashboard-html`, `--notify` (plus webhook URL flags), `--policy-command`, `--cost-command`, and `--audit-command`. Policy runs as a publish gate before that root's history, dashboard, and notifications. Concurrent roots serialize history/dashboard writes; a shared `--dashboard-html` path is overwritten by the last successful root.
+`scan-all` accepts a **text** or **JSON** manifest. Text manifests list one Terraform root per line (blank lines and `#` comments ignored; relative roots resolve from the manifest directory). JSON manifests use `version: 1` and may set per-root `profile`, `plan_mode`, `workspace`, `var_files`, and `vars` so mono-repos are not forced into one global flag set. Named `profile` values require `--config`. It runs roots with bounded concurrency and emits aggregate table or JSON output. `--incremental-state` is opt-in and retries only roots that previously drifted or failed; omit it for full coverage. Delivery flags matching `scan` are supported per root: `--history-dir`, `--dashboard-html`, `--notify` (plus webhook URL flags), `--policy-command`, `--cost-command`, and `--audit-command`. Policy runs as a publish gate before that root's history, dashboard, and notifications. Concurrent roots serialize history/dashboard writes; a shared `--dashboard-html` path is overwritten by the last successful root.
 
 Build a static cross-root dashboard index from recent history:
 
@@ -95,6 +95,28 @@ Use `--discover <workspace>` to find roots containing `.tf` files. Repeat `--inc
 environments/development
 environments/production
 ```
+
+```json
+{
+  "version": 1,
+  "roots": [
+    {"directory": "terraform/dev", "profile": "development", "var_files": ["dev.tfvars"]},
+    {"directory": "terraform/prod", "plan_mode": "refresh-only", "workspace": "prod", "var_files": ["prod.tfvars"]}
+  ]
+}
+```
+
+See [examples/multi-root](examples/multi-root) and [examples/github-actions/terradrift-scheduled-multi-root.yml](examples/github-actions/terradrift-scheduled-multi-root.yml) for a scheduled multi-root + Slack + high-severity gate.
+
+### `scan` flag groups
+
+| Group | Flags |
+| --- | --- |
+| Core | `--directory`, `--output`, `--timeout`, `--terraform-exec`, `--terraform-bin`, `--plan-mode`, `--workspace`, `--var-file`, `--var`, `--config`, `--profile`, `--failure-severity`, `--workspace-root`, `--redact-paths`, `--lock-backend`, `--skip-terraform-init`, `--attribute-values` |
+| Delivery | `--history-dir`, `--history-retention`, `--history-compressed`, `--dashboard-html`, `--notify`, webhook URLs, `--artifact-url`, `--audit-log`, GitHub summary flags, `--approval-file` |
+| Enrichment | `--policy-command`, `--policy-arg`, `--cost-command`, `--cost-arg`, `--audit-command`, `--audit-arg` |
+
+`terradrift scan --help` lists the same groups in the command long description.
 
 TerraDrift accepts any existing local directory at the CLI validation layer. When `--terraform-exec` is enabled, Terraform performs its own configuration validation and returns a scan failure if the selected directory is not usable Terraform configuration.
 

@@ -259,17 +259,17 @@ Product and UX gaps beyond hardening. Do **not** start these until the Next hard
 
 - [x] Stop treating bootstrap no-drift as the default meaningful result: either require `--terraform-exec` for real scans, or keep bootstrap only behind an explicit dry-run/bootstrap flag and fail/warn loudly otherwise.
 - [x] Make Slack/Teams/webhook notifications actionable: include top-N resource addresses, risk levels, and a pointer to the report (still redacted; no secret attribute values).
-- [ ] Support per-root settings in manifests (at least profile / plan_mode / var-files), so mono-repos are not forced into one global flag set.
+- [x] Support per-root settings in manifests (at least profile / plan_mode / var-files), so mono-repos are not forced into one global flag set.
 
 ### UX / DX (cheap wins)
 
 - [x] Rewrite README current-status section to reflect what is production-usable today; demote “foundation only” language that undersells shipped features.
 - [x] Emit scan phase progress lines (`init`, `plan`, `show`, `parse`) so long Terraform runs do not look hung (compatible with `--redact-paths`).
 - [x] Fix stale docs/examples that claim reports lack attributes (e.g. policy examples) so they match `attribute_changes`.
-- [ ] Ship one end-to-end example: scheduled multi-root + Slack + severity gate (config + GitHub Actions).
+- [x] Ship one end-to-end example: scheduled multi-root + Slack + severity gate (config + GitHub Actions).
 - [x] Clarify exit codes vs `--failure-severity` with one concrete CI example near the flags/docs.
 - [x] Improve `scan-all` aggregate table/JSON so partial failure vs drift per root is obvious without reading every nested report.
-- [ ] Group advanced `scan` flags in help/docs (core / delivery / enrichment) to reduce flag overload.
+- [x] Group advanced `scan` flags in help/docs (core / delivery / enrichment) to reduce flag overload.
 
 ### Explicitly out of scope for now
 

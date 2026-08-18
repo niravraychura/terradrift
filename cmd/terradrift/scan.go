@@ -91,9 +91,26 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "scan",
 		Short: "Validate a Terraform directory for drift scanning",
+		Long: `Scan a Terraform directory for drift or configuration changes.
+
+Flag groups:
+  Core:       --directory, --output, --timeout, --terraform-exec, --terraform-bin,
+              --plan-mode, --workspace, --var-file, --var, --config, --profile,
+              --failure-severity, --workspace-root, --redact-paths, --lock-backend,
+              --skip-terraform-init, --attribute-values
+  Delivery:   --history-dir, --history-retention, --history-compressed, --dashboard-html,
+              --notify, --slack-webhook-url, --teams-webhook-url, --webhook-url,
+              --webhook-ca-cert, --artifact-url, --audit-log, --github-repository,
+              --github-pr, --github-issue-after, --approval-file
+  Enrichment: --policy-command, --policy-arg, --cost-command, --cost-arg,
+              --audit-command, --audit-arg
+
+Explicit CLI flags always override config/profile values. History, artifacts, policy
+input, and notifications store attribute paths only unless --attribute-values is set.`,
 		Example: `  terradrift scan
   terradrift scan --directory ./terraform/prod
-  terradrift scan -d ./terraform/prod --output json`,
+  terradrift scan -d ./terraform/prod --output json
+  terradrift scan --config .terradrift.json --profile production --failure-severity high`,
 		RunE: func(cmd *cobra.Command, args []string) (runErr error) {
 			var auditReport report.DriftReport
 			defer func() {
