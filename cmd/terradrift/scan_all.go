@@ -156,7 +156,7 @@ per-root profile, plan_mode, workspace, var_files, and vars. Named profiles requ
 				runner.Vars = append([]string(nil), vars...)
 				options.Runner = runner
 			} else {
-				fmt.Fprintln(cmd.ErrOrStderr(), "warning: bootstrap report only; pass --terraform-exec for a real drift scan")
+				_, _ = fmt.Fprintln(cmd.ErrOrStderr(), "warning: bootstrap report only; pass --terraform-exec for a real drift scan")
 			}
 			delivery := deliveryOptions{
 				AttributeValues:   attributeValues,

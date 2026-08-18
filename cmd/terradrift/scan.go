@@ -252,7 +252,7 @@ input, and notifications store attribute paths only unless --attribute-values is
 				scanOptions.Runner = runner
 				scanOptions.RequireTerraformFiles = true
 			} else {
-				fmt.Fprintln(cmd.ErrOrStderr(), "warning: bootstrap report only; pass --terraform-exec for a real drift scan")
+				_, _ = fmt.Fprintln(cmd.ErrOrStderr(), "warning: bootstrap report only; pass --terraform-exec for a real drift scan")
 			}
 
 			result, err := scanner.Scan(scanContext, scanOptions)
