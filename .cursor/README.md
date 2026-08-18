@@ -13,10 +13,16 @@ Committed rules under `.cursor/rules/` so every agent session inherits the same 
 | `docs-with-flags.mdc` | CLI/flag changes must update README help path + `--help` |
 | `fixtures-no-secrets.mdc` | Tests/examples: synthetic placeholders only |
 
+## Project skills (`.cursor/skills/`)
+
+| Skill | When to use |
+|------|-------------|
+| [`cut-release`](skills/cut-release/SKILL.md) | Tag/ship a SemVer release (`dev`→`main`→`v*`→verify) |
+| [`add-scan-flag`](skills/add-scan-flag/SKILL.md) | Add/change a `scan` / `scan-all` flag end-to-end |
+
 ## Suggested additions later (optional)
 
 - **PR size rule** — soft limit on files/LOC per PR; split otherwise  
-- **Project skill** (`.cursor/skills/`) — short “cut a release” or “add scan flag” runbooks if those become frequent  
 - **Hooks** — optional reminder to run `make test` before claiming done  
 
 Do not add secrets, machine paths, or personal tokens under `.cursor/`.
