@@ -6,6 +6,13 @@ Default brief for coding agents (Cursor, Cloud Agents, and similar) working in t
 
 TerraDrift is an **open-source, self-hosted** Terraform/OpenTofu **drift detection CLI** (Go). MIT licensed. Trusted-runner model — see `SECURITY.md`.
 
+## Always-on agent behavior
+
+1. **Ponytail** (`.cursor/rules/ponytail.mdc`) — YAGNI, reuse, stdlib-first, smallest correct diff.
+2. **Engineering quality** — readability, maintainability, tests, performance bounds, security fail-closed.
+3. **Ask before assuming** — clarify ambiguous requirements; if the user has no further instructions, recommend a default and proceed.
+4. **Verify** — run tests before push; after push, confirm GitHub PR/CI is green.
+
 ## Branch and PR defaults
 
 - Branch from **`dev`**; open PRs into **`dev`**.
@@ -36,6 +43,6 @@ make ci    # full local gate when tooling is available
 | Release / SemVer | `docs/RELEASE.md` |
 | Security posture | `SECURITY.md` |
 | Architecture | `docs/ARCHITECTURE.md` |
-| Cursor rules | `.cursor/rules/` |
+| Cursor rules | `.cursor/rules/` (ponytail, engineering-quality, verify-before-done, ask-before-assuming, workflow, go-cli) |
 
 Do not contradict `docs/RELEASE.md` or `CONTRIBUTING.md` when proposing git workflow.

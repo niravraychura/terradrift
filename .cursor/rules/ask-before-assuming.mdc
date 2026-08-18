@@ -1,0 +1,12 @@
+---
+description: Ask when requirements are unclear; otherwise recommend and proceed
+alwaysApply: true
+---
+
+# Ask before assuming
+
+- If a requirement is ambiguous, incomplete, or could fork into incompatible designs, **ask a short clarifying question** before inventing behavior, APIs, or process.
+- If the user says they do not have more instructions (or cannot decide), **recommend a concrete default** and implement that — state the recommendation in one sentence.
+- Do not hallucinate product decisions, external URLs, versions, or “already done” GitHub state — verify with tools when possible.
+- Prefer one focused question over a long questionnaire; batch only when answers block parallel work.
+- Security, licensing, and destructive git operations always need clear intent — never guess.

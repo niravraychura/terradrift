@@ -28,4 +28,6 @@ alwaysApply: true
 ## Agents
 
 - Follow root `AGENTS.md` and `CONTRIBUTING.md`
+- Always apply **Ponytail** (`.cursor/rules/ponytail.mdc`) — simplest solution that works
+- Apply engineering quality + verify-before-done rules on every change
 - Match existing Go and docs style; keep changes focused

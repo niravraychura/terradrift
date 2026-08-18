@@ -1,0 +1,26 @@
+---
+description: Verify locally before push; verify GitHub CI/PR after push
+alwaysApply: true
+---
+
+# Verify before claiming done
+
+## Before push / before "done"
+
+1. Run the smallest relevant check first (`go test ./...` or package under change).
+2. Prefer `make test` for multi-package work; use `make ci` when the change is release-sensitive or CI-shaped.
+3. Fix failures locally — do not push knowing tests are red unless the user asked for a WIP branch.
+4. Docs-only changes: skip heavy CI locally, but still sanity-check links/paths you edited.
+
+## After push
+
+1. Open or update the PR into **`dev`** (never invent a different default).
+2. Watch required checks (`gh pr checks <n> --watch` or Actions UI) until `test` completes.
+3. If CI fails: diagnose, fix on the same branch, push again; do not declare success.
+4. Confirm PR status, mergeability, and that branch protection expectations still hold.
+5. Mention the PR URL and CI outcome in the final reply to the user.
+
+## Do not
+
+- Claim "tests pass" without running them (or without quoting CI green after push)
+- Merge to `main` or cut tags unless the user asked for a release (see `docs/RELEASE.md`)
