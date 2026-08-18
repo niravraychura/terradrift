@@ -44,5 +44,6 @@ make ci    # full local gate when tooling is available
 | Security posture | `SECURITY.md` |
 | Architecture | `docs/ARCHITECTURE.md` |
 | Cursor rules | `.cursor/rules/` (ponytail, engineering-quality, verify-before-done, ask-before-assuming, workflow, go-cli, docs-with-flags, fixtures-no-secrets) |
+| Project skills | `.cursor/skills/cut-release`, `.cursor/skills/add-scan-flag` |
 
 Do not contradict `docs/RELEASE.md` or `CONTRIBUTING.md` when proposing git workflow.
