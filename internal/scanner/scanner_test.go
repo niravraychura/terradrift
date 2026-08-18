@@ -320,4 +320,3 @@ func TestScanSkipInitSkipsRunnerInit(t *testing.T) {
 		t.Fatalf("expected no drift, got %q", result.Outcome)
 	}
 }
-

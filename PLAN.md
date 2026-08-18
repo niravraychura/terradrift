@@ -170,3 +170,121 @@ Verified against the current codebase. Keep completed history above; track only 
 - [x] Investigate optional skip/reuse of `terraform init` when providers and lockfile are already satisfied.
 - [x] Add remaining quality benchmarks for report rendering, redaction, and history loading with synthetic large reports.
 - [x] Thread a context-aware logger through scan operations instead of relying only on global slog state.
+
+## Next hardening backlog
+
+Agreed follow-ups from the post-MonkeyCode security/resilience/performance review. Implement in priority order. Checkboxes move to `[x]` only when code, tests, and docs are done.
+
+### 1. Attribute diffs with security (product + security)
+
+Keep attribute-level change reporting. Do not remove diffs. Change what values are shown and where they are stored.
+
+**Display rules (table / human output and JSON `attribute_changes`):**
+
+- Always include the attribute **path** when a resource changed.
+- Show **old → new values** only when safe:
+  - Terraform `before_sensitive` / `after_sensitive` → `"[REDACTED]" -> "[REDACTED]"` (or redact the sensitive side only).
+  - Sensitive name heuristics (`password`, `secret`, `token`, `*_key`, `api_key`, `access_key`, `private_key`, `aws_access_key_id`, `secret_string`, credentials, etc.) → redacted even if unmarked.
+  - Safe scalars (numbers, bools, short non-secret strings, enums) → real values (e.g. `idle_timeout: 60 -> 120`).
+  - Large / blob values (IAM policy JSON, `user_data`, container definitions) → summarize or truncate (e.g. `policy: [changed, 4KB]`), never dump full blobs by default.
+  - Unknown after apply → `(known after apply)`.
+- `(absent)` remains valid for create/delete sides.
+
+**Persistence / automation rules:**
+
+- Default for **history, dashboard artifacts, uploaded report artifacts, policy stdin, and notifications**: either the same redacted view as above, or **paths-only** (path + actions, no raw values).
+- Add an explicit opt-in to include safe values in persisted/automation output (e.g. `--attribute-values` and/or config `attribute_values`). Sensitive values must still never appear in cleartext.
+- Document the contract in README and `docs/ARCHITECTURE.md` (what is always redacted vs optional).
+
+**Implementation notes:**
+
+- Primary code: `internal/parser/diff.go`, `internal/report` (`AttributeChange`), `cmd/terradrift/output.go`, history/notify/policy wiring in `scan.go`.
+- Expand heuristics and tests (including unmarked secret-like names such as `connection_string` / `db_url` if adopted).
+- Regression tests must prove secret fixtures never appear in history JSON, policy input, or notification payloads.
+
+- [ ] Implement safe attribute value display rules (sensitive marks + heuristics + truncation/summaries).
+- [ ] Default history / artifacts / policy / notifications to redacted or paths-only attribute data.
+- [ ] Add opt-in `--attribute-values` (and config) for including safe values in persisted/automation output; secrets remain redacted.
+- [ ] Document attribute security contract in README and architecture docs; add regression tests.
+
+### 2. Policy as a publish gate (resilience + security)
+
+- [ ] Run `policy.Run` **before** writing history, dashboard HTML, uploaded artifacts, and sending notifications.
+- [ ] On policy failure, do not persist or upload a success-looking report; return a clear scan failure.
+- [ ] Update tests and README for the new pipeline order.
+
+### 3. Harden GitHub HTTP delivery (security)
+
+- [ ] Route GitHub issue/PR notification HTTP through the same SSRF-safe dialer / no-redirect / no-proxy posture used for webhooks (`internal/notify`).
+- [ ] Add explicit client timeouts (connect / TLS / overall), independent of the long scan context where practical.
+- [ ] Add tests covering blocked hosts / redirects / token-safe errors.
+
+### 4. Fail closed on truncated adapter output (resilience)
+
+- [ ] Make policy / cost / audit command capture fail when stdout/stderr exceeds the size budget (same fail-on-truncate behavior as Terraform `limitedWriter`), instead of silently truncating then parsing.
+- [ ] Prefer a shared truncated-aware buffer in `internal/ioutil`; update callers and tests.
+
+### 5. Large plan performance (performance)
+
+- [ ] Stream or selectively decode `terraform show -json` so full `prior_state` / unused fields are not held when only counts and changed resources are needed.
+- [ ] Keep attribute-diff extraction bounded; avoid walking huge unchanged blobs.
+- [ ] Add a large-plan fixture or benchmark gate for parse memory/CPU regressions.
+
+### 6. Lock honesty and docs (correctness)
+
+Note: `--lock-backend` currently supports **`local` only** (per-host `O_EXCL` file lock). PLAN previously implied a distributed backend; that is not implemented.
+
+- [ ] Document clearly in README and SECURITY.md that the scan lock is local/single-host unless runners share the lock file via a shared filesystem.
+- [ ] Optionally: add stale-lock guidance (PID check / manual removal) and keep Redis/Postgres backends explicitly out of scope until productized.
+
+### Suggested implementation order
+
+1. Attribute security (§1)
+2. Policy publish gate (§2)
+3. GitHub client hardening (§3)
+4. Adapter truncate-fail (§4)
+5. Stream/selective plan decode (§5)
+6. Lock docs honesty (§6)
+
+## Next product backlog
+
+Product and UX gaps beyond hardening. Do **not** start these until the Next hardening backlog is mostly complete, except where noted. Prefer one product Must per sprint.
+
+### Must (after hardening)
+
+- [ ] Bring `scan-all` to delivery parity with `scan`: support history, dashboard, notifications, policy (as publish gate), and cost/audit enrichment for multi-root runs (or a clear documented subset that is production-usable). Today multi-root intentionally skips most post-scan delivery.
+- [ ] Add Terraform workspace selection and `-var` / `-var-file` passthrough (CLI + config) so one root can target multiple workspaces/env files without requiring separate directories.
+
+### Should
+
+- [ ] Stop treating bootstrap no-drift as the default meaningful result: either require `--terraform-exec` for real scans, or keep bootstrap only behind an explicit dry-run/bootstrap flag and fail/warn loudly otherwise.
+- [ ] Make Slack/Teams/webhook notifications actionable: include top-N resource addresses, risk levels, and a pointer to the report (still redacted; no secret attribute values).
+- [ ] Support per-root settings in manifests (at least profile / plan_mode / var-files), so mono-repos are not forced into one global flag set.
+
+### UX / DX (cheap wins)
+
+- [ ] Rewrite README current-status section to reflect what is production-usable today; demote “foundation only” language that undersells shipped features.
+- [ ] Emit scan phase progress lines (`init`, `plan`, `show`, `parse`) so long Terraform runs do not look hung (compatible with `--redact-paths`).
+- [ ] Fix stale docs/examples that claim reports lack attributes (e.g. policy examples) so they match `attribute_changes`.
+- [ ] Ship one end-to-end example: scheduled multi-root + Slack + severity gate (config + GitHub Actions).
+- [ ] Clarify exit codes vs `--failure-severity` with one concrete CI example near the flags/docs.
+- [ ] Improve `scan-all` aggregate table/JSON so partial failure vs drift per root is obvious without reading every nested report.
+- [ ] Group advanced `scan` flags in help/docs (core / delivery / enrichment) to reduce flag overload.
+
+### Explicitly out of scope for now
+
+- Hosted SaaS / multi-tenant auth for `serve`
+- Redis/Postgres distributed lock backends
+- Auto-apply / auto-import / any state mutation
+- Additional chat adapters before notifications are useful
+- Embedded Infracost/OPA (keep external adapters)
+- Fancy interactive TUI or large React dashboard rewrite
+
+### Product implementation order (after hardening)
+
+1. `scan-all` delivery parity
+2. Workspace + var-file support
+3. Bootstrap-default honesty
+4. Actionable notifications
+5. Per-root manifest settings
+6. UX/DX doc and progress polish

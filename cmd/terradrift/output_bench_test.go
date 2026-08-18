@@ -36,9 +36,9 @@ func largeBenchmarkReport() report.DriftReport {
 		changes = append(changes, report.ResourceChange{
 			Address:   "aws_instance.web",
 			Type:      "aws_instance",
-			Name:       "web",
-			Actions:    []string{"update"},
-			RiskLevel:  "medium",
+			Name:      "web",
+			Actions:   []string{"update"},
+			RiskLevel: "medium",
 			AttributeChanges: []report.AttributeChange{{
 				Path:   "instance_type",
 				Before: "t3.micro",
