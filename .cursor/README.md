@@ -10,12 +10,13 @@ Committed rules under `.cursor/rules/` so every agent session inherits the same 
 | `ask-before-assuming.mdc` | Clarify ambiguity; otherwise recommend and proceed |
 | `terradrift-workflow.mdc` | `dev`/`main` flow, docs ownership, secret-safe fixtures |
 | `go-cli.mdc` | Go CLI fail-closed / policy / attribute conventions (when editing `*.go`) |
+| `docs-with-flags.mdc` | CLI/flag changes must update README help path + `--help` |
+| `fixtures-no-secrets.mdc` | Tests/examples: synthetic placeholders only |
 
 ## Suggested additions later (optional)
 
 - **PR size rule** — soft limit on files/LOC per PR; split otherwise  
-- **Docs-with-flags rule** — `globs` on `cmd/**` requiring README/`--help` updates when flags change  
-- **Example-freeze rule** — do not invent webhook/credential examples outside `example.test` / `REDACTED_*`  
 - **Project skill** (`.cursor/skills/`) — short “cut a release” or “add scan flag” runbooks if those become frequent  
+- **Hooks** — optional reminder to run `make test` before claiming done  
 
 Do not add secrets, machine paths, or personal tokens under `.cursor/`.
