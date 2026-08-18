@@ -32,6 +32,19 @@ func executeCommand(args ...string) (string, string, error) {
 	return stdout.String(), stderr.String(), err
 }
 
+func TestVersionFlag(t *testing.T) {
+	stdout, _, err := executeCommand("--version")
+	if err != nil {
+		t.Fatalf("expected --version to succeed: %v", err)
+	}
+	if !strings.Contains(stdout, version) {
+		t.Fatalf("expected version output to include %q, got %q", version, stdout)
+	}
+	if !strings.Contains(stdout, "terradrift") {
+		t.Fatalf("expected version output to include binary name, got %q", stdout)
+	}
+}
+
 func TestScanDefaultsToCurrentDirectory(t *testing.T) {
 	wd, err := os.Getwd()
 	if err != nil {

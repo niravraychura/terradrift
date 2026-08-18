@@ -1,10 +1,11 @@
 # syntax=docker/dockerfile:1
 FROM golang:1.26-alpine AS builder
+ARG VERSION=dev
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
-RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/terradrift ./cmd/terradrift
+RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o /out/terradrift ./cmd/terradrift
 
 FROM alpine:3.24
 RUN addgroup -S terradrift && adduser -S -G terradrift terradrift

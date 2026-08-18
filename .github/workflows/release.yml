@@ -29,17 +29,18 @@ jobs:
           check-latest: true
       - name: Build release archives
         run: |
+          ldflags="-s -w -X main.version=${GITHUB_REF_NAME}"
           for target in linux_amd64 darwin_arm64; do
             os="${target%_*}"
             arch="${target#*_}"
             directory="dist/terradrift_${os}_${arch}"
             mkdir -p "$directory"
-            GOOS="$os" GOARCH="$arch" CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o "$directory/terradrift" ./cmd/terradrift
+            GOOS="$os" GOARCH="$arch" CGO_ENABLED=0 go build -trimpath -ldflags="$ldflags" -o "$directory/terradrift" ./cmd/terradrift
             tar -C "$directory" -czf "dist/terradrift_${os}_${arch}.tar.gz" terradrift
           done
           sha256sum dist/*.tar.gz > dist/checksums.txt
       - name: Build runtime image
-        run: docker build -t "$IMAGE" .
+        run: docker build --build-arg VERSION="$GITHUB_REF_NAME" -t "$IMAGE" .
       - name: Generate image SBOM
         uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
         with:

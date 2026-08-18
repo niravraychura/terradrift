@@ -41,6 +41,7 @@ git clone https://github.com/niravraychura/terradrift.git
 cd terradrift
 make build
 ./bin/terradrift --help
+./bin/terradrift --version   # local builds report "dev"; release binaries use the tag
 ```
 
 ### Step 2 — Have Terraform (or OpenTofu) ready

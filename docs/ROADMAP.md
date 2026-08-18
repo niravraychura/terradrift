@@ -11,7 +11,7 @@ Completed engineering history (through v0.1.0): [archive/PLAN-v0.1.md](archive/P
 | Version | Intent |
 |---------|--------|
 | **v0.1.0** | Shipped — first public tagged CLI release |
-| **v0.2.0** | Product polish after first release (UX, docs, scan-all / CI examples as needed) — open a milestone when work starts |
+| **v0.2.0** | Product polish after first release — [milestone](https://github.com/niravraychura/terradrift/milestone/4) (version/DX, scan-all parity, ignore/baselines, GitHub PR upsert, install path) |
 | **v1.0.0** | Stability promise for CLI flags and published JSON consumers rely on — open a milestone when work starts |
 
 ## Out of scope (for now)
