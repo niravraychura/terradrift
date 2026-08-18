@@ -46,9 +46,9 @@ const (
 )
 
 const (
-	maxApprovalBytes   = 64 * 1024
-	maxArtifactBytes   = 1 << 20
-	maxManifestBytes   = 1 << 20
+	maxApprovalBytes   = 32 << 20
+	maxArtifactBytes   = 32 << 20
+	maxManifestBytes   = 32 << 20
 	maxDeliveryWorkers = 4
 )
 

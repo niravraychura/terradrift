@@ -15,8 +15,8 @@ import (
 )
 
 const (
-	maxCostInputBytes  = 1 << 20
-	maxCostOutputBytes = 256 * 1024
+	maxCostInputBytes  = 32 << 20
+	maxCostOutputBytes = 32 << 20
 )
 
 // Options configures a cost command invocation.

@@ -17,7 +17,7 @@ import (
 
 const (
 	maxCommandOutputBytes   = 32 << 20
-	maxModulesManifestBytes = 1 << 20
+	maxModulesManifestBytes = 32 << 20
 )
 
 // CLIRunner executes Terraform-compatible CLI commands.

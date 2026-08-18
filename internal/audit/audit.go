@@ -15,8 +15,8 @@ import (
 )
 
 const (
-	maxInputBytes  = 1 << 20
-	maxOutputBytes = 256 * 1024
+	maxInputBytes  = 32 << 20
+	maxOutputBytes = 32 << 20
 )
 
 // Options configures an external cloud audit adapter.

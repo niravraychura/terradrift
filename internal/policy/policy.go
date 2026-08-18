@@ -15,8 +15,8 @@ import (
 )
 
 const (
-	maxPolicyInputBytes  = 1 << 20
-	maxPolicyOutputBytes = 64 * 1024
+	maxPolicyInputBytes  = 32 << 20
+	maxPolicyOutputBytes = 32 << 20
 )
 
 // Options configures a policy command invocation.

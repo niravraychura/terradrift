@@ -18,7 +18,7 @@ import (
 // DefaultPath is the default local TerraDrift configuration filename.
 const DefaultPath = ".terradrift.json"
 
-const maxConfigBytes = 1 << 20
+const maxConfigBytes = 32 << 20
 
 // Config stores repeatable TerraDrift CLI settings for local and CI usage.
 type Config struct {

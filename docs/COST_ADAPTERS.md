@@ -23,7 +23,7 @@ terradrift scan \
   --cost-arg production
 ```
 
-Keep API keys in the adapter's environment or secret manager, not in command arguments. Adapter output is capped at 256 KiB and command errors are redacted before display.
+Keep API keys in the adapter's environment or secret manager, not in command arguments. Adapter output is capped at 32 MiB and command errors are redacted before display.
 
 ## Infracost
 

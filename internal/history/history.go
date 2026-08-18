@@ -19,7 +19,7 @@ import (
 const fileTimestampFormat = "20060102T150405.000000000Z"
 
 const (
-	maxReportBytes  = 1 << 20
+	maxReportBytes  = 32 << 20
 	maxHistoryFiles = 1000
 )
 
