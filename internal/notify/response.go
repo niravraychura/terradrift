@@ -2,7 +2,7 @@ package notify
 
 import "io"
 
-const maxResponseBodyBytes = 32 * 1024
+const maxResponseBodyBytes = 32 << 20
 
 func closeResponseBody(body io.ReadCloser) error {
 	if body == nil {

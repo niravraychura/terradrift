@@ -9,14 +9,15 @@ import (
 	"os/exec"
 	"strings"
 
+	"github.com/niravraychura/terradrift/internal/ioutil"
 	"github.com/niravraychura/terradrift/internal/redact"
 	"github.com/niravraychura/terradrift/internal/report"
 	"github.com/niravraychura/terradrift/internal/validation"
 )
 
 const (
-	maxPolicyInputBytes  = 1 << 20
-	maxPolicyOutputBytes = 64 * 1024
+	maxPolicyInputBytes  = 32 << 20
+	maxPolicyOutputBytes = 32 << 20
 )
 
 // Options configures a policy command invocation.
@@ -50,8 +51,8 @@ func Run(ctx context.Context, options Options, scanReport report.DriftReport) er
 	cmd.Stdin = bytes.NewReader(payload)
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	cmd.Stdout = &limitedBuffer{buffer: &stdout, remaining: maxPolicyOutputBytes}
-	cmd.Stderr = &limitedBuffer{buffer: &stderr, remaining: maxPolicyOutputBytes}
+	cmd.Stdout = &ioutil.LimitedBuffer{Buffer: &stdout, Remaining: maxPolicyOutputBytes}
+	cmd.Stderr = &ioutil.LimitedBuffer{Buffer: &stderr, Remaining: maxPolicyOutputBytes}
 	if err := cmd.Run(); err != nil {
 		message := strings.TrimSpace(stderr.String())
 		if message == "" {
@@ -63,22 +64,4 @@ func Run(ctx context.Context, options Options, scanReport report.DriftReport) er
 		return fmt.Errorf("policy command failed: %w: %s", err, redact.String(message))
 	}
 	return nil
-}
-
-type limitedBuffer struct {
-	buffer    *bytes.Buffer
-	remaining int
-}
-
-func (buffer *limitedBuffer) Write(p []byte) (int, error) {
-	originalLen := len(p)
-	if buffer.remaining <= 0 {
-		return originalLen, nil
-	}
-	if len(p) > buffer.remaining {
-		p = p[:buffer.remaining]
-	}
-	written, err := buffer.buffer.Write(p)
-	buffer.remaining -= written
-	return originalLen, err
 }

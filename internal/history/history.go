@@ -3,6 +3,7 @@ package history
 
 import (
 	"compress/gzip"
+	"container/heap"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -19,7 +20,7 @@ import (
 const fileTimestampFormat = "20060102T150405.000000000Z"
 
 const (
-	maxReportBytes  = 1 << 20
+	maxReportBytes  = 32 << 20
 	maxHistoryFiles = 1000
 )
 
@@ -91,6 +92,8 @@ func write(directory string, scanReport report.DriftReport, compressed bool) (st
 }
 
 // LoadRecent reads up to limit recent scan reports from directory newest-first.
+// Only the newest limit report files are considered; malformed or oversized files among
+// those candidates are skipped and may reduce the number of returned entries.
 func LoadRecent(directory string, limit int) ([]Entry, error) {
 	if directory == "" || limit <= 0 {
 		return nil, nil
@@ -99,7 +102,7 @@ func LoadRecent(directory string, limit int) ([]Entry, error) {
 	if err != nil {
 		return nil, err
 	}
-	sort.Sort(sort.Reverse(sort.StringSlice(matches)))
+	matches = selectNewestPaths(matches, limit)
 	entries := make([]Entry, 0, len(matches))
 	for _, path := range matches {
 		if len(entries) == limit {
@@ -118,6 +121,50 @@ func LoadRecent(directory string, limit int) ([]Entry, error) {
 		entries = append(entries, Entry{Report: scanReport})
 	}
 	return entries, nil
+}
+
+// selectNewestPaths returns up to limit paths in newest-first deterministic order
+// without sorting the full input when limit is smaller than len(paths).
+func selectNewestPaths(paths []string, limit int) []string {
+	if limit <= 0 || len(paths) == 0 {
+		return nil
+	}
+	if len(paths) <= limit {
+		sorted := append([]string(nil), paths...)
+		sort.Sort(sort.Reverse(sort.StringSlice(sorted)))
+		return sorted
+	}
+	h := make(minStringHeap, 0, limit)
+	heap.Init(&h)
+	for _, path := range paths {
+		if h.Len() < limit {
+			heap.Push(&h, path)
+			continue
+		}
+		if path > h[0] {
+			heap.Pop(&h)
+			heap.Push(&h, path)
+		}
+	}
+	selected := make([]string, h.Len())
+	for i := len(selected) - 1; i >= 0; i-- {
+		selected[i] = heap.Pop(&h).(string)
+	}
+	return selected
+}
+
+type minStringHeap []string
+
+func (h minStringHeap) Len() int           { return len(h) }
+func (h minStringHeap) Less(i, j int) bool { return h[i] < h[j] }
+func (h minStringHeap) Swap(i, j int)      { h[i], h[j] = h[j], h[i] }
+func (h *minStringHeap) Push(x any)        { *h = append(*h, x.(string)) }
+func (h *minStringHeap) Pop() any {
+	old := *h
+	n := len(old)
+	item := old[n-1]
+	*h = old[:n-1]
+	return item
 }
 
 func readReport(path string) ([]byte, error) {

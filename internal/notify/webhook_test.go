@@ -2,12 +2,22 @@ package notify
 
 import (
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/x509"
+	"crypto/x509/pkix"
 	"encoding/json"
+	"encoding/pem"
 	"io"
+	"math/big"
 	"net"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/niravraychura/terradrift/internal/report"
 )
@@ -91,6 +101,53 @@ func TestWebhookNotifierDoesNotExposeMalformedURL(t *testing.T) {
 func TestSecureWebhookClientDoesNotFollowRedirects(t *testing.T) {
 	if err := secureWebhookClient().CheckRedirect(nil, nil); err != http.ErrUseLastResponse {
 		t.Fatalf("expected redirects to be rejected, got %v", err)
+	}
+}
+
+func TestSecureWebhookClientFromCA(t *testing.T) {
+	client, err := secureWebhookClientFromCA("")
+	if err != nil || client == nil {
+		t.Fatalf("expected empty CA path to succeed: %v", err)
+	}
+	if _, err := secureWebhookClientFromCA(filepath.Join(t.TempDir(), "missing.pem")); err == nil {
+		t.Fatal("expected missing CA file to fail")
+	}
+	bad := filepath.Join(t.TempDir(), "bad.pem")
+	if err := os.WriteFile(bad, []byte("not a certificate"), 0o600); err != nil {
+		t.Fatalf("write bad CA: %v", err)
+	}
+	if _, err := secureWebhookClientFromCA(bad); err == nil {
+		t.Fatal("expected invalid CA PEM to fail")
+	}
+
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatalf("generate key: %v", err)
+	}
+	template := &x509.Certificate{
+		SerialNumber:          big.NewInt(1),
+		Subject:               pkix.Name{CommonName: "terradrift-test-ca"},
+		NotBefore:             time.Now().Add(-time.Hour),
+		NotAfter:              time.Now().Add(time.Hour),
+		IsCA:                  true,
+		BasicConstraintsValid: true,
+		KeyUsage:              x509.KeyUsageCertSign,
+	}
+	der, err := x509.CreateCertificate(rand.Reader, template, template, &key.PublicKey, key)
+	if err != nil {
+		t.Fatalf("create certificate: %v", err)
+	}
+	path := filepath.Join(t.TempDir(), "ca.pem")
+	if err := os.WriteFile(path, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}), 0o600); err != nil {
+		t.Fatalf("write CA: %v", err)
+	}
+	withCA, err := secureWebhookClientFromCA(path)
+	if err != nil || withCA == nil {
+		t.Fatalf("expected CA client: %v", err)
+	}
+	transport, ok := withCA.Transport.(*http.Transport)
+	if !ok || transport.TLSClientConfig == nil || transport.TLSClientConfig.RootCAs == nil {
+		t.Fatal("expected TLS RootCAs to be configured")
 	}
 }
 

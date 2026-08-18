@@ -13,4 +13,4 @@ Use `--audit-command` to correlate drifted Terraform addresses with CloudTrail, 
 }
 ```
 
-The adapter owns cloud authentication and address-to-audit-resource mapping. Pass each argument with `--audit-arg`; TerraDrift never invokes a shell. Output is capped at 256 KiB and failures are redacted.
+The adapter owns cloud authentication and address-to-audit-resource mapping. Pass each argument with `--audit-arg`; TerraDrift never invokes a shell. Output is capped at 32 MiB and failures are redacted.

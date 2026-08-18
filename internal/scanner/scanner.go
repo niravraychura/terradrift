@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/niravraychura/terradrift/internal/logger"
 	"github.com/niravraychura/terradrift/internal/parser"
 	"github.com/niravraychura/terradrift/internal/redact"
 	"github.com/niravraychura/terradrift/internal/report"
@@ -49,6 +50,8 @@ type Options struct {
 	PlanMode              terraform.PlanMode
 	WorkspaceRoot         string
 	RequireTerraformFiles bool
+	LockBackend           LockBackend
+	SkipInit              bool
 	workspaceRootResolved bool
 }
 
@@ -118,28 +121,36 @@ func Scan(ctx context.Context, options Options) (Result, error) {
 
 	absDir, err := ValidateDirectory(options.Directory)
 	if err != nil {
+		logger.Error(ctx, "scan failed", "directory", options.Directory, "error", err)
 		return Result{Outcome: OutcomeFailed}, err
 	}
+	logger.Info(ctx, "scan started", "directory", absDir)
 	if options.WorkspaceRoot != "" {
 		if err := validateResolvedWorkspaceRoot(absDir, options.WorkspaceRoot); err != nil {
+			logger.Error(ctx, "scan failed", "directory", absDir, "error", err)
 			return Result{Outcome: OutcomeFailed}, err
 		}
 	}
 	if options.RequireTerraformFiles {
 		matches, err := filepath.Glob(filepath.Join(absDir, "*.tf"))
 		if err != nil {
+			logger.Error(ctx, "scan failed", "directory", absDir, "error", err)
 			return Result{Outcome: OutcomeFailed}, fmt.Errorf("list Terraform files: %w", err)
 		}
 		jsonMatches, err := filepath.Glob(filepath.Join(absDir, "*.tf.json"))
 		if err != nil {
+			logger.Error(ctx, "scan failed", "directory", absDir, "error", err)
 			return Result{Outcome: OutcomeFailed}, fmt.Errorf("list Terraform JSON files: %w", err)
 		}
 		if len(matches)+len(jsonMatches) == 0 {
-			return Result{Outcome: OutcomeFailed}, fmt.Errorf("terraform directory has no .tf or .tf.json files: %s", absDir)
+			err := fmt.Errorf("terraform directory has no .tf or .tf.json files: %s", absDir)
+			logger.Error(ctx, "scan failed", "directory", absDir, "error", err)
+			return Result{Outcome: OutcomeFailed}, err
 		}
 	}
 	scanID, err := newScanID()
 	if err != nil {
+		logger.Error(ctx, "scan failed", "directory", absDir, "error", err)
 		return Result{Outcome: OutcomeFailed}, fmt.Errorf("create scan ID: %w", err)
 	}
 
@@ -151,6 +162,7 @@ func Scan(ctx context.Context, options Options) (Result, error) {
 			status = report.ScanStatusNoChanges
 			outcome = OutcomeNoChanges
 		}
+		logger.Info(ctx, "scan completed", "directory", absDir, "outcome", string(outcome))
 		return Result{Outcome: outcome, Report: report.DriftReport{
 			ScanID:          scanID,
 			RootID:          rootID(absDir),
@@ -163,52 +175,53 @@ func Scan(ctx context.Context, options Options) (Result, error) {
 		}}, nil
 	}
 
-	unlock, err := acquireScanLock(absDir)
+	lock := options.LockBackend
+	if lock == nil {
+		lock = LocalFileLockBackend{}
+	}
+	unlock, err := lock.Acquire(absDir)
 	if err != nil {
+		logger.Error(ctx, "scan failed", "directory", absDir, "error", err)
 		return Result{Outcome: OutcomeFailed}, err
 	}
 	defer unlock()
 
-	scanReport, err := runTerraformScan(ctx, options.Runner, absDir, scanID, options.PlanMode)
+	// Re-validate after lock acquire to harden TOCTOU between initial checks and Terraform execution.
+	absDir, err = ValidateDirectory(options.Directory)
 	if err != nil {
+		logger.Error(ctx, "scan failed", "directory", options.Directory, "error", err)
+		return Result{Outcome: OutcomeFailed}, err
+	}
+	if options.WorkspaceRoot != "" {
+		if err := validateResolvedWorkspaceRoot(absDir, options.WorkspaceRoot); err != nil {
+			logger.Error(ctx, "scan failed", "directory", absDir, "error", err)
+			return Result{Outcome: OutcomeFailed}, err
+		}
+	}
+
+	scanReport, err := runTerraformScan(ctx, options.Runner, absDir, scanID, options.PlanMode, options.SkipInit)
+	if err != nil {
+		logger.Error(ctx, "scan failed", "directory", absDir, "error", err)
 		return Result{Outcome: OutcomeFailed, Report: scanReport}, err
 	}
 	if scanReport.TotalChangedResources > 0 {
 		if options.PlanMode == terraform.PlanModeNormal {
 			scanReport.Status = report.ScanStatusChangesDetected
+			logger.Info(ctx, "scan completed", "directory", absDir, "outcome", string(OutcomeChangesDetected))
 			return Result{Outcome: OutcomeChangesDetected, Report: scanReport}, nil
 		}
 		scanReport.Status = report.ScanStatusDriftDetected
+		logger.Info(ctx, "scan completed", "directory", absDir, "outcome", string(OutcomeDriftDetected))
 		return Result{Outcome: OutcomeDriftDetected, Report: scanReport}, nil
 	}
 	if options.PlanMode == terraform.PlanModeNormal {
 		scanReport.Status = report.ScanStatusNoChanges
+		logger.Info(ctx, "scan completed", "directory", absDir, "outcome", string(OutcomeNoChanges))
 		return Result{Outcome: OutcomeNoChanges, Report: scanReport}, nil
 	}
 	scanReport.Status = report.ScanStatusNoDrift
+	logger.Info(ctx, "scan completed", "directory", absDir, "outcome", string(OutcomeNoDrift))
 	return Result{Outcome: OutcomeNoDrift, Report: scanReport}, nil
-}
-
-func acquireScanLock(directory string) (func(), error) {
-	path := filepath.Join(directory, scanLockFilename)
-	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
-	if err != nil {
-		if os.IsExist(err) {
-			return nil, fmt.Errorf("terraform scan already running for %s; remove stale %s after confirming no scan is active", directory, path)
-		}
-		return nil, fmt.Errorf("create terraform scan lock: %w", err)
-	}
-	if _, err := fmt.Fprintln(file, os.Getpid()); err != nil {
-		_ = file.Close()
-		_ = os.Remove(path)
-		return nil, fmt.Errorf("write terraform scan lock: %w", err)
-	}
-	if err := file.Close(); err != nil {
-		_ = os.Remove(path)
-		return nil, fmt.Errorf("close terraform scan lock: %w", err)
-	}
-	// ponytail: local O_EXCL lock; use a shared lock service for distributed runners.
-	return func() { _ = os.Remove(path) }, nil
 }
 
 // ValidateWorkspaceRoot ensures directory resolves inside workspaceRoot after symlink evaluation.
@@ -261,7 +274,7 @@ func ValidateDirectory(directory string) (string, error) {
 	return resolved, nil
 }
 
-func runTerraformScan(ctx context.Context, runner terraform.Runner, directory string, scanID string, mode terraform.PlanMode) (scanReport report.DriftReport, returnErr error) {
+func runTerraformScan(ctx context.Context, runner terraform.Runner, directory string, scanID string, mode terraform.PlanMode, skipInit bool) (scanReport report.DriftReport, returnErr error) {
 	startedAt := time.Now().UTC()
 	scanReport = report.DriftReport{
 		ScanID:          scanID,
@@ -273,9 +286,11 @@ func runTerraformScan(ctx context.Context, runner terraform.Runner, directory st
 		StartedAt:       startedAt,
 	}
 
-	if err := runner.Init(ctx, directory); err != nil {
-		failReport(&scanReport, err)
-		return scanReport, fmt.Errorf("terraform init: %s", scanReport.ErrorMessage)
+	if !skipInit {
+		if err := runner.Init(ctx, directory); err != nil {
+			failReport(&scanReport, err)
+			return scanReport, fmt.Errorf("terraform init: %s", scanReport.ErrorMessage)
+		}
 	}
 	if inventoryRunner, ok := runner.(interface {
 		Inventory(context.Context, string) (terraform.Inventory, error)

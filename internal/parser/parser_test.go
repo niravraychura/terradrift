@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/niravraychura/terradrift/internal/report"
 	"github.com/niravraychura/terradrift/internal/terraform"
 )
 
@@ -77,13 +78,26 @@ func TestParsePlanDropsTerraformValuesAndSensitiveMarks(t *testing.T) {
 	if len(outputChanges) != 1 || outputChanges[0].Name != "service_url" || outputChanges[0].Actions[0] != "update" {
 		t.Fatalf("expected safe output metadata, got %#v", outputChanges)
 	}
+	attrs := map[string]report.AttributeChange{}
+	for _, attr := range changes[0].AttributeChanges {
+		attrs[attr.Path] = attr
+	}
+	if got := attrs["instance_type"]; got.Before != `"t3.micro"` || got.After != `"t3.small"` {
+		t.Fatalf("expected instance_type diff, got %#v", got)
+	}
+	if got := attrs["tags.Env"]; got.Before != `"old"` || got.After != `"new"` {
+		t.Fatalf("expected tags.Env diff, got %#v", got)
+	}
+	if got := attrs["password"]; got.Before != "[REDACTED]" || got.After != "[REDACTED]" {
+		t.Fatalf("expected redacted password diff, got %#v", got)
+	}
 	encoded, err := json.Marshal(struct {
 		Changes []interface{} `json:"changes"`
 	}{Changes: []interface{}{changes, outputChanges}})
 	if err != nil {
 		t.Fatalf("marshal parsed report fields: %v", err)
 	}
-	for _, forbidden := range []string{"super-secret-value", "password", "before_sensitive", "after_sensitive"} {
+	for _, forbidden := range []string{"super-secret-value", "another-super-secret", "before_sensitive", "after_sensitive"} {
 		if strings.Contains(string(encoded), forbidden) {
 			t.Fatalf("parsed report retained %q: %s", forbidden, encoded)
 		}

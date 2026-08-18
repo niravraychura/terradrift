@@ -12,12 +12,13 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/niravraychura/terradrift/internal/ioutil"
 	"github.com/niravraychura/terradrift/internal/redact"
 )
 
 const (
-	maxCommandOutputBytes   = 1 << 20
-	maxModulesManifestBytes = 1 << 20
+	maxCommandOutputBytes   = 32 << 20
+	maxModulesManifestBytes = 32 << 20
 )
 
 // CLIRunner executes Terraform-compatible CLI commands.
@@ -96,7 +97,7 @@ func (runner CLIRunner) Inventory(ctx context.Context, directory string) (Invent
 	}
 	inventory := Inventory{TerraformVersion: version.TerraformVersion, ProviderVersions: version.ProviderSelections, Modules: []Module{}}
 	modulesPath := filepath.Join(directory, ".terraform", "modules", "modules.json")
-	data, err = readLimitedFile(modulesPath, maxModulesManifestBytes)
+	data, err = ioutil.ReadLimitedFile(modulesPath, maxModulesManifestBytes)
 	if os.IsNotExist(err) {
 		return inventory, nil
 	}
@@ -170,20 +171,4 @@ func (writer *limitedWriter) Write(p []byte) (int, error) {
 	written, err := writer.w.Write(p)
 	writer.n -= int64(written)
 	return originalLen, err
-}
-
-func readLimitedFile(path string, maximum int64) ([]byte, error) {
-	file, err := os.Open(path)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = file.Close() }()
-	data, err := io.ReadAll(io.LimitReader(file, maximum+1))
-	if err != nil {
-		return nil, err
-	}
-	if int64(len(data)) > maximum {
-		return nil, fmt.Errorf("file exceeds %d bytes", maximum)
-	}
-	return data, nil
 }

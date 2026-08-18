@@ -120,9 +120,11 @@ terradrift scan -d ./terraform/prod --terraform-exec --plan-mode normal --output
 
 Normal-plan changes with no refresh-only drift usually mean unapplied configuration changes rather than out-of-band infrastructure drift.
 
-Terraform-backed scans create `.terradrift-scan.lock` in the selected root to prevent overlap. The lock is removed when the scan exits; after a crash, remove it only after confirming no scan is still active.
+Terraform-backed scans create `.terradrift-scan.lock` in the selected root to prevent overlap. The lock is removed when the scan exits; after a crash, remove it only after confirming no scan is still active. Use `--lock-backend local` (the default) for single-host runners; unknown backends are rejected. When `--workspace-root` is set, TerraDrift re-validates the resolved directory after acquiring the lock to harden symlink TOCTOU races before Terraform runs.
 
-The `terradrift init` command writes a tailored `.terradrift.json` file with safe local defaults. Use its `--directory`, `--terraform-exec`, `--redact-paths`, and `--history-dir` flags to guide the initial configuration. Config files can also define optional scan settings such as `terraform_exec`, `terraform_bin`, `plan_mode`, `workspace_root`, `notify`, `slack_webhook_url`, `teams_webhook_url`, `webhook_url`, `dashboard_html`, `history_dir`, `history_compressed`, `audit_log`, `policy_command`, `policy_args`, `cost_command`, `cost_args`, `baseline_rules`, and `remediation_runbooks`; explicit CLI flags always take precedence. Audit logs are JSON Lines with allowlisted metadata and redacted errors.
+By default each Terraform-backed scan runs `terraform init`. Use `--skip-terraform-init` only when `.terraform` (providers and modules) is already valid for the selected root; skipping init with a stale or missing working directory will fail the scan.
+
+The `terradrift init` command writes a tailored `.terradrift.json` file with safe local defaults. Use its `--directory`, `--terraform-exec`, `--redact-paths`, and `--history-dir` flags to guide the initial configuration. Config files can also define optional scan settings such as `terraform_exec`, `terraform_bin`, `plan_mode`, `workspace_root`, `notify`, `slack_webhook_url`, `teams_webhook_url`, `webhook_url`, `webhook_ca_cert`, `dashboard_html`, `history_dir`, `history_compressed`, `audit_log`, `policy_command`, `policy_args`, `cost_command`, `cost_args`, `baseline_rules`, and `remediation_runbooks`; explicit CLI flags always take precedence. Audit logs are JSON Lines with allowlisted metadata and redacted errors.
 
 Use [`docs/terradrift.schema.json`](docs/terradrift.schema.json) as the JSON Schema reference for editor and CI validation.
 
@@ -146,7 +148,7 @@ Use `profiles` for standalone development, staging, and production configuration
 }
 ```
 
-Slack notifications are available with `--notify slack --slack-webhook-url "$SLACK_WEBHOOK_URL"`. Microsoft Teams notifications are available with `--notify teams --teams-webhook-url "$TEAMS_WEBHOOK_URL"`. Generic HTTPS webhooks are available with `--notify webhook --webhook-url "$WEBHOOK_URL"`. Notification messages use concise summaries and avoid including local filesystem paths or webhook secrets.
+Slack notifications are available with `--notify slack --slack-webhook-url "$SLACK_WEBHOOK_URL"`. Microsoft Teams notifications are available with `--notify teams --teams-webhook-url "$TEAMS_WEBHOOK_URL"`. Generic HTTPS webhooks are available with `--notify webhook --webhook-url "$WEBHOOK_URL"`. For enterprise TLS interception, pass `--webhook-ca-cert /path/to/ca.pem` (or `webhook_ca_cert` in config) so Slack, Teams, generic, and owner webhooks trust your custom CA. Notification messages use concise summaries and avoid including local filesystem paths or webhook secrets.
 
 Static dashboard output is available with `--dashboard-html <path>`. This writes an escaped local HTML report that can be archived by CI or served by your own internal tooling. Historical JSON report storage is available with `--history-dir <directory>`; files are written with restrictive permissions and recent history is included in dashboard output when both flags are used.
 
@@ -154,14 +156,25 @@ Default table output:
 
 ```text
 TerraDrift scan initialized
-Status: no_drift
-Plan mode: refresh-only
+Status: changes_detected
+Plan mode: normal
+Scan ID: 0a0cb23d-f342-4ce5-8517-03ba05aee949
 Terraform directory: /absolute/path/to/terraform/prod
-Resources checked: 0
-Changed resources: 0
+Resources checked: 144
+Changed resources: 2
+
+CRITICAL  delete,create  module.ecs.aws_ecs_task_definition.td
+  reason: replace_because_cannot_update
+  cpu: "256" -> "512"
+
+MEDIUM  update  module.alb.aws_lb.main
+  idle_timeout: 60 -> 120
+  tags.Environment: "staging" -> "dev"
 ```
 
-JSON output is available for automation:
+Attribute diffs use Terraform plan before/after values. Sensitive attributes are shown as `[REDACTED]`. Unknown values are shown as `(known after apply)`.
+
+JSON output is available for automation and includes the same `attribute_changes` on each resource:
 
 ```json
 {
@@ -270,7 +283,7 @@ For scheduled CI scans, set `TF_PLUGIN_CACHE_DIR` to a job cache directory and c
 When `--terraform-exec` is provided, `terradrift scan` performs this flow:
 
 1. Validate the Terraform directory.
-2. Run `terraform init -input=false -backend=true -lockfile=readonly`. A committed `.terraform.lock.hcl` is required; TerraDrift never upgrades providers or rewrites the lockfile.
+2. Run `terraform init -input=false -backend=true -lockfile=readonly` unless `--skip-terraform-init` is set. A committed `.terraform.lock.hcl` is required when init runs; TerraDrift never upgrades providers or rewrites the lockfile. Skip init only when `.terraform` is already valid for the selected root.
 3. Run `terraform plan -refresh-only -detailed-exitcode -out <planfile>` for refresh-only mode, or `terraform plan -detailed-exitcode -out <planfile>` for normal mode.
 4. Run `terraform show -json <planfile>`.
 5. Parse the JSON plan.
