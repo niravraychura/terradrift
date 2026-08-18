@@ -1,0 +1,68 @@
+name: Bug report
+description: Report incorrect behavior in TerraDrift
+title: "bug: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for filing a bug. Do **not** include credentials, state files, plan JSON with secrets, or webhook URLs.
+        Security issues: use [private advisory reporting](https://github.com/niravraychura/terradrift/security/advisories/new) — see SECURITY.md.
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What went wrong in one or two sentences?
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproduction steps
+      description: Exact commands and flags (redact secrets).
+      placeholder: |
+        1. terradrift scan --terraform-exec --directory ...
+        2. ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: Include relevant redacted output or exit codes.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: TerraDrift version
+      description: Output of `terradrift --version` or release tag / commit.
+    validations:
+      required: true
+  - type: input
+    id: tf_version
+    attributes:
+      label: Terraform / OpenTofu version
+      description: Optional but helpful when using `--terraform-exec`.
+  - type: dropdown
+    id: os
+    attributes:
+      label: OS
+      options:
+        - Linux
+        - macOS
+        - Windows
+        - Other / container
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: CI logs (redacted), config snippets without secrets, related issues.

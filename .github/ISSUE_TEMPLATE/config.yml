@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/niravraychura/terradrift/security/advisories/new
+    about: Report security issues privately. Do not file public issues with secrets or exploit details. See SECURITY.md.
+  - name: Contributing guide
+    url: https://github.com/niravraychura/terradrift/blob/dev/CONTRIBUTING.md
+    about: Branch model, tests, and PR expectations.
+  - name: Release policy
+    url: https://github.com/niravraychura/terradrift/blob/dev/docs/RELEASE.md
+    about: How versions are cut from main.
