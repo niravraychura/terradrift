@@ -29,4 +29,4 @@ terradrift scan \
   --policy-arg=-
 ```
 
-The report does not contain resource tags or configuration attributes. Add policy rules only for fields TerraDrift emits.
+The report includes resource addresses, actions, risk, and optional `attribute_changes` (paths always; values only when `--attribute-values` is set, with secrets redacted). Add policy rules only for fields TerraDrift emits — never expect raw Terraform tags or unredacted secrets.

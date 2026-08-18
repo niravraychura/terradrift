@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
 
@@ -36,7 +37,7 @@ func acquireScanLock(directory string) (func(), error) {
 	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
 	if err != nil {
 		if os.IsExist(err) {
-			return nil, fmt.Errorf("terraform scan already running for %s; remove stale %s after confirming no scan is active", directory, path)
+			return nil, fmt.Errorf("terraform scan already running for %s; %s", directory, staleLockGuidance(path))
 		}
 		return nil, fmt.Errorf("create terraform scan lock: %w", err)
 	}
@@ -49,6 +50,21 @@ func acquireScanLock(directory string) (func(), error) {
 		_ = os.Remove(path)
 		return nil, fmt.Errorf("close terraform scan lock: %w", err)
 	}
-	// ponytail: local O_EXCL lock; use a shared lock service for distributed runners.
+	// Local O_EXCL lock only; Redis/Postgres backends remain out of scope.
 	return func() { _ = os.Remove(path) }, nil
+}
+
+func staleLockGuidance(path string) string {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Sprintf("remove stale %s after confirming no scan is active", path)
+	}
+	pid, err := strconv.Atoi(strings.TrimSpace(string(data)))
+	if err != nil || pid <= 0 {
+		return fmt.Sprintf("remove stale %s after confirming no scan is active", path)
+	}
+	if processExists(pid) {
+		return fmt.Sprintf("lock held by pid %d (%s); wait for that process or remove the lock only if it is not a TerraDrift scan", pid, path)
+	}
+	return fmt.Sprintf("stale lock file %s references pid %d which is not running; remove it after confirming no scan is active", path, pid)
 }

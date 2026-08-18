@@ -3,7 +3,7 @@
 TerraDrift is an open-source, self-hosted Terraform drift detection tool. It is being built to help teams identify infrastructure changes that happened outside their normal Terraform workflow and surface those changes in a clear, automation-friendly way.
 
 > [!WARNING]
-> TerraDrift is under active development. The default scan still emits a bootstrap report unless `--terraform-exec` is explicitly enabled. Treat Terraform execution, Slack notifications, and static dashboard output as early CLI features and review their output before relying on them in production automation.
+> Without `--terraform-exec`, `terradrift scan` emits a bootstrap placeholder report (not a real drift result) and prints a warning. Use `--terraform-exec` for production CI. Attribute values are paths-only in history/policy/notifications unless `--attribute-values` is set; sensitive values stay redacted.
 
 ## Why TerraDrift exists
 
@@ -13,20 +13,17 @@ The long-term goal is to make drift detection easy to run from a developer lapto
 
 ## Current status
 
-The first version of TerraDrift is a project foundation. It includes:
+TerraDrift is a production-usable CLI for self-hosted drift detection. It includes:
 
-- A Go module and Cobra-based CLI named `terradrift`
-- A `scan` command that defaults to the current directory and supports `--directory` / `-d`
-- Directory validation, optional workspace-root enforcement, and absolute path reporting
-- Human-friendly table output and automation-friendly JSON output
-- Documented exit codes for future CI drift workflows
-- Domain models for future drift reports
-- A Terraform runner interface and explicit Terraform CLI execution mode
-- Secret-safe Slack notifications and static HTML dashboard output
-- Unit tests that do not require Terraform or cloud credentials
-- Docker, Makefile, GitHub Actions CI, Dependabot, and security policy scaffolding
+- `scan` and `scan-all` with Terraform/OpenTofu execution (`--terraform-exec`), refresh-only and normal plan modes
+- Workspace selection plus `-var` / `-var-file` passthrough
+- Table and JSON reports with attribute-level diffs (safe values; secrets redacted)
+- Policy publish gate, cost/audit adapters, Slack/Teams/webhook/GitHub notifications
+- History, static dashboards, JUnit/SARIF/Prometheus outputs, severity gates
+- Multi-root manifests with concurrent scans and shared delivery options
+- Secret-safe defaults, size budgets, local scan locks, and CI/release hardening
 
-Terraform execution is available behind the explicit `--terraform-exec` flag while the broader workflow continues to mature.
+Bootstrap (no Terraform) remains available for dry wiring checks only; prefer `--terraform-exec` for real results.
 
 ## Do Terraform files need to be in this repository?
 
@@ -83,7 +80,11 @@ terradrift init --directory ./terraform/prod --terraform-exec --redact-paths --h
 
 If `--directory` is omitted, TerraDrift scans the current working directory.
 
-`scan-all` reads one Terraform root per line from a manifest. Blank lines and `#` comments are ignored, and relative roots resolve from the manifest's directory. It runs roots with bounded concurrency and emits aggregate table or JSON output. `--incremental-state` is opt-in and retries only roots that previously drifted or failed; omit it for full coverage. The first multi-root pass intentionally excludes notifications, history, dashboards, policies, and cost enrichment.
+`scan-all` accepts a **text** or **JSON** manifest. Text manifests list one Terraform root per line (blank lines and `#` comments ignored; relative roots resolve from the manifest directory). JSON manifests use `version: 1` and may set per-root `profile`, `plan_mode`, `workspace`, `var_files`, and `vars` so mono-repos are not forced into one global flag set. Named `profile` values require `--config`. It runs roots with bounded concurrency and emits aggregate table or JSON output. `--incremental-state` is opt-in and retries only roots that previously drifted or failed; omit it for full coverage.
+
+**`scan-all` delivery subset (production-usable):** `--history-dir`, `--dashboard-html`, `--notify` (plus webhook URL flags), `--policy-command`, `--cost-command`, `--audit-command`, `--attribute-values`, workspace/var-file defaults, and `--failure-severity` (gates exit code `2` for refresh-only drift the same way as `scan`). Policy runs as a publish gate before that root's history, dashboard, and notifications. Concurrent roots serialize history/dashboard writes.
+
+**Not on `scan-all` yet** (use `terradrift scan` per root): baselines/owners/runbooks, GitHub PR/issue summaries, `--artifact-url`, `--audit-log`, notification throttle, approvals. Prefer `terradrift dashboard-index` for multi-root HTML; a shared `--dashboard-html` path is overwritten by the last successful root (and warns when `concurrency > 1`).
 
 Build a static cross-root dashboard index from recent history:
 
@@ -98,6 +99,28 @@ Use `--discover <workspace>` to find roots containing `.tf` files. Repeat `--inc
 environments/development
 environments/production
 ```
+
+```json
+{
+  "version": 1,
+  "roots": [
+    {"directory": "terraform/dev", "profile": "development", "var_files": ["dev.tfvars"]},
+    {"directory": "terraform/prod", "plan_mode": "refresh-only", "workspace": "prod", "var_files": ["prod.tfvars"]}
+  ]
+}
+```
+
+See [examples/multi-root](examples/multi-root) and [examples/github-actions/terradrift-scheduled-multi-root.yml](examples/github-actions/terradrift-scheduled-multi-root.yml) for a scheduled multi-root + Slack + high-severity gate.
+
+### `scan` flag groups
+
+| Group | Flags |
+| --- | --- |
+| Core | `--directory`, `--output`, `--timeout`, `--terraform-exec`, `--terraform-bin`, `--plan-mode`, `--workspace`, `--var-file`, `--var`, `--config`, `--profile`, `--failure-severity`, `--workspace-root`, `--redact-paths`, `--lock-backend`, `--skip-terraform-init`, `--attribute-values` |
+| Delivery | `--history-dir`, `--history-retention`, `--history-compressed`, `--dashboard-html`, `--notify`, webhook URLs, `--artifact-url`, `--audit-log`, GitHub summary flags, `--approval-file` |
+| Enrichment | `--policy-command`, `--policy-arg`, `--cost-command`, `--cost-arg`, `--audit-command`, `--audit-arg` |
+
+`terradrift scan --help` lists the same groups in the command long description.
 
 TerraDrift accepts any existing local directory at the CLI validation layer. When `--terraform-exec` is enabled, Terraform performs its own configuration validation and returns a scan failure if the selected directory is not usable Terraform configuration.
 
@@ -120,11 +143,11 @@ terradrift scan -d ./terraform/prod --terraform-exec --plan-mode normal --output
 
 Normal-plan changes with no refresh-only drift usually mean unapplied configuration changes rather than out-of-band infrastructure drift.
 
-Terraform-backed scans create `.terradrift-scan.lock` in the selected root to prevent overlap. The lock is removed when the scan exits; after a crash, remove it only after confirming no scan is still active. Use `--lock-backend local` (the default) for single-host runners; unknown backends are rejected. When `--workspace-root` is set, TerraDrift re-validates the resolved directory after acquiring the lock to harden symlink TOCTOU races before Terraform runs.
+Terraform-backed scans create `.terradrift-scan.lock` in the selected root to prevent overlap on a **single host**. The lock is a local `O_EXCL` file lock (`--lock-backend local` only). Runners that share a filesystem can share the same lock file; Redis/Postgres distributed lock backends are out of scope. The lock is removed when the scan exits; after a crash, remove `.terradrift-scan.lock` manually only after confirming no scan is still active. When `--workspace-root` is set, TerraDrift re-validates the resolved directory after acquiring the lock to harden symlink TOCTOU races before Terraform runs.
 
-By default each Terraform-backed scan runs `terraform init`. Use `--skip-terraform-init` only when `.terraform` (providers and modules) is already valid for the selected root; skipping init with a stale or missing working directory will fail the scan.
+By default each Terraform-backed scan runs `terraform init`. Use `--skip-terraform-init` only when `.terraform` (providers and modules) is already valid for the selected root; skipping init with a stale or missing working directory will fail the scan. Use `--workspace` to `terraform workspace select` before plan, and repeatable `--var-file` / `--var` to pass Terraform variables into plan (also via config `workspace`, `var_files`, `vars`).
 
-The `terradrift init` command writes a tailored `.terradrift.json` file with safe local defaults. Use its `--directory`, `--terraform-exec`, `--redact-paths`, and `--history-dir` flags to guide the initial configuration. Config files can also define optional scan settings such as `terraform_exec`, `terraform_bin`, `plan_mode`, `workspace_root`, `notify`, `slack_webhook_url`, `teams_webhook_url`, `webhook_url`, `webhook_ca_cert`, `dashboard_html`, `history_dir`, `history_compressed`, `audit_log`, `policy_command`, `policy_args`, `cost_command`, `cost_args`, `baseline_rules`, and `remediation_runbooks`; explicit CLI flags always take precedence. Audit logs are JSON Lines with allowlisted metadata and redacted errors.
+The `terradrift init` command writes a tailored `.terradrift.json` file with safe local defaults. Use its `--directory`, `--terraform-exec`, `--redact-paths`, and `--history-dir` flags to guide the initial configuration. Config files can also define optional scan settings such as `terraform_exec`, `terraform_bin`, `plan_mode`, `workspace`, `var_files`, `vars`, `workspace_root`, `attribute_values`, `notify`, `slack_webhook_url`, `teams_webhook_url`, `webhook_url`, `webhook_ca_cert`, `dashboard_html`, `history_dir`, `history_compressed`, `audit_log`, `policy_command`, `policy_args`, `cost_command`, `cost_args`, `baseline_rules`, and `remediation_runbooks`; explicit CLI flags always take precedence. Audit logs are JSON Lines with allowlisted metadata and redacted errors.
 
 Use [`docs/terradrift.schema.json`](docs/terradrift.schema.json) as the JSON Schema reference for editor and CI validation.
 
@@ -172,7 +195,12 @@ MEDIUM  update  module.alb.aws_lb.main
   tags.Environment: "staging" -> "dev"
 ```
 
-Attribute diffs use Terraform plan before/after values. Sensitive attributes are shown as `[REDACTED]`. Unknown values are shown as `(known after apply)`.
+Attribute diffs use Terraform plan before/after values with security controls:
+
+- Terraform `before_sensitive` / `after_sensitive` and name heuristics (`password`, `token`, `connection_string`, `db_url`, `user_data`, and similar) are shown as `[REDACTED]`.
+- Large strings and encoded objects over 200 characters are summarized as `[changed, NB]` instead of partial dumps.
+- Human table/JSON **stdout** may include these safe values.
+- By default, history, uploaded artifacts, policy stdin, dashboards, and notifications use **paths only** (attribute paths without Before/After). Pass `--attribute-values` (or config `attribute_values: true`) to include the same safe/redacted values in those outputs. Secrets are never persisted in cleartext.
 
 JSON output is available for automation and includes the same `attribute_changes` on each resource:
 
@@ -268,7 +296,20 @@ Build the image:
 make docker-build
 ```
 
-The current runtime image intentionally does not install Terraform. To use `--terraform-exec` in Docker, build a derived image that installs Terraform or mount/provide a trusted Terraform binary on `PATH`. Pin Terraform, provider, and module versions in CI for repeatable drift results.
+The current runtime image intentionally does not install Terraform. To use `--terraform-exec` in Docker, build a derived image that installs Terraform or OpenTofu, or mount a trusted binary on `PATH`. Example derived image:
+
+```dockerfile
+FROM ghcr.io/niravraychura/terradrift:latest
+USER root
+RUN apk --no-cache add curl unzip \
+  && curl -fsSLo /tmp/terraform.zip https://releases.hashicorp.com/terraform/1.10.5/terraform_1.10.5_linux_amd64.zip \
+  && unzip /tmp/terraform.zip -d /usr/local/bin \
+  && rm /tmp/terraform.zip \
+  && chmod 0755 /usr/local/bin/terraform
+USER terradrift:terradrift
+```
+
+Pin TerraDrift, Terraform/OpenTofu, provider, and module versions in CI for repeatable drift results. Do not bake cloud credentials into the image.
 
 ## Releases
 
@@ -294,9 +335,11 @@ The CLI reserves these exit codes for automation-friendly workflows:
 
 | Exit code | Meaning |
 | ---: | --- |
-| `0` | Scan completed successfully with no drift or normal-plan changes. |
-| `1` | Scan failed before producing a reliable result. |
-| `2` | Scan completed successfully and drift or normal-plan changes were detected. |
+| `0` | Scan completed successfully with no drift or normal-plan changes (or active findings below `--failure-severity`). |
+| `1` | Scan failed before producing a reliable result (including policy publish-gate failure). |
+| `2` | Scan completed successfully and drift or normal-plan changes were detected at/above the failure severity threshold. |
+
+Example: with `--failure-severity high`, medium updates exit `0`, but a replacement (`critical`) exits `2`.
 
 ## Feature ideas and improvement backlog
 
@@ -358,7 +401,7 @@ terradrift scan --approval-file report.json.approval.json
 
 Correlate drift with CloudTrail, Azure Activity Log, or GCP Audit Log through `--audit-command`; see [audit adapter guidance](docs/AUDIT_ADAPTERS.md).
 
-For CI, set absolute `allowed_commands` and `trusted_command_dirs` in a profile. Resolved commands, including bare names, must be under a trusted directory; commands containing shell syntax are rejected.
+For CI, set absolute `allowed_commands` and `trusted_command_dirs` in a profile (see `examples/config/ci.json`). Resolved commands, including bare names, must be under a trusted directory; commands containing shell syntax are rejected. Empty allowlists mean **local trust only**—fine on a laptop, unsafe for shared CI without pinning both fields.
 
 ```json
 {
@@ -398,7 +441,7 @@ Set `remediation_runbooks` in `.terradrift.json` to link resources to HTTPS runb
 
 ## Policy-as-code hooks
 
-Use `--policy-command <command>` to run an external policy tool after the scan report is written and before notifications are sent. TerraDrift passes the redacted scan report JSON on stdin and never invokes a shell implicitly; pass each argument explicitly with repeated `--policy-arg` flags. A non-zero policy exit fails the scan, and policy stdout/stderr included in errors is size-limited and redacted before display.
+Use `--policy-command <command>` to run an external policy tool as a **publish gate** after stdout is written and **before** history, dashboard HTML, artifact upload, and notifications. On policy failure the scan returns an error immediately and does not persist or notify. TerraDrift passes the (paths-only by default) scan report JSON on stdin and never invokes a shell implicitly; pass each argument explicitly with repeated `--policy-arg` flags. A non-zero policy exit fails the scan, and policy stdout/stderr included in errors is size-limited (fail-closed on truncation) and redacted before display.
 
 Example with Conftest-style stdin usage:
 

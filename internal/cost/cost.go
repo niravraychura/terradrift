@@ -51,9 +51,14 @@ func Enrich(ctx context.Context, options Options, scanReport report.DriftReport)
 	cmd.Stdin = bytes.NewReader(payload)
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	cmd.Stdout = &ioutil.LimitedBuffer{Buffer: &stdout, Remaining: maxCostOutputBytes}
-	cmd.Stderr = &ioutil.LimitedBuffer{Buffer: &stderr, Remaining: maxCostOutputBytes}
+	stdoutBuf := &ioutil.LimitedBuffer{Buffer: &stdout, Remaining: maxCostOutputBytes}
+	stderrBuf := &ioutil.LimitedBuffer{Buffer: &stderr, Remaining: maxCostOutputBytes}
+	cmd.Stdout = stdoutBuf
+	cmd.Stderr = stderrBuf
 	if err := cmd.Run(); err != nil {
+		if stdoutBuf.Truncated || stderrBuf.Truncated {
+			return scanReport, fmt.Errorf("command output exceeded %d bytes", maxCostOutputBytes)
+		}
 		message := strings.TrimSpace(stderr.String())
 		if message == "" {
 			message = strings.TrimSpace(stdout.String())
@@ -62,6 +67,9 @@ func Enrich(ctx context.Context, options Options, scanReport report.DriftReport)
 			return scanReport, fmt.Errorf("cost command failed: %w", err)
 		}
 		return scanReport, fmt.Errorf("cost command failed: %w: %s", err, redact.String(message))
+	}
+	if stdoutBuf.Truncated || stderrBuf.Truncated {
+		return scanReport, fmt.Errorf("command output exceeded %d bytes", maxCostOutputBytes)
 	}
 	var output commandOutput
 	if err := json.Unmarshal(stdout.Bytes(), &output); err != nil {

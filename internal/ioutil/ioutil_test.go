@@ -2,6 +2,7 @@ package ioutil
 
 import (
 	"bytes"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -16,6 +17,27 @@ func TestLimitedBufferCapsRetainedBytes(t *testing.T) {
 	}
 	if buffer.String() != "abcd" {
 		t.Fatalf("retained %q, want abcd", buffer.String())
+	}
+	if !writer.Truncated {
+		t.Fatal("expected Truncated to be set")
+	}
+}
+
+func TestLimitedBufferMarksTruncationOnExactThenExtra(t *testing.T) {
+	var buffer bytes.Buffer
+	writer := &LimitedBuffer{Buffer: &buffer, Remaining: 2}
+	if _, err := writer.Write([]byte("ab")); err != nil || writer.Truncated {
+		t.Fatalf("exact write should not truncate: err=%v truncated=%t", err, writer.Truncated)
+	}
+	if _, err := writer.Write([]byte("c")); err != nil || !writer.Truncated {
+		t.Fatalf("expected truncation after budget exhausted: err=%v truncated=%t", err, writer.Truncated)
+	}
+}
+
+func TestLimitedWriterMarksTruncation(t *testing.T) {
+	writer := &LimitedWriter{W: io.Discard, Remaining: 1}
+	if _, err := writer.Write([]byte("ab")); err != nil || !writer.Truncated {
+		t.Fatalf("expected truncation, err=%v truncated=%t", err, writer.Truncated)
 	}
 }
 

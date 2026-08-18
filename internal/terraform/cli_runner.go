@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -23,7 +22,10 @@ const (
 
 // CLIRunner executes Terraform-compatible CLI commands.
 type CLIRunner struct {
-	Path string
+	Path      string
+	Workspace string
+	VarFiles  []string
+	Vars      []string
 }
 
 // Inventory describes the selected CLI, providers, and initialized modules.
@@ -61,11 +63,20 @@ func (runner CLIRunner) Plan(ctx context.Context, directory string, outputPath s
 	if err != nil {
 		return 1, err
 	}
+	if err := runner.selectWorkspace(ctx, directory); err != nil {
+		return 1, err
+	}
 	args := []string{"plan"}
 	if mode == PlanModeRefreshOnly {
 		args = append(args, "-refresh-only")
 	}
 	args = append(args, "-detailed-exitcode", "-out", outputPath)
+	for _, varFile := range runner.VarFiles {
+		args = append(args, "-var-file="+varFile)
+	}
+	for _, variable := range runner.Vars {
+		args = append(args, "-var="+variable)
+	}
 	_, err = runner.run(ctx, directory, args...)
 	if err == nil {
 		return 0, nil
@@ -75,6 +86,18 @@ func (runner CLIRunner) Plan(ctx context.Context, directory string, outputPath s
 		return exitErr.ExitCode(), nil
 	}
 	return 1, err
+}
+
+func (runner CLIRunner) selectWorkspace(ctx context.Context, directory string) error {
+	workspace := strings.TrimSpace(runner.Workspace)
+	if workspace == "" {
+		return nil
+	}
+	_, err := runner.run(ctx, directory, "workspace", "select", workspace)
+	if err != nil {
+		return fmt.Errorf("terraform workspace select %q: %w", workspace, err)
+	}
+	return nil
 }
 
 // ShowJSON returns the JSON rendering of a Terraform plan file.
@@ -130,13 +153,13 @@ func (runner CLIRunner) run(ctx context.Context, directory string, args ...strin
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	stdoutWriter := &limitedWriter{w: &stdout, n: maxCommandOutputBytes}
-	stderrWriter := &limitedWriter{w: &stderr, n: maxCommandOutputBytes}
+	stdoutWriter := &ioutil.LimitedWriter{W: &stdout, Remaining: maxCommandOutputBytes}
+	stderrWriter := &ioutil.LimitedWriter{W: &stderr, Remaining: maxCommandOutputBytes}
 	cmd.Stdout = stdoutWriter
 	cmd.Stderr = stderrWriter
 
 	if err := cmd.Run(); err != nil {
-		if stdoutWriter.truncated || stderrWriter.truncated {
+		if stdoutWriter.Truncated || stderrWriter.Truncated {
 			return stdout.Bytes(), fmt.Errorf("terraform %v: command output exceeded %d bytes", args, maxCommandOutputBytes)
 		}
 		if stderr.Len() > 0 {
@@ -144,31 +167,8 @@ func (runner CLIRunner) run(ctx context.Context, directory string, args ...strin
 		}
 		return stdout.Bytes(), fmt.Errorf("terraform %v: %w", args, err)
 	}
-	if stdoutWriter.truncated || stderrWriter.truncated {
+	if stdoutWriter.Truncated || stderrWriter.Truncated {
 		return stdout.Bytes(), fmt.Errorf("terraform %v: command output exceeded %d bytes", args, maxCommandOutputBytes)
 	}
 	return stdout.Bytes(), nil
-}
-
-type limitedWriter struct {
-	w         io.Writer
-	n         int64
-	truncated bool
-}
-
-func (writer *limitedWriter) Write(p []byte) (int, error) {
-	originalLen := len(p)
-	if writer.n <= 0 {
-		if len(p) > 0 {
-			writer.truncated = true
-		}
-		return originalLen, nil
-	}
-	if int64(len(p)) > writer.n {
-		p = p[:writer.n]
-		writer.truncated = true
-	}
-	written, err := writer.w.Write(p)
-	writer.n -= int64(written)
-	return originalLen, err
 }

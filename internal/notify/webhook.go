@@ -13,10 +13,18 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/niravraychura/terradrift/internal/redact"
 	"github.com/niravraychura/terradrift/internal/report"
 	"github.com/niravraychura/terradrift/internal/validation"
+)
+
+const (
+	webhookHTTPTimeout           = 30 * time.Second
+	webhookDialTimeout           = 10 * time.Second
+	webhookTLSHandshakeTimeout   = 10 * time.Second
+	webhookResponseHeaderTimeout = 15 * time.Second
 )
 
 // WebhookNotifier sends drift summaries to a generic HTTPS webhook endpoint.
@@ -138,6 +146,8 @@ func secureWebhookClientFromCA(caCertPath string) (*http.Client, error) {
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.Proxy = nil
 	transport.DialContext = secureWebhookDialContext
+	transport.TLSHandshakeTimeout = webhookTLSHandshakeTimeout
+	transport.ResponseHeaderTimeout = webhookResponseHeaderTimeout
 	if caCertPath != "" {
 		pemData, err := os.ReadFile(caCertPath)
 		if err != nil {
@@ -153,6 +163,7 @@ func secureWebhookClientFromCA(caCertPath string) (*http.Client, error) {
 		}
 	}
 	return &http.Client{
+		Timeout:   webhookHTTPTimeout,
 		Transport: transport,
 		CheckRedirect: func(*http.Request, []*http.Request) error {
 			return http.ErrUseLastResponse
@@ -170,7 +181,7 @@ func secureWebhookDialContext(ctx context.Context, network string, address strin
 		return nil, fmt.Errorf("resolve webhook host: %w", err)
 	}
 
-	dialer := net.Dialer{}
+	dialer := net.Dialer{Timeout: webhookDialTimeout}
 	var dialErr error
 	for _, ip := range addresses {
 		if isBlockedWebhookIP(ip) {

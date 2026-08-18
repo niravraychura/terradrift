@@ -8,13 +8,17 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/niravraychura/terradrift/internal/redact"
 	"github.com/niravraychura/terradrift/internal/report"
 	"github.com/niravraychura/terradrift/internal/validation"
 )
 
-const githubAPIURL = "https://api.github.com"
+const (
+	githubAPIURL      = "https://api.github.com"
+	githubHTTPTimeout = 30 * time.Second
+)
 
 // GitHubPRNotifier posts a scan summary to a pull request comment thread.
 type GitHubPRNotifier struct {
@@ -53,13 +57,13 @@ func (notifier GitHubPRNotifier) Notify(ctx context.Context, scanReport report.D
 	request.Header.Set("X-GitHub-Api-Version", "2022-11-28")
 	request.Header.Set("User-Agent", "terradrift")
 	request.Header.Set("Content-Type", "application/json")
-	client := notifier.Client
-	if client == nil {
-		client = http.DefaultClient
+	client, err := githubHTTPClient(notifier.Client)
+	if err != nil {
+		return err
 	}
 	response, err := client.Do(request)
 	if err != nil {
-		return fmt.Errorf("send GitHub pull request summary to %s: %w", redact.String(repository), err)
+		return fmt.Errorf("send GitHub pull request summary to %s: %s", redact.String(repository), redact.String(err.Error()))
 	}
 	defer func() { _ = closeResponseBody(response.Body) }()
 	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
@@ -102,19 +106,31 @@ func (notifier GitHubIssueNotifier) Notify(ctx context.Context, scanReport repor
 	request.Header.Set("X-GitHub-Api-Version", "2022-11-28")
 	request.Header.Set("User-Agent", "terradrift")
 	request.Header.Set("Content-Type", "application/json")
-	client := notifier.Client
-	if client == nil {
-		client = http.DefaultClient
+	client, err := githubHTTPClient(notifier.Client)
+	if err != nil {
+		return err
 	}
 	response, err := client.Do(request)
 	if err != nil {
-		return fmt.Errorf("create GitHub drift issue in %s: %w", redact.String(repository), err)
+		return fmt.Errorf("create GitHub drift issue in %s: %s", redact.String(repository), redact.String(err.Error()))
 	}
 	defer func() { _ = closeResponseBody(response.Body) }()
 	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
 		return fmt.Errorf("create GitHub drift issue in %s: unexpected status %s", redact.String(repository), response.Status)
 	}
 	return nil
+}
+
+func githubHTTPClient(client HTTPDoer) (HTTPDoer, error) {
+	if client != nil {
+		return client, nil
+	}
+	secure, err := secureWebhookClientFromCA("")
+	if err != nil {
+		return nil, fmt.Errorf("create GitHub HTTP client: %w", err)
+	}
+	secure.Timeout = githubHTTPTimeout
+	return secure, nil
 }
 
 func validateGitHubNotifier(rawRepository string, rawToken string) (string, string, error) {
