@@ -10,3 +10,5 @@ coverage.out
 *.tfstate
 *.tfstate.*
 crash.log
+.tools/
+.opencode/

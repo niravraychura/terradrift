@@ -14,7 +14,7 @@ Empty milestones with zero issues/PRs are noise. Prefer roadmap docs over placeh
 - **Close** a milestone when its tag ships (e.g. after `vX.Y.Z`); do not leave shipped milestones open.
 - **Delete** empty open milestones; do not keep open placeholders “for later” with no work.
 - Version **intent** (what v0.2 / v1.0 mean) lives in `docs/ROADMAP.md` until real work exists.
-- Triage board = GitHub Project; engineering detail = `PLAN.md`; milestones = version buckets for scheduled work only.
+- Triage board = GitHub Project; historical engineering detail = `docs/archive/PLAN-v0.1.md`; milestones = version buckets for scheduled work only.
 
 ## When cutting a release
 

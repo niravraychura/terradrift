@@ -1,8 +1,10 @@
 # Roadmap
 
-High-level product direction for TerraDrift. Detailed engineering work lives in [PLAN.md](../PLAN.md). Triage uses a single GitHub **Project** board.
+High-level product direction for TerraDrift. Triage uses a single GitHub **Project** board.
 
 **Milestones:** create a GitHub milestone only when there is real work to attach (issues/PRs). Do not keep empty version placeholders. Shipped releases close their milestone (see `.cursor/rules/github-milestones.mdc`).
+
+Completed engineering history (through v0.1.0): [archive/PLAN-v0.1.md](archive/PLAN-v0.1.md) — see also the root [PLAN.md](../PLAN.md) stub.
 
 ## Near term (intent — not empty GitHub milestones)
 
@@ -22,5 +24,5 @@ High-level product direction for TerraDrift. Detailed engineering work lives in 
 ## Related
 
 - [docs/RELEASE.md](RELEASE.md) — how versions ship
-- [docs/GITHUB_PRODUCT_SETUP.md](GITHUB_PRODUCT_SETUP.md) — GitHub packaging checklist
+- [docs/GITHUB_PRODUCT_SETUP.md](GITHUB_PRODUCT_SETUP.md) — packaging summary (checklist archived)
 - [SECURITY.md](../SECURITY.md) — trust boundary and reporting

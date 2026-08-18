@@ -51,4 +51,4 @@ Do not force-push tags that have already been published with artifacts.
 
 - [SECURITY.md](../SECURITY.md) — vulnerability reporting and supported versions
 - [CONTRIBUTING.md](../CONTRIBUTING.md) — branch and PR expectations
-- [docs/GITHUB_PRODUCT_SETUP.md](GITHUB_PRODUCT_SETUP.md) — product packaging backlog
+- [docs/GITHUB_PRODUCT_SETUP.md](GITHUB_PRODUCT_SETUP.md) — packaging summary (historical checklist archived)

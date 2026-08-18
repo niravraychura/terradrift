@@ -1,3 +1,5 @@
+<!-- Archived packaging checklist (completed for v0.1.0). Live summary: ../GITHUB_PRODUCT_SETUP.md -->
+
 # GitHub Product Setup
 
 Actionable backlog for TerraDrift as a public GitHub product. This is **not** engineering feature work (`PLAN.md`); it is repo packaging, release process, community surface, and Cursor defaults.

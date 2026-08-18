@@ -18,7 +18,8 @@ TerraDrift is an **open-source, self-hosted** Terraform/OpenTofu **drift detecti
 - Branch from **`dev`**; open PRs into **`dev`**.
 - Promote **`dev` → `main`** only for stable ship; **never** invent a different release flow.
 - Releases: annotated **`v*`** tags on **`main`** per `docs/RELEASE.md`. Tag push runs `release.yml`.
-- Engineering backlog: `PLAN.md`. GitHub product packaging: `docs/GITHUB_PRODUCT_SETUP.md`. Roadmap: `docs/ROADMAP.md`.
+- Forward intent: `docs/ROADMAP.md`. Shipping: `docs/RELEASE.md`. Packaging summary: `docs/GITHUB_PRODUCT_SETUP.md`.
+- Historical engineering ledger: `docs/archive/PLAN-v0.1.md` (root `PLAN.md` is a stub).
 
 ## Commands
 
@@ -41,9 +42,11 @@ make ci    # full local gate when tooling is available
 |--------|------|
 | Contribute / PR expectations | `CONTRIBUTING.md` |
 | Release / SemVer | `docs/RELEASE.md` |
+| Roadmap | `docs/ROADMAP.md` |
 | Security posture | `SECURITY.md` |
 | Architecture | `docs/ARCHITECTURE.md` |
-| Cursor rules | `.cursor/rules/` (ponytail, engineering-quality, verify-before-done, ask-before-assuming, workflow, go-cli, docs-with-flags, fixtures-no-secrets, github-milestones) |
+| Cursor rules | `.cursor/rules/` |
 | Project skills | `.cursor/skills/cut-release`, `.cursor/skills/add-scan-flag` |
+| Historical plans | `docs/archive/` (root `PLAN.md` is a stub) |
 
 Do not contradict `docs/RELEASE.md` or `CONTRIBUTING.md` when proposing git workflow.

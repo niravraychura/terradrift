@@ -13,10 +13,10 @@ alwaysApply: true
 
 ## Docs ownership
 
-- Engineering features/hardening: `PLAN.md`
-- GitHub product packaging checklist: `docs/GITHUB_PRODUCT_SETUP.md`
+- Forward product intent: `docs/ROADMAP.md`
 - Release policy: `docs/RELEASE.md`
-- Roadmap / out of scope: `docs/ROADMAP.md`
+- Packaging summary: `docs/GITHUB_PRODUCT_SETUP.md` (full checklist in `docs/archive/`)
+- Completed engineering ledger: `docs/archive/PLAN-v0.1.md` (root `PLAN.md` is a stub only)
 - Prefer editing these over inventing parallel process docs
 
 ## Safety

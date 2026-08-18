@@ -1,3 +1,5 @@
+<!-- Archived 2026-07-22 repository review. Prefer ROADMAP.md and CHANGELOG.md for current direction. -->
+
 # TerraDrift Repository Review and Improvement Backlog
 
 Review date: 2026-07-22
