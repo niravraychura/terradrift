@@ -141,3 +141,32 @@ Before marking a feature complete, run the relevant checks and update this file:
 - [x] `go test -race ./...`
 - [x] `golangci-lint run`
 - [x] `govulncheck ./...`
+
+## MonkeyCode review follow-ups
+
+Verified against the current codebase. Keep completed history above; track only actionable follow-ups here. Overstated or outdated review claims are omitted (parser edge-case coverage already exists; report/config/notify tests already exist; cost/audit enrichment already merges by address).
+
+### High
+
+- [ ] Split oversized CLI entry point: move `newScanCommand` / `newScanAllCommand` handlers and helpers (`writeScanReport`, `enrichReport`, `deliverNotifications`, `runDeliveries`) out of `cmd/terradrift/main.go` into focused files or internal packages.
+
+### Medium
+
+- [ ] Extract shared `limitedBuffer` from `internal/cost`, `internal/policy`, and `internal/audit` into one shared package.
+- [ ] Extract shared `readLimitedFile` from `cmd/terradrift` and `internal/terraform` into one shared package.
+- [ ] Replace repetitive config-to-CLI `Flags().Changed(...)` mapping with a table-driven overlay helper.
+- [ ] Make `enrichReport` merge cost/audit fields by resource `Address` (defense-in-depth; Enrich already attaches by address today).
+- [ ] Narrow sensitive query-parameter redaction so matching `"key"` as a substring does not false-positive on benign names like `key_id`.
+- [ ] Add unit tests for `internal/validation`.
+- [ ] Add an optional external/distributed scan-lock backend for multi-runner CI (local `O_EXCL` lock remains for single-host use).
+
+### Low
+
+- [ ] Replace `panic` on `MarkFlagRequired` failures with controlled startup error handling.
+- [ ] Validate `GITHUB_TOKEN` early when GitHub notification delivery is configured.
+- [ ] Document or harden workspace-root symlink TOCTOU between validation and Terraform execution.
+- [ ] Add optional webhook custom CA support for enterprise TLS environments.
+- [ ] Optimize `history.LoadRecent` to avoid sorting the full file list when only a small limit is needed.
+- [ ] Investigate optional skip/reuse of `terraform init` when providers and lockfile are already satisfied.
+- [ ] Add remaining quality benchmarks for report rendering, redaction, and history loading with synthetic large reports.
+- [ ] Thread a context-aware logger through scan operations instead of relying only on global slog state.
