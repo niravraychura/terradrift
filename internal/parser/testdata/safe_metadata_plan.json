@@ -1,0 +1,33 @@
+{
+  "resource_changes": [
+    {
+      "address": "aws_instance.web",
+      "type": "aws_instance",
+      "name": "web",
+      "action_reason": "replace_because_cannot_update",
+      "change": {
+        "actions": ["delete", "create"],
+        "before": {
+          "instance_type": "t3.micro",
+          "password": "super-secret-value",
+          "tags": {"Env": "old"}
+        },
+        "after": {
+          "instance_type": "t3.small",
+          "password": "another-super-secret",
+          "tags": {"Env": "new"}
+        },
+        "before_sensitive": {"password": true},
+        "after_sensitive": {"password": true}
+      }
+    }
+  ],
+  "output_changes": {
+    "service_url": {
+      "actions": ["update"],
+      "before": "super-secret-value",
+      "after": "super-secret-value",
+      "after_sensitive": true
+    }
+  }
+}
