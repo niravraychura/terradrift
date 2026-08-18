@@ -1,0 +1,33 @@
+name: Feature request
+description: Propose a new capability or improvement
+title: "feat: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Check [docs/ROADMAP.md](https://github.com/niravraychura/terradrift/blob/dev/docs/ROADMAP.md) for current direction and out-of-scope items.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What problem are you trying to solve?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+      description: What would you like TerraDrift to do?
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Workarounds or other tools you evaluated.
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Examples, diagrams, or links (no secrets).
