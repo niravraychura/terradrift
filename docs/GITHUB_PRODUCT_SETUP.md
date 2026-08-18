@@ -76,8 +76,9 @@ Actionable backlog for TerraDrift as a public GitHub product. This is **not** en
 
 ### 2.4 Milestones
 
-- [x] `v0.1.0`, `v0.2.0`, `v1.0.0` created
-- [ ] Attach open issues/PRs as they appear
+- [x] Policy: **no empty/dummy milestones** (`.cursor/rules/github-milestones.mdc`)
+- [x] `v0.1.0` closed after ship; empty `v0.2.0` / `v1.0.0` placeholders removed
+- [x] Version intent documented in `docs/ROADMAP.md`; create a milestone only when attaching real issues/PRs
 
 ### 2.5 Single GitHub Project
 
@@ -152,7 +153,7 @@ See `docs/RELEASE.md`.
 | How humans contribute | `CONTRIBUTING.md` |
 | How Cursor/agents behave by default | `AGENTS.md` + `.cursor/rules/` |
 | Triage board | [TerraDrift Project](https://github.com/users/niravraychura/projects/1) |
-| Version buckets | GitHub Milestones |
+| Version buckets | GitHub Milestones (only when work is attached; see `.cursor/rules/github-milestones.mdc`) |
 | Automate Settings | `scripts/github-product-setup.sh` |
 
 ---

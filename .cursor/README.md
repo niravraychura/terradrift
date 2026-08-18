@@ -12,6 +12,7 @@ Committed rules under `.cursor/rules/` so every agent session inherits the same 
 | `go-cli.mdc` | Go CLI fail-closed / policy / attribute conventions (when editing `*.go`) |
 | `docs-with-flags.mdc` | CLI/flag changes must update README help path + `--help` |
 | `fixtures-no-secrets.mdc` | Tests/examples: synthetic placeholders only |
+| `github-milestones.mdc` | No empty milestones; attach real work; close on ship |
 
 ## Project skills (`.cursor/skills/`)
 
