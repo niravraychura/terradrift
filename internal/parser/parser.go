@@ -1,6 +1,7 @@
 package parser
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"sort"
@@ -13,24 +14,17 @@ type terraformPlan struct {
 	ResourceChanges json.RawMessage            `json:"resource_changes"`
 	ResourceDrift   json.RawMessage            `json:"resource_drift"`
 	OutputChanges   map[string]terraformChange `json:"output_changes"`
-	PriorState      *terraformState            `json:"prior_state"`
+	// PriorState is kept as RawMessage so full resource Values are not retained
+	// beyond the lightweight mode-only count pass (see countPriorState).
+	PriorState json.RawMessage `json:"prior_state"`
 }
 
-type terraformState struct {
-	Values *terraformStateValues `json:"values"`
-}
-
-type terraformStateValues struct {
-	RootModule *terraformModule `json:"root_module"`
-}
-
-type terraformModule struct {
-	Resources    []terraformStateResource `json:"resources"`
-	ChildModules []terraformModule        `json:"child_modules"`
-}
-
-type terraformStateResource struct {
-	Mode string `json:"mode"`
+// priorStateCountModule decodes only mode/structure needed for managed-resource counts.
+type priorStateCountModule struct {
+	Resources []struct {
+		Mode string `json:"mode"`
+	} `json:"resources"`
+	ChildModules []priorStateCountModule `json:"child_modules"`
 }
 
 type terraformResourceChange struct {
@@ -132,14 +126,26 @@ func relevantChanges(source []terraformResourceChange) []report.ResourceChange {
 	return changes
 }
 
-func countPriorState(state *terraformState) (int, bool) {
-	if state == nil || state.Values == nil || state.Values.RootModule == nil {
+func countPriorState(data json.RawMessage) (int, bool) {
+	trimmed := bytes.TrimSpace(data)
+	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {
+		return 0, false
+	}
+	var state struct {
+		Values *struct {
+			RootModule *priorStateCountModule `json:"root_module"`
+		} `json:"values"`
+	}
+	if err := json.Unmarshal(trimmed, &state); err != nil {
+		return 0, false
+	}
+	if state.Values == nil || state.Values.RootModule == nil {
 		return 0, false
 	}
 	return countModule(*state.Values.RootModule), true
 }
 
-func countModule(module terraformModule) int {
+func countModule(module priorStateCountModule) int {
 	total := 0
 	for _, resource := range module.Resources {
 		if resource.Mode != "data" {

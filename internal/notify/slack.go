@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/niravraychura/terradrift/internal/redact"
 	"github.com/niravraychura/terradrift/internal/report"
@@ -64,15 +65,36 @@ func (notifier SlackNotifier) Notify(ctx context.Context, scanReport report.Drif
 	return nil
 }
 
-// RedactedNotificationMessage formats a scan summary without leaking raw local paths.
+// RedactedNotificationMessage formats a scan summary without leaking raw local paths
+// or attribute values. When drift is present, include the top five resource addresses
+// and risk levels for actionable triage.
 func RedactedNotificationMessage(scanReport report.DriftReport) string {
-	return fmt.Sprintf("Terraform scan completed\nScan ID: %s\nStatus: %s\nPlan mode: %s\nResources checked: %d\nChanged resources: %d",
+	message := fmt.Sprintf("Terraform scan completed\nScan ID: %s\nStatus: %s\nPlan mode: %s\nResources checked: %d\nChanged resources: %d",
 		scanReport.ScanID,
 		scanReport.Status,
 		scanReport.PlanMode,
 		scanReport.TotalResourcesChecked,
 		scanReport.TotalChangedResources,
 	)
+	if len(scanReport.ResourceChanges) == 0 {
+		return message
+	}
+	limit := 5
+	if len(scanReport.ResourceChanges) < limit {
+		limit = len(scanReport.ResourceChanges)
+	}
+	message += "\nTop changes:"
+	for _, change := range scanReport.ResourceChanges[:limit] {
+		risk := strings.TrimSpace(change.RiskLevel)
+		if risk == "" {
+			risk = "unknown"
+		}
+		message += fmt.Sprintf("\n- %s (%s)", change.Address, risk)
+	}
+	if len(scanReport.ResourceChanges) > limit {
+		message += fmt.Sprintf("\n- … and %d more", len(scanReport.ResourceChanges)-limit)
+	}
+	return message
 }
 
 type slackPayload struct {

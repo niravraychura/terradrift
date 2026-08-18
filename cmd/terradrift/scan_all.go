@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/niravraychura/terradrift/internal/command"
 	"github.com/niravraychura/terradrift/internal/ioutil"
 	"github.com/niravraychura/terradrift/internal/report"
 	"github.com/niravraychura/terradrift/internal/scanner"
@@ -36,6 +37,27 @@ func newScanAllCommand(stdout io.Writer) *cobra.Command {
 	var planMode string
 	var lockBackendName string
 	var skipTerraformInit bool
+	var historyDir string
+	var historyRetention int
+	var historyCompressed bool
+	var dashboardHTMLPath string
+	var notifyTarget string
+	var slackWebhookURL string
+	var teamsWebhookURL string
+	var webhookURL string
+	var webhookCACert string
+	var policyCommand string
+	var policyArgs []string
+	var costCommand string
+	var costArgs []string
+	var auditCommand string
+	var auditArgs []string
+	var allowedCommands []string
+	var trustedCommandDirs []string
+	var attributeValues bool
+	var terraformWorkspace string
+	var varFiles []string
+	var vars []string
 
 	cmd := &cobra.Command{
 		Use:   "scan-all",
@@ -50,6 +72,16 @@ func newScanAllCommand(stdout io.Writer) *cobra.Command {
 					return err
 				}
 				incrementalState = normalized
+			}
+			for _, path := range []*string{&dashboardHTMLPath, &historyDir} {
+				if *path == "" {
+					continue
+				}
+				normalized, err := normalizeOutputPath(*path)
+				if err != nil {
+					return err
+				}
+				*path = normalized
 			}
 			var directories []string
 			var err error
@@ -77,6 +109,13 @@ func newScanAllCommand(stdout io.Writer) *cobra.Command {
 			if concurrency <= 0 {
 				return fmt.Errorf("concurrency must be greater than zero")
 			}
+			for _, external := range []string{costCommand, policyCommand, auditCommand} {
+				if external != "" {
+					if err := command.Validate(external, allowedCommands, trustedCommandDirs); err != nil {
+						return err
+					}
+				}
+			}
 
 			mode, err := terraform.ParsePlanMode(planMode)
 			if err != nil {
@@ -98,9 +137,30 @@ func newScanAllCommand(stdout io.Writer) *cobra.Command {
 				return err
 			}
 			if terraformExec {
-				options.Runner = terraform.NewCLIRunner(terraformBin)
+				runner := terraform.NewCLIRunner(terraformBin)
+				runner.Workspace = terraformWorkspace
+				runner.VarFiles = append([]string(nil), varFiles...)
+				runner.Vars = append([]string(nil), vars...)
+				options.Runner = runner
+			} else {
+				fmt.Fprintln(cmd.ErrOrStderr(), "warning: bootstrap report only; pass --terraform-exec for a real drift scan")
 			}
-			aggregate := scanAll(cmd.Context(), directories, options, concurrency, redactPaths)
+			delivery := deliveryOptions{
+				AttributeValues:   attributeValues,
+				HistoryDir:        historyDir,
+				HistoryRetention:  historyRetention,
+				HistoryCompressed: historyCompressed,
+				DashboardHTMLPath: dashboardHTMLPath,
+				PolicyCommand:     policyCommand,
+				PolicyArgs:        policyArgs,
+				NotifyTarget:      notifyTarget,
+				SlackWebhookURL:   slackWebhookURL,
+				TeamsWebhookURL:   teamsWebhookURL,
+				WebhookURL:        webhookURL,
+				WebhookCACert:     webhookCACert,
+				historyMu:         &sync.Mutex{},
+			}
+			aggregate := scanAll(cmd.Context(), directories, options, concurrency, redactPaths, costCommand, costArgs, auditCommand, auditArgs, delivery)
 			if err := writeMultiScanReport(stdout, aggregate, parsedFormat); err != nil {
 				return err
 			}
@@ -134,8 +194,27 @@ func newScanAllCommand(stdout io.Writer) *cobra.Command {
 	cmd.Flags().StringVar(&workspaceRoot, "workspace-root", "", "require roots to resolve inside this workspace root")
 	cmd.Flags().BoolVar(&redactPaths, "redact-paths", false, "redact local filesystem paths from scan output")
 	cmd.Flags().StringVar(&incrementalState, "incremental-state", "", "JSON state file; retry only roots previously drifted or failed")
-	cmd.Flags().StringVar(&lockBackendName, "lock-backend", "local", "scan lock backend: local")
+	cmd.Flags().StringVar(&lockBackendName, "lock-backend", "local", "scan lock backend: local (single-host file lock)")
 	cmd.Flags().BoolVar(&skipTerraformInit, "skip-terraform-init", false, "skip terraform init when .terraform is already valid")
+	cmd.Flags().StringVar(&historyDir, "history-dir", "", "write per-root JSON scan history to this directory")
+	cmd.Flags().IntVar(&historyRetention, "history-retention", 0, "maximum history reports to retain (0 keeps all)")
+	cmd.Flags().BoolVar(&historyCompressed, "history-compressed", false, "store history reports as gzip-compressed JSON")
+	cmd.Flags().StringVar(&dashboardHTMLPath, "dashboard-html", "", "write the last successful root dashboard HTML to this path")
+	cmd.Flags().StringVar(&notifyTarget, "notify", "", "notification target: slack, teams, webhook")
+	cmd.Flags().StringVar(&slackWebhookURL, "slack-webhook-url", "", "Slack incoming webhook URL")
+	cmd.Flags().StringVar(&teamsWebhookURL, "teams-webhook-url", "", "Microsoft Teams incoming webhook URL")
+	cmd.Flags().StringVar(&webhookURL, "webhook-url", "", "generic HTTPS webhook URL")
+	cmd.Flags().StringVar(&webhookCACert, "webhook-ca-cert", "", "PEM CA certificate file for webhook TLS verification")
+	cmd.Flags().StringVar(&policyCommand, "policy-command", "", "policy command run per root before history/notify")
+	cmd.Flags().StringArrayVar(&policyArgs, "policy-arg", nil, "policy command argument; repeat for multiple arguments")
+	cmd.Flags().StringVar(&costCommand, "cost-command", "", "cost command to enrich each root report")
+	cmd.Flags().StringArrayVar(&costArgs, "cost-arg", nil, "cost command argument; repeat for multiple arguments")
+	cmd.Flags().StringVar(&auditCommand, "audit-command", "", "audit correlation command to enrich each root report")
+	cmd.Flags().StringArrayVar(&auditArgs, "audit-arg", nil, "audit command argument; repeat for multiple arguments")
+	cmd.Flags().BoolVar(&attributeValues, "attribute-values", false, "include safe attribute values in persisted/automation output")
+	cmd.Flags().StringVar(&terraformWorkspace, "workspace", "", "Terraform workspace to select before plan")
+	cmd.Flags().StringArrayVar(&varFiles, "var-file", nil, "Terraform -var-file path; repeatable")
+	cmd.Flags().StringArrayVar(&vars, "var", nil, "Terraform -var assignment; repeatable")
 	return cmd
 }
 
@@ -348,7 +427,7 @@ func matchesPath(path string, patterns []string) bool {
 	return false
 }
 
-func scanAll(ctx context.Context, directories []string, options scanner.Options, concurrency int, redactPaths bool) multiScanReport {
+func scanAll(ctx context.Context, directories []string, options scanner.Options, concurrency int, redactPaths bool, costCommand string, costArgs []string, auditCommand string, auditArgs []string, delivery deliveryOptions) multiScanReport {
 	roots := make([]multiScanRoot, len(directories))
 	jobs := make(chan int)
 	var workers sync.WaitGroup
@@ -369,10 +448,23 @@ func scanAll(ctx context.Context, directories []string, options scanner.Options,
 						root.Error = err.Error()
 					}
 				} else {
-					root.Report = result.Report
+					scanReport := result.Report
+					enriched, enrichErr := enrichReport(ctx, scanReport, costCommand, costArgs, auditCommand, auditArgs)
+					if enrichErr != nil {
+						root.Error = enrichErr.Error()
+					} else {
+						scanReport = enriched
+						if redactPaths {
+							scanReport.Directory = "[REDACTED]"
+						}
+						if finalizeErr := finalizeRootScan(ctx, scanReport, delivery); finalizeErr != nil {
+							root.Error = finalizeErr.Error()
+						} else {
+							root.Report = scanReport
+						}
+					}
 					if redactPaths {
 						root.Directory = "[REDACTED]"
-						root.Report.Directory = "[REDACTED]"
 					}
 				}
 				roots[index] = root

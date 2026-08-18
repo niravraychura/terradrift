@@ -243,30 +243,45 @@ func formatValue(value any) string {
 	}
 	switch typed := value.(type) {
 	case string:
-		return truncateValue(strconv.Quote(typed))
+		if len(typed) > maxAttributeValueChars {
+			return summarizeBytes(len(typed))
+		}
+		formatted := strconv.Quote(typed)
+		if len(formatted) > maxAttributeValueChars {
+			return summarizeBytes(len(typed))
+		}
+		return formatted
 	case float64:
 		if typed == float64(int64(typed)) {
-			return truncateValue(strconv.FormatInt(int64(typed), 10))
+			return strconv.FormatInt(int64(typed), 10)
 		}
-		return truncateValue(strconv.FormatFloat(typed, 'f', -1, 64))
+		return strconv.FormatFloat(typed, 'f', -1, 64)
 	case bool:
 		return strconv.FormatBool(typed)
 	case json.Number:
-		return truncateValue(typed.String())
+		text := typed.String()
+		if len(text) > maxAttributeValueChars {
+			return summarizeBytes(len(text))
+		}
+		return text
 	default:
 		encoded, err := json.Marshal(typed)
 		if err != nil {
-			return truncateValue(fmt.Sprint(typed))
+			text := fmt.Sprint(typed)
+			if len(text) > maxAttributeValueChars {
+				return summarizeBytes(len(text))
+			}
+			return text
 		}
-		return truncateValue(string(encoded))
+		if len(encoded) > maxAttributeValueChars {
+			return summarizeBytes(len(encoded))
+		}
+		return string(encoded)
 	}
 }
 
-func truncateValue(value string) string {
-	if len(value) <= maxAttributeValueChars {
-		return value
-	}
-	return value[:maxAttributeValueChars] + "..."
+func summarizeBytes(size int) string {
+	return fmt.Sprintf("[changed, %dB]", size)
 }
 
 func sensitivePath(path string) bool {
@@ -274,6 +289,9 @@ func sensitivePath(path string) bool {
 	for _, marker := range []string{
 		"password", "secret", "token", "private_key", "access_key",
 		"secret_string", "api_key", "client_secret", "credentials",
+		"connection_string", "database_url", "db_url", "db_password",
+		"user_data", "private_key_pem", "auth_token", "bearer", "oauth",
+		"smtp_password", "aws_access_key_id",
 	} {
 		if strings.Contains(lower, marker) {
 			return true

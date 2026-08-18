@@ -15,10 +15,9 @@ import (
 	"github.com/niravraychura/terradrift/internal/validation"
 )
 
-const (
-	maxPolicyInputBytes  = 32 << 20
-	maxPolicyOutputBytes = 32 << 20
-)
+const maxPolicyInputBytes = 32 << 20
+
+var maxPolicyOutputBytes = 32 << 20
 
 // Options configures a policy command invocation.
 type Options struct {
@@ -51,9 +50,15 @@ func Run(ctx context.Context, options Options, scanReport report.DriftReport) er
 	cmd.Stdin = bytes.NewReader(payload)
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	cmd.Stdout = &ioutil.LimitedBuffer{Buffer: &stdout, Remaining: maxPolicyOutputBytes}
-	cmd.Stderr = &ioutil.LimitedBuffer{Buffer: &stderr, Remaining: maxPolicyOutputBytes}
-	if err := cmd.Run(); err != nil {
+	stdoutBuf := &ioutil.LimitedBuffer{Buffer: &stdout, Remaining: maxPolicyOutputBytes}
+	stderrBuf := &ioutil.LimitedBuffer{Buffer: &stderr, Remaining: maxPolicyOutputBytes}
+	cmd.Stdout = stdoutBuf
+	cmd.Stderr = stderrBuf
+	err = cmd.Run()
+	if stdoutBuf.Truncated || stderrBuf.Truncated {
+		return fmt.Errorf("command output exceeded %d bytes", maxPolicyOutputBytes)
+	}
+	if err != nil {
 		message := strings.TrimSpace(stderr.String())
 		if message == "" {
 			message = strings.TrimSpace(stdout.String())

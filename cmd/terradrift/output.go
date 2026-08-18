@@ -198,6 +198,18 @@ func writeMultiScanReport(stdout io.Writer, aggregate multiScanReport, format ou
 			return fmt.Errorf("write scan output: %w", err)
 		}
 	}
+	for _, root := range aggregate.Roots {
+		switch {
+		case root.Error != "":
+			if _, err := fmt.Fprintf(stdout, "FAILED  %s  %s\n", root.Directory, root.Error); err != nil {
+				return fmt.Errorf("write scan output: %w", err)
+			}
+		case report.HasChanges(root.Report.Status):
+			if _, err := fmt.Fprintf(stdout, "%s  %s  changed=%d\n", strings.ToUpper(string(root.Report.Status)), root.Directory, root.Report.TotalChangedResources); err != nil {
+				return fmt.Errorf("write scan output: %w", err)
+			}
+		}
+	}
 	return nil
 }
 

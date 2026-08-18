@@ -124,7 +124,7 @@ func TestMultiScanStatusReportsNormalChanges(t *testing.T) {
 func TestScanAllReportsPartialOutcome(t *testing.T) {
 	valid := t.TempDir()
 	missing := filepath.Join(t.TempDir(), "missing")
-	aggregate := scanAll(context.Background(), []string{valid, missing}, scanner.Options{}, 1, false)
+	aggregate := scanAll(context.Background(), []string{valid, missing}, scanner.Options{}, 1, false, "", nil, "", nil, deliveryOptions{})
 	if aggregate.Status != multiScanStatusPartial || aggregate.FailedRoots != 1 {
 		t.Fatalf("expected partial aggregate, got %#v", aggregate)
 	}
@@ -757,6 +757,42 @@ func TestScanRunsPolicyCommand(t *testing.T) {
 	}
 	if !strings.Contains(string(data), `"status":"no_drift"`) {
 		t.Fatalf("expected policy input report, got %q", data)
+	}
+}
+
+func TestScanPolicyFailureSkipsHistory(t *testing.T) {
+	historyDir := filepath.Join(t.TempDir(), "history")
+	_, _, err := executeCommand("scan", "-d", t.TempDir(), "--history-dir", historyDir, "--policy-command", "false")
+	if err == nil {
+		t.Fatal("expected policy failure")
+	}
+	entries, err := os.ReadDir(historyDir)
+	if err == nil && len(entries) > 0 {
+		t.Fatalf("expected no history writes after policy failure, found %d", len(entries))
+	}
+}
+
+func TestScanAllHelpIncludesDeliveryFlags(t *testing.T) {
+	stdout, _, err := executeCommand("scan-all", "--help")
+	if err != nil {
+		t.Fatalf("scan-all help: %v", err)
+	}
+	for _, flag := range []string{"--history-dir", "--notify", "--policy-command", "--cost-command", "--workspace", "--var-file"} {
+		if !strings.Contains(stdout, flag) {
+			t.Fatalf("expected scan-all help to contain %q", flag)
+		}
+	}
+}
+
+func TestScanHelpIncludesAttributeValuesAndWorkspace(t *testing.T) {
+	stdout, _, err := executeCommand("scan", "--help")
+	if err != nil {
+		t.Fatalf("scan help: %v", err)
+	}
+	for _, flag := range []string{"--attribute-values", "--workspace", "--var-file", "--var"} {
+		if !strings.Contains(stdout, flag) {
+			t.Fatalf("expected scan help to contain %q", flag)
+		}
 	}
 }
 

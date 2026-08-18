@@ -17,8 +17,6 @@ import (
 	"github.com/niravraychura/terradrift/internal/dashboard"
 	"github.com/niravraychura/terradrift/internal/history"
 	"github.com/niravraychura/terradrift/internal/ioutil"
-	"github.com/niravraychura/terradrift/internal/notify"
-	"github.com/niravraychura/terradrift/internal/policy"
 	"github.com/niravraychura/terradrift/internal/report"
 	"github.com/niravraychura/terradrift/internal/scanner"
 	"github.com/niravraychura/terradrift/internal/terraform"
@@ -85,6 +83,10 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 	var planMode string
 	var lockBackendName string
 	var skipTerraformInit bool
+	var attributeValues bool
+	var terraformWorkspace string
+	var varFiles []string
+	var vars []string
 
 	cmd := &cobra.Command{
 		Use:   "scan",
@@ -157,6 +159,10 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 					{assign: func() error { allowedCommands = append([]string(nil), cfg.AllowedCommands...); return nil }},
 					{assign: func() error { trustedCommandDirs = append([]string(nil), cfg.TrustedCommandDirs...); return nil }},
 					{flag: "failure-severity", assign: func() error { failureSeverity = cfg.FailureSeverity; return nil }},
+					{flag: "attribute-values", assign: func() error { attributeValues = cfg.AttributeValues; return nil }},
+					{flag: "workspace", assign: func() error { terraformWorkspace = cfg.Workspace; return nil }},
+					{flag: "var-file", assign: func() error { varFiles = append([]string(nil), cfg.VarFiles...); return nil }},
+					{flag: "var", assign: func() error { vars = append([]string(nil), cfg.Vars...); return nil }},
 				}); err != nil {
 					return err
 				}
@@ -222,8 +228,14 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 				return err
 			}
 			if terraformExec {
-				scanOptions.Runner = terraform.NewCLIRunner(terraformBin)
+				runner := terraform.NewCLIRunner(terraformBin)
+				runner.Workspace = terraformWorkspace
+				runner.VarFiles = append([]string(nil), varFiles...)
+				runner.Vars = append([]string(nil), vars...)
+				scanOptions.Runner = runner
 				scanOptions.RequireTerraformFiles = true
+			} else {
+				fmt.Fprintln(cmd.ErrOrStderr(), "warning: bootstrap report only; pass --terraform-exec for a real drift scan")
 			}
 
 			result, err := scanner.Scan(scanContext, scanOptions)
@@ -268,63 +280,26 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 			if err := writeScanReport(stdout, scanReport, parsedFormat); err != nil {
 				return err
 			}
-			if artifactURL != "" {
-				artifact, err := json.Marshal(scanReport)
-				if err != nil {
-					return fmt.Errorf("encode report artifact: %w", err)
-				}
-				if len(artifact) > maxArtifactBytes {
-					return fmt.Errorf("report artifact exceeds %d bytes", maxArtifactBytes)
-				}
-				if err := (notify.ArtifactUploader{URL: artifactURL}).Upload(scanContext, artifact, "application/json"); err != nil {
-					return err
-				}
-			}
-			var historyEntries []history.Entry
-			var previousReport report.DriftReport
-			if historyDir != "" {
-				entries, err := history.LoadRecent(historyDir, 100)
-				if err != nil {
-					return err
-				}
-				previousReport = previousReportForRoot(entries, scanReport)
-				if shouldCreatePersistentIssue(scanReport, entries, githubIssueAfter) {
-					if err := (notify.GitHubIssueNotifier{Repository: githubRepository, Token: os.Getenv("GITHUB_TOKEN")}).Notify(scanContext, scanReport); err != nil {
-						return err
-					}
-				}
-				var historyWriteErr error
-				if historyCompressed {
-					_, historyWriteErr = history.WriteCompressed(historyDir, scanReport)
-				} else {
-					_, historyWriteErr = history.Write(historyDir, scanReport)
-				}
-				if historyWriteErr != nil {
-					return historyWriteErr
-				}
-				if historyRetention > 0 {
-					if err := history.Prune(historyDir, historyRetention); err != nil {
-						return err
-					}
-				}
-				entries, err = history.LoadRecent(historyDir, 10)
-				if err != nil {
-					return err
-				}
-				historyEntries = entries
-			}
-			if dashboardHTMLPath != "" {
-				if err := writeDashboard(dashboardHTMLPath, scanReport, historyEntries); err != nil {
-					return err
-				}
-			}
-			if policyCommand != "" {
-				if err := policy.Run(scanContext, policy.Options{Command: policyCommand, Args: policyArgs}, scanReport); err != nil {
-					return err
-				}
-			}
-			shouldNotify := !notificationThrottle || report.ShouldNotify(scanReport, previousReport)
-			if err := deliverNotifications(scanContext, notifyTarget, slackWebhookURL, teamsWebhookURL, webhookURL, webhookCACert, githubRepository, githubPR, ownerWebhooks, notificationThrottle, scanReport, previousReport, shouldNotify); err != nil {
+			if err := finalizeRootScan(scanContext, scanReport, deliveryOptions{
+				AttributeValues:      attributeValues,
+				ArtifactURL:          artifactURL,
+				HistoryDir:           historyDir,
+				HistoryRetention:     historyRetention,
+				HistoryCompressed:    historyCompressed,
+				DashboardHTMLPath:    dashboardHTMLPath,
+				PolicyCommand:        policyCommand,
+				PolicyArgs:           policyArgs,
+				NotifyTarget:         notifyTarget,
+				SlackWebhookURL:      slackWebhookURL,
+				TeamsWebhookURL:      teamsWebhookURL,
+				WebhookURL:           webhookURL,
+				WebhookCACert:        webhookCACert,
+				GitHubRepository:     githubRepository,
+				GitHubPR:             githubPR,
+				GitHubIssueAfter:     githubIssueAfter,
+				OwnerWebhooks:        ownerWebhooks,
+				NotificationThrottle: notificationThrottle,
+			}); err != nil {
 				return err
 			}
 			if scanReport.Status == report.ScanStatusDriftDetected {
@@ -377,8 +352,12 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 	cmd.Flags().StringArrayVar(&policyArgs, "policy-arg", nil, "policy command argument; repeat for multiple arguments")
 	cmd.Flags().StringVar(&costCommand, "cost-command", "", "cost command to enrich the scan report from JSON stdin/stdout")
 	cmd.Flags().StringArrayVar(&costArgs, "cost-arg", nil, "cost command argument; repeat for multiple arguments")
-	cmd.Flags().StringVar(&lockBackendName, "lock-backend", "local", "scan lock backend: local")
+	cmd.Flags().StringVar(&lockBackendName, "lock-backend", "local", "scan lock backend: local (single-host file lock)")
 	cmd.Flags().BoolVar(&skipTerraformInit, "skip-terraform-init", false, "skip terraform init when .terraform is already valid")
+	cmd.Flags().BoolVar(&attributeValues, "attribute-values", false, "include safe attribute values in history, artifacts, policy input, dashboards, and notifications (default: paths only)")
+	cmd.Flags().StringVar(&terraformWorkspace, "workspace", "", "Terraform workspace to select before plan")
+	cmd.Flags().StringArrayVar(&varFiles, "var-file", nil, "Terraform -var-file path; repeatable")
+	cmd.Flags().StringArrayVar(&vars, "var", nil, "Terraform -var assignment; repeatable")
 	return cmd
 }
 

@@ -287,6 +287,7 @@ func runTerraformScan(ctx context.Context, runner terraform.Runner, directory st
 	}
 
 	if !skipInit {
+		logger.Info(ctx, "terraform init", "directory", directory)
 		if err := runner.Init(ctx, directory); err != nil {
 			failReport(&scanReport, err)
 			return scanReport, fmt.Errorf("terraform init: %s", scanReport.ErrorMessage)
@@ -320,6 +321,7 @@ func runTerraformScan(ctx context.Context, runner terraform.Runner, directory st
 		}
 	}()
 
+	logger.Info(ctx, "terraform plan", "directory", directory, "plan_mode", string(mode))
 	exitCode, err := runner.Plan(ctx, directory, planFile, mode)
 	if err != nil {
 		failReport(&scanReport, err)
@@ -331,12 +333,14 @@ func runTerraformScan(ctx context.Context, runner terraform.Runner, directory st
 		return scanReport, err
 	}
 
+	logger.Info(ctx, "terraform show", "directory", directory)
 	planJSON, err := runner.ShowJSON(ctx, directory, planFile)
 	if err != nil {
 		failReport(&scanReport, err)
 		return scanReport, fmt.Errorf("terraform show JSON: %s", scanReport.ErrorMessage)
 	}
 
+	logger.Info(ctx, "parse plan", "directory", directory)
 	resourceChanges, outputChanges, totalResources, resourcesExact, err := parser.ParsePlan(planJSON, mode)
 	if err != nil {
 		failReport(&scanReport, err)

@@ -23,7 +23,10 @@ const (
 
 // CLIRunner executes Terraform-compatible CLI commands.
 type CLIRunner struct {
-	Path string
+	Path      string
+	Workspace string
+	VarFiles  []string
+	Vars      []string
 }
 
 // Inventory describes the selected CLI, providers, and initialized modules.
@@ -61,11 +64,20 @@ func (runner CLIRunner) Plan(ctx context.Context, directory string, outputPath s
 	if err != nil {
 		return 1, err
 	}
+	if err := runner.selectWorkspace(ctx, directory); err != nil {
+		return 1, err
+	}
 	args := []string{"plan"}
 	if mode == PlanModeRefreshOnly {
 		args = append(args, "-refresh-only")
 	}
 	args = append(args, "-detailed-exitcode", "-out", outputPath)
+	for _, varFile := range runner.VarFiles {
+		args = append(args, "-var-file="+varFile)
+	}
+	for _, variable := range runner.Vars {
+		args = append(args, "-var="+variable)
+	}
 	_, err = runner.run(ctx, directory, args...)
 	if err == nil {
 		return 0, nil
@@ -75,6 +87,18 @@ func (runner CLIRunner) Plan(ctx context.Context, directory string, outputPath s
 		return exitErr.ExitCode(), nil
 	}
 	return 1, err
+}
+
+func (runner CLIRunner) selectWorkspace(ctx context.Context, directory string) error {
+	workspace := strings.TrimSpace(runner.Workspace)
+	if workspace == "" {
+		return nil
+	}
+	_, err := runner.run(ctx, directory, "workspace", "select", workspace)
+	if err != nil {
+		return fmt.Errorf("terraform workspace select %q: %w", workspace, err)
+	}
+	return nil
 }
 
 // ShowJSON returns the JSON rendering of a Terraform plan file.

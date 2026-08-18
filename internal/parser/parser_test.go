@@ -192,6 +192,25 @@ func TestParsePlanRejectsMalformedOptionalChangeSection(t *testing.T) {
 	}
 }
 
+func TestCountPriorStateIgnoresResourceValues(t *testing.T) {
+	huge := strings.Repeat("x", 10000)
+	plan := []byte(`{
+		"prior_state":{"values":{"root_module":{"resources":[
+			{"mode":"managed","values":{"blob":` + mustQuoteJSON(huge) + `}},
+			{"mode":"data","values":{"blob":` + mustQuoteJSON(huge) + `}},
+			{"mode":"managed","values":{"blob":` + mustQuoteJSON(huge) + `}}
+		]}}},
+		"resource_changes":[]
+	}`)
+	_, _, total, exact, err := ParsePlan(plan, terraform.PlanModeRefreshOnly)
+	if err != nil {
+		t.Fatalf("parse plan: %v", err)
+	}
+	if !exact || total != 2 {
+		t.Fatalf("expected exact managed count 2, got total=%d exact=%t", total, exact)
+	}
+}
+
 func largePlanFixture(resources int) []byte {
 	var builder strings.Builder
 	builder.WriteString(`{"resource_changes":[`)

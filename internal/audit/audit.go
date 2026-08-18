@@ -49,9 +49,14 @@ func Enrich(ctx context.Context, options Options, scanReport report.DriftReport)
 	cmd := exec.CommandContext(ctx, options.Command, options.Args...)
 	cmd.Stdin = bytes.NewReader(payload)
 	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &ioutil.LimitedBuffer{Buffer: &stdout, Remaining: maxOutputBytes}
-	cmd.Stderr = &ioutil.LimitedBuffer{Buffer: &stderr, Remaining: maxOutputBytes}
+	stdoutBuf := &ioutil.LimitedBuffer{Buffer: &stdout, Remaining: maxOutputBytes}
+	stderrBuf := &ioutil.LimitedBuffer{Buffer: &stderr, Remaining: maxOutputBytes}
+	cmd.Stdout = stdoutBuf
+	cmd.Stderr = stderrBuf
 	if err := cmd.Run(); err != nil {
+		if stdoutBuf.Truncated || stderrBuf.Truncated {
+			return scanReport, fmt.Errorf("command output exceeded %d bytes", maxOutputBytes)
+		}
 		message := strings.TrimSpace(stderr.String())
 		if message == "" {
 			message = strings.TrimSpace(stdout.String())
@@ -60,6 +65,9 @@ func Enrich(ctx context.Context, options Options, scanReport report.DriftReport)
 			return scanReport, fmt.Errorf("audit command failed: %w", err)
 		}
 		return scanReport, fmt.Errorf("audit command failed: %w: %s", err, redact.String(message))
+	}
+	if stdoutBuf.Truncated || stderrBuf.Truncated {
+		return scanReport, fmt.Errorf("command output exceeded %d bytes", maxOutputBytes)
 	}
 	var output struct {
 		ResourceEvents []struct {
