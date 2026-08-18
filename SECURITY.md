@@ -2,7 +2,7 @@
 
 ## Supported versions
 
-TerraDrift is pre-1.0 and under active development. Security fixes are applied to the default branch until a formal release policy is published.
+TerraDrift is pre-1.0 and under active development. Security fixes land on `dev` first, then `main` through the normal promotion path, until a formal supported-release policy is published.
 
 ## Reporting a vulnerability
 
@@ -15,16 +15,73 @@ Include:
 - Potential impact
 - Any suggested mitigation
 
+## Trust boundary
+
+TerraDrift is a **self-hosted CLI**. It assumes a trusted runner and trusted Terraform configuration.
+
+When `--terraform-exec` is enabled, TerraDrift runs Terraform/OpenTofu locally. That expands the trust boundary because:
+
+- `terraform init` can download providers and modules
+- `terraform plan` can contact cloud APIs using credentials available to the process
+- plan and state data can contain sensitive infrastructure values
+
+Without `--terraform-exec`, TerraDrift only validates the directory and emits a bootstrap placeholder report (with a warning). That mode is for wiring checks, not production drift detection.
+
+Do not commit cloud credentials, webhook URLs, or `GITHUB_TOKEN` values. Keep them in CI secrets or a secret manager.
+
 ## Current security posture
 
-By default, the CLI validates local directory input only and emits a bootstrap report. When `--terraform-exec` is explicitly enabled, TerraDrift executes Terraform locally and may contact cloud APIs through Terraform providers.
+### Execution and filesystem
 
-Future Terraform execution must treat Terraform modules, providers, plans, state files, and logs as potentially sensitive. Contributors should avoid adding behavior that prints secrets, commits state files, or executes untrusted Terraform without explicit user action.
+- Scan-level `--timeout` bounds Terraform and delivery work.
+- Temporary plan files are created with restrictive permissions and cleaned up.
+- `--redact-paths` replaces local filesystem paths in user-facing output.
+- `--workspace-root` requires the scan directory to resolve inside a trusted root (symlink-aware) and re-validates after lock acquisition to reduce symlink TOCTOU risk.
+- History, dashboard, and approval outputs reject direct symlink targets and use restrictive file permissions where applicable.
+- I/O for Terraform output, config, history, adapters, notifications, and artifacts is size-bounded; overrun fails closed where parsers would otherwise see truncated data.
 
-Terraform execution will expand TerraDrift's trust boundary because `terraform init` can download modules and providers, `terraform plan -refresh-only` can contact cloud APIs, and plan/state-derived data can contain sensitive infrastructure values. Future runner work must use context timeouts, clean up temporary plan files, avoid logging raw Terraform output by default, and redact sensitive values before displaying diagnostics or sending notifications.
+### Attribute values and secrets
 
-Slack notifications must be configured with secret storage such as CI secrets or environment variables. Do not commit webhook URLs. TerraDrift redacts webhook URLs in notification errors and sends concise Slack summaries that avoid local filesystem paths.
+- Changed attribute **paths** are always reported.
+- Values are shown only when safe: Terraform sensitive marks, name heuristics (for example `password`, `token`, `connection_string`, `*_key`), and large blobs are redacted or summarized.
+- By default, history, uploaded artifacts, policy stdin, dashboards, and notifications use **paths only**. `--attribute-values` / `attribute_values` may include the same safe/redacted scalars in those channels; secrets must never be persisted in cleartext.
+- Errors and notification text are redacted before display (webhook URLs, common credential patterns, sensitive query parameters).
 
-Terraform-backed scans use a local `.terradrift-scan.lock` file by default (`--lock-backend local`) to prevent overlapping scans of the same root on a single host. Shared filesystems can share the lock file across runners on that volume; Redis/Postgres distributed backends are out of scope. When a lock already exists, TerraDrift reports the recorded PID and whether that process appears to be running; remove a stale lock only after confirming no scan is active. When `--workspace-root` is set, the resolved directory is re-validated after lock acquisition to reduce symlink TOCTOU risk before Terraform execution. Optional `--webhook-ca-cert` loads a PEM CA bundle for webhook TLS verification in enterprise environments. Slack, Teams, generic webhook, artifact upload, and GitHub issue/PR delivery use the same SSRF-hardened HTTPS client posture (no proxy, no redirects, blocked private destinations, explicit dial/TLS/overall timeouts).
+### Notifications and outbound HTTP
 
-Attribute values in history, artifacts, policy input, dashboards, and notifications default to paths-only; use `--attribute-values` only when safe redacted scalars are needed in those channels.
+- Slack, Teams, generic webhooks, artifact upload, and GitHub issue/PR delivery share an SSRF-hardened HTTPS client: no proxy, no redirects, blocked private/loopback/link-local destinations, and explicit dial / TLS / overall timeouts.
+- Optional `--webhook-ca-cert` (or `webhook_ca_cert`) loads a PEM CA bundle for enterprise TLS interception.
+- `GITHUB_TOKEN` is read only from the environment and validated early when GitHub delivery is configured.
+
+### Policy, adapters, and publish gate
+
+- External policy, cost, and audit commands never use an implicit shell; pass arguments with repeated `--*-arg` flags.
+- For CI, set both `allowed_commands` and `trusted_command_dirs`. Empty allowlists mean **local trust only**.
+- Policy runs as a **publish gate**: on failure, TerraDrift does not write history, dashboards, artifacts, or notifications for that scan (stdout may already have been emitted).
+- Adapter stdout/stderr capture fails closed when size budgets are exceeded.
+
+### Locks
+
+- Terraform-backed scans use a local `.terradrift-scan.lock` (`--lock-backend local` only) to prevent overlapping scans of the same root on a **single host**.
+- Shared filesystems can share that lock file across runners on the volume. Redis/Postgres distributed backends are out of scope.
+- If a lock already exists, TerraDrift reports the recorded PID and whether that process appears to be running. Remove a stale lock only after confirming no scan is active.
+
+### Local API (`serve`)
+
+- `terradrift serve` binds to loopback only and has no authentication. Do not expose it through a tunnel or public interface without your own front-door controls. Multi-tenant auth is out of scope.
+
+### Supply chain and CI
+
+- User-facing and CI workflows pin third-party GitHub Actions to immutable SHAs.
+- Releases produce checksums, SBOM, provenance, and image scanning as configured in repository workflows.
+- Prefer pinned Terraform/OpenTofu and committed `.terraform.lock.hcl`; TerraDrift init uses `-lockfile=readonly` and does not upgrade providers.
+
+## Operator checklist
+
+1. Use `--terraform-exec` (or config) for real scans; do not treat bootstrap output as drift truth.
+2. Prefer `--redact-paths` and `--workspace-root` in CI.
+3. Keep webhook URLs and tokens in secrets; never commit them.
+4. Set `allowed_commands` and `trusted_command_dirs` for any policy/cost/audit adapters in CI.
+5. Leave `--attribute-values` off unless you intentionally need safe values in persisted/automation channels.
+6. Treat policy failure as a failed publish, not only a log line.
+7. For multi-runner CI, do not assume the local file lock coordinates across hosts unless they share the lock path on a shared filesystem.
