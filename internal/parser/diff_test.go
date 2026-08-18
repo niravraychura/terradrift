@@ -102,6 +102,8 @@ func TestAttributeChangesRedactUnknownAndCreateDelete(t *testing.T) {
 }
 
 func TestAttributeChangesRedactConnectionString(t *testing.T) {
+	beforeValue := "fixture-connection-string-v1"
+	afterValue := "fixture-connection-string-v2"
 	plan := []byte(`{
 		"resource_changes":[{
 			"address":"aws_db_instance.main",
@@ -110,8 +112,8 @@ func TestAttributeChangesRedactConnectionString(t *testing.T) {
 			"mode":"managed",
 			"change":{
 				"actions":["update"],
-				"before":{"connection_string":"postgres://user:secret@db/prod","engine":"postgres"},
-				"after":{"connection_string":"postgres://user:other@db/prod","engine":"postgres"}
+				"before":{"connection_string":"` + beforeValue + `","engine":"postgres"},
+				"after":{"connection_string":"` + afterValue + `","engine":"postgres"}
 			}
 		}]
 	}`)
@@ -127,7 +129,7 @@ func TestAttributeChangesRedactConnectionString(t *testing.T) {
 		t.Fatalf("connection_string = %#v", got)
 	}
 	encoded := string(mustMarshal(t, changes))
-	if strings.Contains(encoded, "postgres://") || strings.Contains(encoded, "secret") {
+	if strings.Contains(encoded, beforeValue) || strings.Contains(encoded, afterValue) {
 		t.Fatalf("connection string leaked: %s", encoded)
 	}
 }

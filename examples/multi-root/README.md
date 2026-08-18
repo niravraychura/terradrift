@@ -13,7 +13,8 @@ End-to-end pattern: JSON manifest with per-root settings, Slack notifications, a
 ## Local dry run
 
 ```bash
-export SLACK_WEBHOOK_URL='https://hooks.slack.com/services/...'
+# Provide the webhook from a secret manager / CI secret — never commit the URL.
+: "${SLACK_WEBHOOK_URL:?set SLACK_WEBHOOK_URL in your environment}"
 
 terradrift scan-all \
   --manifest examples/multi-root/terraform-roots.json \
