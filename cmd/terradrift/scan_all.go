@@ -634,7 +634,7 @@ func scanAll(ctx context.Context, params scanAllParams) multiScanReport {
 					} else {
 						root.Error = resolveErr.Error()
 					}
-					appendScanAllAudit(params, root, spec.Profile, resolveErr)
+					_ = appendScanAllAudit(params, root, spec.Profile, resolveErr)
 					roots[index] = root
 					continue
 				}
@@ -646,19 +646,22 @@ func scanAll(ctx context.Context, params scanAllParams) multiScanReport {
 					} else {
 						root.Error = err.Error()
 					}
-					appendScanAllAudit(params, root, spec.Profile, err)
+					_ = appendScanAllAudit(params, root, spec.Profile, err)
 				} else {
+					auditReport := result.Report
 					scanReport := result.Report
 					processErr := enrichAndFinalizeRoot(ctx, &scanReport, params)
 					if processErr != nil {
 						root.Error = processErr.Error()
-						appendScanAllAudit(params, multiScanRoot{Directory: root.Directory, Report: scanReport, Error: processErr.Error()}, spec.Profile, processErr)
+						_ = appendScanAllAudit(params, multiScanRoot{Directory: root.Directory, Report: auditReport, Error: processErr.Error()}, spec.Profile, processErr)
 					} else {
 						if params.RedactPaths {
 							scanReport.Directory = "[REDACTED]"
 						}
 						root.Report = scanReport
-						appendScanAllAudit(params, root, spec.Profile, nil)
+						if auditErr := appendScanAllAudit(params, multiScanRoot{Directory: root.Directory, Report: auditReport}, spec.Profile, nil); auditErr != nil {
+							root.Error = auditErr.Error()
+						}
 					}
 					if params.RedactPaths {
 						root.Directory = "[REDACTED]"
@@ -724,9 +727,9 @@ func enrichAndFinalizeRoot(ctx context.Context, scanReport *report.DriftReport, 
 	return finalizeRootScan(ctx, *scanReport, params.Delivery)
 }
 
-func appendScanAllAudit(params scanAllParams, root multiScanRoot, profile string, runErr error) {
+func appendScanAllAudit(params scanAllParams, root multiScanRoot, profile string, runErr error) error {
 	if params.Enrichment.AuditLogPath == "" {
-		return
+		return nil
 	}
 	event := auditlog.Event{
 		Event:            "scan_completed",
@@ -747,7 +750,7 @@ func appendScanAllAudit(params scanAllParams, root multiScanRoot, profile string
 			event.Error = root.Error
 		}
 	}
-	_ = withHistoryLock(params.Delivery.historyMu, func() error {
+	return withHistoryLock(params.Delivery.historyMu, func() error {
 		return auditlog.Append(params.Enrichment.AuditLogPath, event)
 	})
 }
