@@ -20,6 +20,7 @@ type HTTPDoer interface {
 // SlackNotifier sends drift summaries to a Slack incoming webhook.
 type SlackNotifier struct {
 	WebhookURL string
+	CACertPath string
 	Client     HTTPDoer
 }
 
@@ -31,7 +32,10 @@ func (notifier SlackNotifier) Notify(ctx context.Context, scanReport report.Drif
 	}
 	client := notifier.Client
 	if client == nil {
-		client = secureWebhookClient()
+		client, err = secureWebhookClientFromCA(notifier.CACertPath)
+		if err != nil {
+			return err
+		}
 	}
 
 	payload := slackPayload{Text: RedactedNotificationMessage(scanReport)}

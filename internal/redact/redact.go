@@ -75,6 +75,20 @@ func isSensitiveHost(host string) bool {
 }
 
 func isSensitiveKey(key string) bool {
-	key = strings.ToLower(key)
-	return strings.Contains(key, "token") || strings.Contains(key, "secret") || strings.Contains(key, "password") || strings.Contains(key, "key") || strings.Contains(key, "signature") || strings.Contains(key, "credential")
+	key = strings.ToLower(strings.TrimSpace(key))
+	for _, marker := range []string{"token", "secret", "password", "signature", "credential"} {
+		if strings.Contains(key, marker) {
+			return true
+		}
+	}
+	switch key {
+	case "key", "api_key", "access_key", "secret_key", "private_key", "aws_access_key_id", "aws_secret_access_key":
+		return true
+	}
+	for _, suffix := range []string{"_api_key", "_access_key", "_secret_key", "_private_key"} {
+		if strings.HasSuffix(key, suffix) {
+			return true
+		}
+	}
+	return false
 }

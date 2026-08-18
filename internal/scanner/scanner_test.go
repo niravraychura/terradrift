@@ -15,17 +15,19 @@ import (
 )
 
 type fakeRunner struct {
-	initErr  error
-	planExit int
-	planErr  error
-	showJSON []byte
-	showErr  error
-	planPath string
-	showPath string
-	planMode terraform.PlanMode
+	initErr    error
+	initCalled bool
+	planExit   int
+	planErr    error
+	showJSON   []byte
+	showErr    error
+	planPath   string
+	showPath   string
+	planMode   terraform.PlanMode
 }
 
 func (runner *fakeRunner) Init(ctx context.Context, directory string) error {
+	runner.initCalled = true
 	return runner.initErr
 }
 
@@ -50,6 +52,10 @@ func TestScanReturnsNoDriftBootstrapResult(t *testing.T) {
 	absDir, err := filepath.Abs(dir)
 	if err != nil {
 		t.Fatalf("abs fixture: %v", err)
+	}
+	absDir, err = filepath.EvalSymlinks(absDir)
+	if err != nil {
+		t.Fatalf("resolve fixture: %v", err)
 	}
 	if result.Outcome != OutcomeNoDrift {
 		t.Fatalf("expected no-drift outcome, got %q", result.Outcome)
@@ -282,3 +288,36 @@ func TestScanRequiresTerraformFilesWhenRequested(t *testing.T) {
 		t.Fatalf("expected missing Terraform file failure, got %#v, %v", result, err)
 	}
 }
+
+func TestParseLockBackend(t *testing.T) {
+	for _, name := range []string{"", "local", "LOCAL"} {
+		backend, err := ParseLockBackend(name)
+		if err != nil {
+			t.Fatalf("ParseLockBackend(%q): %v", name, err)
+		}
+		if _, ok := backend.(LocalFileLockBackend); !ok {
+			t.Fatalf("ParseLockBackend(%q): expected LocalFileLockBackend, got %T", name, backend)
+		}
+	}
+	if _, err := ParseLockBackend("redis"); err == nil {
+		t.Fatal("expected unknown lock backend to fail")
+	}
+}
+
+func TestScanSkipInitSkipsRunnerInit(t *testing.T) {
+	runner := &fakeRunner{
+		planExit: 0,
+		showJSON: []byte(`{"prior_state":{"values":{"root_module":{"resources":[]}}},"resource_changes":[]}`),
+	}
+	result, err := Scan(context.Background(), Options{Directory: t.TempDir(), Runner: runner, SkipInit: true})
+	if err != nil {
+		t.Fatalf("scan: %v", err)
+	}
+	if runner.initCalled {
+		t.Fatal("expected Init to be skipped")
+	}
+	if result.Outcome != OutcomeNoDrift {
+		t.Fatalf("expected no drift, got %q", result.Outcome)
+	}
+}
+

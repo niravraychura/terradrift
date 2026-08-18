@@ -34,6 +34,7 @@ type Config struct {
 	SlackWebhookURL      string                     `json:"slack_webhook_url"`
 	TeamsWebhookURL      string                     `json:"teams_webhook_url"`
 	WebhookURL           string                     `json:"webhook_url"`
+	WebhookCACert        string                     `json:"webhook_ca_cert"`
 	DashboardHTML        string                     `json:"dashboard_html"`
 	HistoryDir           string                     `json:"history_dir"`
 	HistoryRetention     int                        `json:"history_retention"`

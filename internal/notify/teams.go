@@ -14,6 +14,7 @@ import (
 // TeamsNotifier sends drift summaries to a Microsoft Teams incoming webhook.
 type TeamsNotifier struct {
 	WebhookURL string
+	CACertPath string
 	Client     HTTPDoer
 }
 
@@ -25,7 +26,10 @@ func (notifier TeamsNotifier) Notify(ctx context.Context, scanReport report.Drif
 	}
 	client := notifier.Client
 	if client == nil {
-		client = secureWebhookClient()
+		client, err = secureWebhookClientFromCA(notifier.CACertPath)
+		if err != nil {
+			return err
+		}
 	}
 
 	payload := teamsPayload{

@@ -26,7 +26,7 @@ This plan tracks security, performance, code quality, and feature work for Terra
 - [x] Avoid buffering unbounded Terraform stdout/stderr in memory.
 - [x] Keep plan parsing focused on the fields needed for drift reports.
 - [x] Add large-plan parser fixtures or benchmarks once JSON parsing exists.
-- [ ] Add benchmark tests for report rendering, redaction, and history loading with synthetic large reports.
+- [x] Add benchmark tests for report rendering, redaction, and history loading with synthetic large reports.
 - [x] Revisit Makefile formatting implementation if repository size grows significantly.
 
 ## Code quality plan
@@ -35,7 +35,7 @@ This plan tracks security, performance, code quality, and feature work for Terra
 - [x] Add typed scan outcomes so CLI exit codes can cleanly distinguish no drift, drift detected, and scan failure.
 - [x] Decide whether `scan` should accept any directory or require at least one `.tf` file, then update docs/tests accordingly.
 - [x] Add clear package boundaries for Terraform execution, plan parsing, reporting, and notification delivery.
-- [ ] Thread a context-aware logger through scan operations instead of relying only on global slog state.
+- [x] Thread a context-aware logger through scan operations instead of relying only on global slog state.
 
 ## Feature plan
 
@@ -148,25 +148,25 @@ Verified against the current codebase. Keep completed history above; track only 
 
 ### High
 
-- [ ] Split oversized CLI entry point: move `newScanCommand` / `newScanAllCommand` handlers and helpers (`writeScanReport`, `enrichReport`, `deliverNotifications`, `runDeliveries`) out of `cmd/terradrift/main.go` into focused files or internal packages.
+- [x] Split oversized CLI entry point: move `newScanCommand` / `newScanAllCommand` handlers and helpers (`writeScanReport`, `enrichReport`, `deliverNotifications`, `runDeliveries`) out of `cmd/terradrift/main.go` into focused files or internal packages.
 
 ### Medium
 
-- [ ] Extract shared `limitedBuffer` from `internal/cost`, `internal/policy`, and `internal/audit` into one shared package.
-- [ ] Extract shared `readLimitedFile` from `cmd/terradrift` and `internal/terraform` into one shared package.
-- [ ] Replace repetitive config-to-CLI `Flags().Changed(...)` mapping with a table-driven overlay helper.
-- [ ] Make `enrichReport` merge cost/audit fields by resource `Address` (defense-in-depth; Enrich already attaches by address today).
-- [ ] Narrow sensitive query-parameter redaction so matching `"key"` as a substring does not false-positive on benign names like `key_id`.
-- [ ] Add unit tests for `internal/validation`.
-- [ ] Add an optional external/distributed scan-lock backend for multi-runner CI (local `O_EXCL` lock remains for single-host use).
+- [x] Extract shared `limitedBuffer` from `internal/cost`, `internal/policy`, and `internal/audit` into one shared package.
+- [x] Extract shared `readLimitedFile` from `cmd/terradrift` and `internal/terraform` into one shared package.
+- [x] Replace repetitive config-to-CLI `Flags().Changed(...)` mapping with a table-driven overlay helper.
+- [x] Make `enrichReport` merge cost/audit fields by resource `Address` (defense-in-depth; Enrich already attaches by address today).
+- [x] Narrow sensitive query-parameter redaction so matching `"key"` as a substring does not false-positive on benign names like `key_id`.
+- [x] Add unit tests for `internal/validation`.
+- [x] Add an optional external/distributed scan-lock backend for multi-runner CI (local `O_EXCL` lock remains for single-host use).
 
 ### Low
 
-- [ ] Replace `panic` on `MarkFlagRequired` failures with controlled startup error handling.
-- [ ] Validate `GITHUB_TOKEN` early when GitHub notification delivery is configured.
-- [ ] Document or harden workspace-root symlink TOCTOU between validation and Terraform execution.
-- [ ] Add optional webhook custom CA support for enterprise TLS environments.
-- [ ] Optimize `history.LoadRecent` to avoid sorting the full file list when only a small limit is needed.
-- [ ] Investigate optional skip/reuse of `terraform init` when providers and lockfile are already satisfied.
-- [ ] Add remaining quality benchmarks for report rendering, redaction, and history loading with synthetic large reports.
-- [ ] Thread a context-aware logger through scan operations instead of relying only on global slog state.
+- [x] Replace `panic` on `MarkFlagRequired` failures with controlled startup error handling.
+- [x] Validate `GITHUB_TOKEN` early when GitHub notification delivery is configured.
+- [x] Document or harden workspace-root symlink TOCTOU between validation and Terraform execution.
+- [x] Add optional webhook custom CA support for enterprise TLS environments.
+- [x] Optimize `history.LoadRecent` to avoid sorting the full file list when only a small limit is needed.
+- [x] Investigate optional skip/reuse of `terraform init` when providers and lockfile are already satisfied.
+- [x] Add remaining quality benchmarks for report rendering, redaction, and history loading with synthetic large reports.
+- [x] Thread a context-aware logger through scan operations instead of relying only on global slog state.

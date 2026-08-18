@@ -107,7 +107,7 @@ func TestLoadRecentSkipsMalformedReports(t *testing.T) {
 		t.Fatalf("write valid report: %v", err)
 	}
 
-	entries, err := LoadRecent(dir, 1)
+	entries, err := LoadRecent(dir, 2)
 	if err != nil {
 		t.Fatalf("load recent: %v", err)
 	}
@@ -125,11 +125,25 @@ func TestLoadRecentSkipsOversizedReports(t *testing.T) {
 		t.Fatalf("write valid report: %v", err)
 	}
 
-	entries, err := LoadRecent(dir, 1)
+	entries, err := LoadRecent(dir, 2)
 	if err != nil {
 		t.Fatalf("load recent: %v", err)
 	}
 	if len(entries) != 1 || entries[0].Report.Status != report.ScanStatusNoDrift {
 		t.Fatalf("expected valid report after oversized entry, got %#v", entries)
+	}
+}
+
+func TestSelectNewestPathsKeepsNewestFirst(t *testing.T) {
+	paths := []string{
+		filepath.Join("h", "a.json"),
+		filepath.Join("h", "c.json"),
+		filepath.Join("h", "b.json"),
+		filepath.Join("h", "d.json"),
+	}
+	got := selectNewestPaths(paths, 2)
+	want := []string{filepath.Join("h", "d.json"), filepath.Join("h", "c.json")}
+	if len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+		t.Fatalf("expected %v, got %v", want, got)
 	}
 }

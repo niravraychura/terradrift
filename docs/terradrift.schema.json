@@ -15,6 +15,7 @@
     "slack_webhook_url": { "type": "string" },
     "teams_webhook_url": { "type": "string" },
     "webhook_url": { "type": "string" },
+    "webhook_ca_cert": { "type": "string" },
     "dashboard_html": { "type": "string" },
     "history_dir": { "type": "string" },
     "history_retention": { "type": "integer", "minimum": 0 },

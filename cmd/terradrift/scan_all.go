@@ -1,0 +1,421 @@
+package main
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"io/fs"
+	"os"
+	"path/filepath"
+	"sort"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/niravraychura/terradrift/internal/ioutil"
+	"github.com/niravraychura/terradrift/internal/report"
+	"github.com/niravraychura/terradrift/internal/scanner"
+	"github.com/niravraychura/terradrift/internal/terraform"
+	"github.com/spf13/cobra"
+)
+
+func newScanAllCommand(stdout io.Writer) *cobra.Command {
+	var manifest string
+	var discover string
+	var includes []string
+	var excludes []string
+	var format string
+	var timeout time.Duration
+	var concurrency int
+	var terraformExec bool
+	var terraformBin string
+	var workspaceRoot string
+	var redactPaths bool
+	var incrementalState string
+	var planMode string
+	var lockBackendName string
+	var skipTerraformInit bool
+
+	cmd := &cobra.Command{
+		Use:   "scan-all",
+		Short: "Scan Terraform roots from a manifest",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if (manifest == "") == (discover == "") {
+				return fmt.Errorf("provide exactly one of --manifest or --discover")
+			}
+			if incrementalState != "" {
+				normalized, err := normalizeOutputPath(incrementalState)
+				if err != nil {
+					return err
+				}
+				incrementalState = normalized
+			}
+			var directories []string
+			var err error
+			if manifest != "" {
+				directories, err = loadScanManifest(manifest)
+			} else {
+				directories, err = discoverTerraformRoots(discover, includes, excludes)
+			}
+			if err != nil {
+				return err
+			}
+			if incrementalState != "" {
+				directories, err = incrementalRoots(incrementalState, directories)
+				if err != nil {
+					return err
+				}
+			}
+			parsedFormat, err := parseOutputFormat(format)
+			if err != nil {
+				return err
+			}
+			if parsedFormat != outputFormatTable && parsedFormat != outputFormatJSON {
+				return fmt.Errorf("scan-all supports table and json output")
+			}
+			if concurrency <= 0 {
+				return fmt.Errorf("concurrency must be greater than zero")
+			}
+
+			mode, err := terraform.ParsePlanMode(planMode)
+			if err != nil {
+				return err
+			}
+			lockBackend, err := scanner.ParseLockBackend(lockBackendName)
+			if err != nil {
+				return err
+			}
+			options := scanner.Options{
+				Timeout:       timeout,
+				WorkspaceRoot: workspaceRoot,
+				PlanMode:      mode,
+				LockBackend:   lockBackend,
+				SkipInit:      skipTerraformInit,
+			}
+			options, err = scanner.PrepareOptions(options)
+			if err != nil {
+				return err
+			}
+			if terraformExec {
+				options.Runner = terraform.NewCLIRunner(terraformBin)
+			}
+			aggregate := scanAll(cmd.Context(), directories, options, concurrency, redactPaths)
+			if err := writeMultiScanReport(stdout, aggregate, parsedFormat); err != nil {
+				return err
+			}
+			if incrementalState != "" {
+				if err := writeIncrementalState(incrementalState, aggregate); err != nil {
+					return err
+				}
+			}
+			if aggregate.FailedRoots > 0 {
+				return fmt.Errorf("%w: %d roots", errMultiScanFailed, aggregate.FailedRoots)
+			}
+			if aggregate.DriftedRoots > 0 {
+				return errDriftDetected
+			}
+			if aggregate.ChangedRoots > 0 {
+				return errChangesDetected
+			}
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&manifest, "manifest", "", "newline-delimited Terraform root manifest")
+	cmd.Flags().StringVar(&discover, "discover", "", "workspace root to discover Terraform roots")
+	cmd.Flags().StringArrayVar(&includes, "include", nil, "root-relative include pattern; repeatable")
+	cmd.Flags().StringArrayVar(&excludes, "exclude", nil, "root-relative exclude pattern; repeatable")
+	cmd.Flags().StringVarP(&format, "output", "o", string(outputFormatTable), "output format: table, json")
+	cmd.Flags().DurationVar(&timeout, "timeout", scanner.DefaultTimeout, "maximum scan duration per root")
+	cmd.Flags().IntVar(&concurrency, "concurrency", 4, "maximum concurrent scans")
+	cmd.Flags().BoolVar(&terraformExec, "terraform-exec", false, "run Terraform-compatible scans")
+	cmd.Flags().StringVar(&planMode, "plan-mode", string(terraform.PlanModeRefreshOnly), "plan mode: refresh-only (remote drift) or normal (configuration reconciliation)")
+	cmd.Flags().StringVar(&terraformBin, "terraform-bin", "", "Terraform-compatible executable to run (default: terraform)")
+	cmd.Flags().StringVar(&workspaceRoot, "workspace-root", "", "require roots to resolve inside this workspace root")
+	cmd.Flags().BoolVar(&redactPaths, "redact-paths", false, "redact local filesystem paths from scan output")
+	cmd.Flags().StringVar(&incrementalState, "incremental-state", "", "JSON state file; retry only roots previously drifted or failed")
+	cmd.Flags().StringVar(&lockBackendName, "lock-backend", "local", "scan lock backend: local")
+	cmd.Flags().BoolVar(&skipTerraformInit, "skip-terraform-init", false, "skip terraform init when .terraform is already valid")
+	return cmd
+}
+
+type multiScanReport struct {
+	Status                multiScanStatus `json:"status"`
+	Roots                 []multiScanRoot `json:"roots"`
+	TotalRoots            int             `json:"total_roots"`
+	DriftedRoots          int             `json:"drifted_roots"`
+	ChangedRoots          int             `json:"changed_roots"`
+	FailedRoots           int             `json:"failed_roots"`
+	TotalResourcesChecked int             `json:"total_resources_checked"`
+	TotalChangedResources int             `json:"total_changed_resources"`
+}
+
+type multiScanStatus string
+
+const (
+	multiScanStatusComplete        multiScanStatus = "complete"
+	multiScanStatusDriftDetected   multiScanStatus = "drift_detected"
+	multiScanStatusChangesDetected multiScanStatus = "changes_detected"
+	multiScanStatusPartial         multiScanStatus = "partial"
+	multiScanStatusFailed          multiScanStatus = "failed"
+)
+
+type multiScanRoot struct {
+	Directory string             `json:"directory"`
+	Report    report.DriftReport `json:"report,omitempty"`
+	Error     string             `json:"error,omitempty"`
+}
+
+type incrementalState struct {
+	Version int                         `json:"version"`
+	Roots   map[string]incrementalEntry `json:"roots"`
+}
+
+type incrementalEntry struct {
+	Status    multiScanStatus `json:"status"`
+	ScanID    string          `json:"scan_id,omitempty"`
+	Completed time.Time       `json:"completed_at,omitempty"`
+}
+
+func incrementalRoots(path string, directories []string) ([]string, error) {
+	data, err := ioutil.ReadLimitedFile(path, int64(maxManifestBytes))
+	if os.IsNotExist(err) {
+		return directories, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("read incremental state %s: %w", path, err)
+	}
+	var state incrementalState
+	if err := json.Unmarshal(data, &state); err != nil {
+		return nil, fmt.Errorf("parse incremental state %s: %w", path, err)
+	}
+	if state.Version != 1 {
+		return nil, fmt.Errorf("unsupported incremental state version %d", state.Version)
+	}
+	roots := make([]string, 0, len(directories))
+	for _, directory := range directories {
+		entry, found := state.Roots[directory]
+		if !found || entry.Status != multiScanStatusComplete {
+			roots = append(roots, directory)
+		}
+	}
+	return roots, nil
+}
+
+func writeIncrementalState(path string, aggregate multiScanReport) error {
+	if err := rejectSymlink(path); err != nil {
+		return err
+	}
+	state := incrementalState{Version: 1, Roots: make(map[string]incrementalEntry, len(aggregate.Roots))}
+	if data, err := ioutil.ReadLimitedFile(path, int64(maxManifestBytes)); err == nil {
+		if err := json.Unmarshal(data, &state); err != nil || state.Version != 1 {
+			return fmt.Errorf("parse incremental state %s", path)
+		}
+		if state.Roots == nil {
+			state.Roots = make(map[string]incrementalEntry)
+		}
+	} else if !os.IsNotExist(err) {
+		return fmt.Errorf("read incremental state %s: %w", path, err)
+	}
+	for _, root := range aggregate.Roots {
+		entry := incrementalEntry{Status: multiScanStatusComplete}
+		if root.Error != "" {
+			entry.Status = multiScanStatusFailed
+		} else if root.Report.Status == report.ScanStatusDriftDetected {
+			entry.Status = multiScanStatusDriftDetected
+		}
+		entry.ScanID = root.Report.ScanID
+		entry.Completed = root.Report.CompletedAt
+		state.Roots[root.Directory] = entry
+	}
+	data, err := json.MarshalIndent(state, "", "  ")
+	if err != nil {
+		return fmt.Errorf("encode incremental state: %w", err)
+	}
+	data = append(data, '\n')
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return fmt.Errorf("create incremental state directory: %w", err)
+	}
+	file, err := os.CreateTemp(filepath.Dir(path), ".terradrift-state-*")
+	if err != nil {
+		return fmt.Errorf("create incremental state: %w", err)
+	}
+	temporary := file.Name()
+	defer func() { _ = os.Remove(temporary) }()
+	if err := file.Chmod(0o600); err != nil {
+		_ = file.Close()
+		return fmt.Errorf("secure incremental state: %w", err)
+	}
+	if _, err := file.Write(data); err != nil {
+		_ = file.Close()
+		return fmt.Errorf("write incremental state: %w", err)
+	}
+	if err := file.Close(); err != nil {
+		return fmt.Errorf("close incremental state: %w", err)
+	}
+	if err := os.Rename(temporary, path); err != nil {
+		return fmt.Errorf("replace incremental state: %w", err)
+	}
+	return nil
+}
+
+func loadScanManifest(path string) ([]string, error) {
+	data, err := ioutil.ReadLimitedFile(path, int64(maxManifestBytes))
+	if err != nil {
+		return nil, fmt.Errorf("read scan manifest %s: %w", path, err)
+	}
+	base := filepath.Dir(path)
+	directories := make([]string, 0)
+	for _, line := range strings.Split(string(data), "\n") {
+		directory := strings.TrimSpace(line)
+		if directory == "" || strings.HasPrefix(directory, "#") {
+			continue
+		}
+		if !filepath.IsAbs(directory) {
+			directory = filepath.Join(base, directory)
+		}
+		directories = append(directories, directory)
+	}
+	if len(directories) == 0 {
+		return nil, fmt.Errorf("scan manifest %s has no Terraform roots", path)
+	}
+	return directories, nil
+}
+
+func discoverTerraformRoots(root string, includes []string, excludes []string) ([]string, error) {
+	for _, pattern := range append(append([]string{}, includes...), excludes...) {
+		if _, err := filepath.Match(filepath.Clean(pattern), ""); err != nil {
+			return nil, fmt.Errorf("invalid discovery pattern %q: %w", pattern, err)
+		}
+	}
+	root, err := filepath.Abs(root)
+	if err != nil {
+		return nil, fmt.Errorf("resolve discovery root: %w", err)
+	}
+	roots := map[string]bool{}
+	err = filepath.WalkDir(root, func(path string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		relative, err := filepath.Rel(root, path)
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() {
+			if entry.Name() == ".terraform" || (relative != "." && matchesPath(relative, excludes)) {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if filepath.Ext(path) != ".tf" {
+			return nil
+		}
+		directory := filepath.Dir(path)
+		relative, err = filepath.Rel(root, directory)
+		if err != nil {
+			return err
+		}
+		if matchesPath(relative, excludes) || (len(includes) > 0 && !matchesPath(relative, includes)) {
+			return nil
+		}
+		roots[directory] = true
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("discover Terraform roots: %w", err)
+	}
+	directories := make([]string, 0, len(roots))
+	for directory := range roots {
+		directories = append(directories, directory)
+	}
+	sort.Strings(directories)
+	if len(directories) == 0 {
+		return nil, fmt.Errorf("no Terraform roots found under %s", root)
+	}
+	return directories, nil
+}
+
+func matchesPath(path string, patterns []string) bool {
+	for _, pattern := range patterns {
+		pattern = filepath.Clean(pattern)
+		if path == pattern || strings.HasPrefix(path, pattern+string(filepath.Separator)) {
+			return true
+		}
+		if matched, err := filepath.Match(pattern, path); err == nil && matched {
+			return true
+		}
+	}
+	return false
+}
+
+func scanAll(ctx context.Context, directories []string, options scanner.Options, concurrency int, redactPaths bool) multiScanReport {
+	roots := make([]multiScanRoot, len(directories))
+	jobs := make(chan int)
+	var workers sync.WaitGroup
+	for range min(concurrency, len(directories)) {
+		workers.Add(1)
+		go func() {
+			defer workers.Done()
+			for index := range jobs {
+				root := multiScanRoot{Directory: directories[index]}
+				rootOptions := options
+				rootOptions.Directory = directories[index]
+				result, err := scanner.Scan(ctx, rootOptions)
+				if err != nil {
+					if redactPaths {
+						root.Directory = "[REDACTED]"
+						root.Error = "scan failed"
+					} else {
+						root.Error = err.Error()
+					}
+				} else {
+					root.Report = result.Report
+					if redactPaths {
+						root.Directory = "[REDACTED]"
+						root.Report.Directory = "[REDACTED]"
+					}
+				}
+				roots[index] = root
+			}
+		}()
+	}
+	for index := range directories {
+		jobs <- index
+	}
+	close(jobs)
+	workers.Wait()
+
+	aggregate := multiScanReport{Roots: roots, TotalRoots: len(roots)}
+	for _, root := range roots {
+		if root.Error != "" {
+			aggregate.FailedRoots++
+			continue
+		}
+		aggregate.TotalResourcesChecked += root.Report.TotalResourcesChecked
+		aggregate.TotalChangedResources += root.Report.TotalChangedResources
+		switch root.Report.Status {
+		case report.ScanStatusDriftDetected:
+			aggregate.DriftedRoots++
+		case report.ScanStatusChangesDetected:
+			aggregate.ChangedRoots++
+		}
+	}
+	aggregate.Status = multiScanStatusFor(aggregate.TotalRoots, aggregate.DriftedRoots, aggregate.ChangedRoots, aggregate.FailedRoots)
+	return aggregate
+}
+
+func multiScanStatusFor(totalRoots, driftedRoots, changedRoots, failedRoots int) multiScanStatus {
+	if failedRoots == totalRoots {
+		return multiScanStatusFailed
+	}
+	if failedRoots > 0 {
+		return multiScanStatusPartial
+	}
+	if driftedRoots > 0 {
+		return multiScanStatusDriftDetected
+	}
+	if changedRoots > 0 {
+		return multiScanStatusChangesDetected
+	}
+	return multiScanStatusComplete
+}

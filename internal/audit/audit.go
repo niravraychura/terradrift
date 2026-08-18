@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"strings"
 
+	"github.com/niravraychura/terradrift/internal/ioutil"
 	"github.com/niravraychura/terradrift/internal/redact"
 	"github.com/niravraychura/terradrift/internal/report"
 	"github.com/niravraychura/terradrift/internal/validation"
@@ -48,8 +49,8 @@ func Enrich(ctx context.Context, options Options, scanReport report.DriftReport)
 	cmd := exec.CommandContext(ctx, options.Command, options.Args...)
 	cmd.Stdin = bytes.NewReader(payload)
 	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &limitedBuffer{buffer: &stdout, remaining: maxOutputBytes}
-	cmd.Stderr = &limitedBuffer{buffer: &stderr, remaining: maxOutputBytes}
+	cmd.Stdout = &ioutil.LimitedBuffer{Buffer: &stdout, Remaining: maxOutputBytes}
+	cmd.Stderr = &ioutil.LimitedBuffer{Buffer: &stderr, Remaining: maxOutputBytes}
 	if err := cmd.Run(); err != nil {
 		message := strings.TrimSpace(stderr.String())
 		if message == "" {
@@ -79,22 +80,4 @@ func Enrich(ctx context.Context, options Options, scanReport report.DriftReport)
 		scanReport.ResourceChanges[i].AuditEvents = events[scanReport.ResourceChanges[i].Address]
 	}
 	return scanReport, nil
-}
-
-type limitedBuffer struct {
-	buffer    *bytes.Buffer
-	remaining int
-}
-
-func (buffer *limitedBuffer) Write(p []byte) (int, error) {
-	original := len(p)
-	if buffer.remaining <= 0 {
-		return original, nil
-	}
-	if len(p) > buffer.remaining {
-		p = p[:buffer.remaining]
-	}
-	written, err := buffer.buffer.Write(p)
-	buffer.remaining -= written
-	return original, err
 }

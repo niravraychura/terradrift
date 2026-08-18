@@ -3,12 +3,15 @@ package notify
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 
 	"github.com/niravraychura/terradrift/internal/redact"
@@ -19,6 +22,7 @@ import (
 // WebhookNotifier sends drift summaries to a generic HTTPS webhook endpoint.
 type WebhookNotifier struct {
 	WebhookURL string
+	CACertPath string
 	Client     HTTPDoer
 }
 
@@ -30,7 +34,10 @@ func (notifier WebhookNotifier) Notify(ctx context.Context, scanReport report.Dr
 	}
 	client := notifier.Client
 	if client == nil {
-		client = secureWebhookClient()
+		client, err = secureWebhookClientFromCA(notifier.CACertPath)
+		if err != nil {
+			return err
+		}
 	}
 
 	payload := webhookPayload{
@@ -55,7 +62,7 @@ func (notifier WebhookNotifier) Notify(ctx context.Context, scanReport report.Dr
 
 	response, err := client.Do(request)
 	if err != nil {
-		return fmt.Errorf("send webhook notification to %s: %w", redact.String(webhookURL), err)
+		return fmt.Errorf("send webhook notification to %s: %s", redact.String(webhookURL), redact.String(err.Error()))
 	}
 	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
 		_ = closeResponseBody(response.Body)
@@ -118,15 +125,39 @@ func isBlockedWebhookIP(ip net.IP) bool {
 }
 
 func secureWebhookClient() *http.Client {
+	client, err := secureWebhookClientFromCA("")
+	if err != nil {
+		panic(err)
+	}
+	return client
+}
+
+// secureWebhookClientFromCA builds the SSRF-hardened webhook HTTP client.
+// When caCertPath is set, PEM certificates from that file are used as TLS roots.
+func secureWebhookClientFromCA(caCertPath string) (*http.Client, error) {
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.Proxy = nil
 	transport.DialContext = secureWebhookDialContext
+	if caCertPath != "" {
+		pemData, err := os.ReadFile(caCertPath)
+		if err != nil {
+			return nil, fmt.Errorf("read webhook CA certificate %s: %w", caCertPath, err)
+		}
+		pool := x509.NewCertPool()
+		if !pool.AppendCertsFromPEM(pemData) {
+			return nil, fmt.Errorf("parse webhook CA certificate %s: no certificates found", caCertPath)
+		}
+		transport.TLSClientConfig = &tls.Config{
+			MinVersion: tls.VersionTLS12,
+			RootCAs:    pool,
+		}
+	}
 	return &http.Client{
 		Transport: transport,
 		CheckRedirect: func(*http.Request, []*http.Request) error {
 			return http.ErrUseLastResponse
 		},
-	}
+	}, nil
 }
 
 func secureWebhookDialContext(ctx context.Context, network string, address string) (net.Conn, error) {
