@@ -1,0 +1,21 @@
+---
+description: When changing CLI flags or report fields, keep README and help text in sync
+globs: cmd/**/*.go
+alwaysApply: false
+---
+
+# Docs with flags
+
+When you add, rename, remove, or change behavior of:
+
+- CLI flags / env inputs
+- Exit codes
+- User-facing report JSON fields or status strings
+
+Also update, in the same change set when practical:
+
+1. Command `--help` / long descriptions in `cmd/terradrift`
+2. The relevant **README** quick-start or “Common options” step (not a flag encyclopedia)
+3. Config schema or examples if the setting is config-backed (`docs/terradrift.schema.json`, `examples/config`)
+
+Do not leave README examples that omit a newly required flag (especially `--terraform-exec` for real scans).

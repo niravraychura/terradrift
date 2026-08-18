@@ -1,0 +1,47 @@
+---
+description: Senior engineering bar — quality, readability, maintainability, tests, performance, security
+alwaysApply: true
+---
+
+# Engineering quality bar
+
+Write like a careful senior Go engineer on a security-sensitive CLI. Ponytail chooses *how little* to build; this rule sets *how well* what you build must be.
+
+## Quality & readability
+
+- Clear names; small functions; one concern per package/file where practical
+- Prefer stdlib and existing `internal/` patterns over new frameworks
+- Comments explain *why* (invariants, trust boundaries), not narrate *what*
+- Match surrounding style (`gofmt`, existing error wrapping, table-driven tests)
+
+## Maintainability
+
+- Smallest coherent diff; no drive-by refactors unless required
+- Update docs/examples when user-facing behavior changes
+- Do not leave dead code, unused exports, or duplicate helpers
+
+## Testability
+
+- Behavior changes need tests (table-driven preferred)
+- Prefer pure logic under `internal/` that is easy to unit-test
+- Use synthetic fixtures only — never realistic secrets (see workflow rule)
+- Non-trivial logic is unfinished without a failing-path check (see Ponytail)
+
+## Performance
+
+- Avoid buffering entire plans/reports when streaming already exists
+- Respect existing size limits and fail-closed truncation
+- No unbounded maps/labels in metrics or logs; watch allocations in hot paths
+- Measure before micro-optimizing; prefer correctness + clear bounds
+
+## Security
+
+- Fail closed at trust boundaries (adapters, webhooks, policy I/O, SSRF)
+- Do not weaken paths-only attributes, redaction, or policy-as-publish-gate without an explicit product decision + docs
+- After substantive first-party code changes, run available Snyk/security checks when configured
+- Follow `SECURITY.md` and `.cursor/rules/go-cli.mdc`
+
+## Definition of done (code)
+
+- Compiles; focused tests pass; lints clean for touched packages when tooling is available
+- No secrets in diff; README/docs updated if operators need to know
