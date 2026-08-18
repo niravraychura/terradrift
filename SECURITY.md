@@ -2,11 +2,11 @@
 
 ## Supported versions
 
-TerraDrift is pre-1.0 and under active development. Security fixes land on `dev` first, then `main` through the normal promotion path, until a formal supported-release policy is published.
+TerraDrift is pre-1.0. Security fixes land on `dev` first, then `main` through the normal promotion path. Until 1.0, **only the latest tagged release on `main`** (and `main` itself) is supported for security fixes. See [docs/RELEASE.md](docs/RELEASE.md) for the release cycle.
 
 ## Reporting a vulnerability
 
-Please report suspected vulnerabilities privately by opening a GitHub security advisory for this repository. If advisories are unavailable, contact the maintainer directly before publishing details.
+Please report suspected vulnerabilities **privately** via [GitHub private vulnerability reporting](https://github.com/niravraychura/terradrift/security/advisories/new) (Settings → Code security) or a draft security advisory. Do not file public issues with secrets or exploit details. If private reporting is unavailable, contact the maintainer directly before publishing details.
 
 Include:
 

@@ -1,5 +1,9 @@
 # TerraDrift
 
+[![CI](https://github.com/niravraychura/terradrift/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/niravraychura/terradrift/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/niravraychura/terradrift?include_prereleases&sort=semver)](https://github.com/niravraychura/terradrift/releases)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 TerraDrift is an open-source, self-hosted Terraform drift detection tool. It is being built to help teams identify infrastructure changes that happened outside their normal Terraform workflow and surface those changes in a clear, automation-friendly way.
 
 > [!WARNING]
@@ -24,6 +28,16 @@ TerraDrift is a production-usable CLI for self-hosted drift detection. It includ
 - Secret-safe defaults, size budgets, local scan locks, and CI/release hardening
 
 Bootstrap (no Terraform) remains available for dry wiring checks only; prefer `--terraform-exec` for real results.
+
+## Roadmap and releasing
+
+- Product direction and out-of-scope items: [docs/ROADMAP.md](docs/ROADMAP.md)
+- Release cycle (`dev` → `main` → `v*` tag): [docs/RELEASE.md](docs/RELEASE.md)
+- Changelog: [CHANGELOG.md](CHANGELOG.md)
+- Contributing (PRs target **`dev`**): [CONTRIBUTING.md](CONTRIBUTING.md)
+- Security reporting: [SECURITY.md](SECURITY.md)
+
+Install binaries and container images from [GitHub Releases](https://github.com/niravraychura/terradrift/releases) once a `v*` tag is published.
 
 ## Do Terraform files need to be in this repository?
 
@@ -567,3 +581,9 @@ make lint
 ## License
 
 TerraDrift is released under the MIT License. See [LICENSE](LICENSE).
+
+## Maintainers / agents
+
+- Humans: [CONTRIBUTING.md](CONTRIBUTING.md)
+- Coding agents / Cursor defaults: [AGENTS.md](AGENTS.md) and [`.cursor/rules/`](.cursor/rules/)
+- GitHub product packaging checklist: [docs/GITHUB_PRODUCT_SETUP.md](docs/GITHUB_PRODUCT_SETUP.md)

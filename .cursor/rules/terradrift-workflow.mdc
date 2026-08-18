@@ -1,0 +1,31 @@
+---
+description: TerraDrift branch, release, docs, and secret-safety defaults for every session
+alwaysApply: true
+---
+
+# TerraDrift workflow
+
+## Git
+
+- Feature work: branch from `dev`, open PRs into **`dev`** (not `main`).
+- Releases: promote `dev` → `main` when CI is green, then annotated `v*` tag on `main` per `docs/RELEASE.md`.
+- Do not force-push shared branches or rewrite published release tags.
+
+## Docs ownership
+
+- Engineering features/hardening: `PLAN.md`
+- GitHub product packaging checklist: `docs/GITHUB_PRODUCT_SETUP.md`
+- Release policy: `docs/RELEASE.md`
+- Roadmap / out of scope: `docs/ROADMAP.md`
+- Prefer editing these over inventing parallel process docs
+
+## Safety
+
+- No credentials, Terraform state, plan files, webhook URLs, or realistic secret-like fixtures in the repo
+- Use synthetic placeholders only (e.g. `REDACTED_TEST_VALUE`, `https://example.test/hook`)
+- Security issues → private advisory path in `SECURITY.md`, never public exploit write-ups
+
+## Agents
+
+- Follow root `AGENTS.md` and `CONTRIBUTING.md`
+- Match existing Go and docs style; keep changes focused
