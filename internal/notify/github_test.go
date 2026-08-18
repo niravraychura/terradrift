@@ -61,3 +61,39 @@ func TestGitHubIssueNotifierCreatesIssue(t *testing.T) {
 		t.Fatalf("create drift issue: %v", err)
 	}
 }
+
+func TestGitHubHTTPClientUsesSecureTimeout(t *testing.T) {
+	client, err := githubHTTPClient(nil)
+	if err != nil {
+		t.Fatalf("githubHTTPClient: %v", err)
+	}
+	httpClient, ok := client.(*http.Client)
+	if !ok {
+		t.Fatalf("expected *http.Client, got %T", client)
+	}
+	if httpClient.Timeout != githubHTTPTimeout {
+		t.Fatalf("timeout = %v, want %v", httpClient.Timeout, githubHTTPTimeout)
+	}
+	if httpClient == http.DefaultClient {
+		t.Fatal("expected dedicated client, not http.DefaultClient")
+	}
+}
+
+func TestGitHubNotifierRedactsTransportErrors(t *testing.T) {
+	notifier := GitHubPRNotifier{
+		Repository: "owner/repo",
+		Number:     1,
+		Token:      "secret-token",
+		APIURL:     "https://api.github.com",
+		Client: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+			return nil, errors.New("dial token=leaked-secret failed")
+		}),
+	}
+	err := notifier.Notify(context.Background(), report.DriftReport{})
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if strings.Contains(err.Error(), "leaked-secret") {
+		t.Fatalf("expected redacted transport error, got %v", err)
+	}
+}

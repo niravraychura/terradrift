@@ -41,3 +41,13 @@ func TestRunRejectsOversizedInput(t *testing.T) {
 		t.Fatalf("expected oversized input error, got %v", err)
 	}
 }
+
+func TestRunFailsClosedOnTruncatedOutput(t *testing.T) {
+	previous := maxPolicyOutputBytes
+	maxPolicyOutputBytes = 8
+	t.Cleanup(func() { maxPolicyOutputBytes = previous })
+	err := Run(context.Background(), Options{Command: "sh", Args: []string{"-c", "printf '%s' '0123456789abcdef'"}}, report.DriftReport{})
+	if err == nil || !strings.Contains(err.Error(), "command output exceeded") {
+		t.Fatalf("expected truncation error, got %v", err)
+	}
+}

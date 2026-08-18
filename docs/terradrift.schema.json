@@ -39,6 +39,10 @@
     "github_pr": { "type": "integer", "minimum": 1 },
     "github_issue_after": { "type": "integer", "minimum": 2 },
     "artifact_url": { "type": "string" },
+    "attribute_values": { "type": "boolean" },
+    "workspace": { "type": "string" },
+    "var_files": { "type": "array", "items": { "type": "string" } },
+    "vars": { "type": "array", "items": { "type": "string" } },
     "ignore_rules": {
       "type": "array",
       "items": {

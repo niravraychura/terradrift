@@ -202,40 +202,40 @@ Keep attribute-level change reporting. Do not remove diffs. Change what values a
 - Expand heuristics and tests (including unmarked secret-like names such as `connection_string` / `db_url` if adopted).
 - Regression tests must prove secret fixtures never appear in history JSON, policy input, or notification payloads.
 
-- [ ] Implement safe attribute value display rules (sensitive marks + heuristics + truncation/summaries).
-- [ ] Default history / artifacts / policy / notifications to redacted or paths-only attribute data.
-- [ ] Add opt-in `--attribute-values` (and config) for including safe values in persisted/automation output; secrets remain redacted.
-- [ ] Document attribute security contract in README and architecture docs; add regression tests.
+- [x] Implement safe attribute value display rules (sensitive marks + heuristics + truncation/summaries).
+- [x] Default history / artifacts / policy / notifications to redacted or paths-only attribute data.
+- [x] Add opt-in `--attribute-values` (and config) for including safe values in persisted/automation output; secrets remain redacted.
+- [x] Document attribute security contract in README and architecture docs; add regression tests.
 
 ### 2. Policy as a publish gate (resilience + security)
 
-- [ ] Run `policy.Run` **before** writing history, dashboard HTML, uploaded artifacts, and sending notifications.
-- [ ] On policy failure, do not persist or upload a success-looking report; return a clear scan failure.
-- [ ] Update tests and README for the new pipeline order.
+- [x] Run `policy.Run` **before** writing history, dashboard HTML, uploaded artifacts, and sending notifications.
+- [x] On policy failure, do not persist or upload a success-looking report; return a clear scan failure.
+- [x] Update tests and README for the new pipeline order.
 
 ### 3. Harden GitHub HTTP delivery (security)
 
-- [ ] Route GitHub issue/PR notification HTTP through the same SSRF-safe dialer / no-redirect / no-proxy posture used for webhooks (`internal/notify`).
-- [ ] Add explicit client timeouts (connect / TLS / overall), independent of the long scan context where practical.
-- [ ] Add tests covering blocked hosts / redirects / token-safe errors.
+- [x] Route GitHub issue/PR notification HTTP through the same SSRF-safe dialer / no-redirect / no-proxy posture used for webhooks (`internal/notify`).
+- [x] Add explicit client timeouts (connect / TLS / overall), independent of the long scan context where practical.
+- [x] Add tests covering blocked hosts / redirects / token-safe errors.
 
 ### 4. Fail closed on truncated adapter output (resilience)
 
-- [ ] Make policy / cost / audit command capture fail when stdout/stderr exceeds the size budget (same fail-on-truncate behavior as Terraform `limitedWriter`), instead of silently truncating then parsing.
-- [ ] Prefer a shared truncated-aware buffer in `internal/ioutil`; update callers and tests.
+- [x] Make policy / cost / audit command capture fail when stdout/stderr exceeds the size budget (same fail-on-truncate behavior as Terraform `limitedWriter`), instead of silently truncating then parsing.
+- [x] Prefer a shared truncated-aware buffer in `internal/ioutil`; update callers and tests.
 
 ### 5. Large plan performance (performance)
 
-- [ ] Stream or selectively decode `terraform show -json` so full `prior_state` / unused fields are not held when only counts and changed resources are needed.
-- [ ] Keep attribute-diff extraction bounded; avoid walking huge unchanged blobs.
-- [ ] Add a large-plan fixture or benchmark gate for parse memory/CPU regressions.
+- [x] Stream or selectively decode `terraform show -json` so full `prior_state` / unused fields are not held when only counts and changed resources are needed.
+- [x] Keep attribute-diff extraction bounded; avoid walking huge unchanged blobs.
+- [x] Add a large-plan fixture or benchmark gate for parse memory/CPU regressions.
 
 ### 6. Lock honesty and docs (correctness)
 
 Note: `--lock-backend` currently supports **`local` only** (per-host `O_EXCL` file lock). PLAN previously implied a distributed backend; that is not implemented.
 
-- [ ] Document clearly in README and SECURITY.md that the scan lock is local/single-host unless runners share the lock file via a shared filesystem.
-- [ ] Optionally: add stale-lock guidance (PID check / manual removal) and keep Redis/Postgres backends explicitly out of scope until productized.
+- [x] Document clearly in README and SECURITY.md that the scan lock is local/single-host unless runners share the lock file via a shared filesystem.
+- [x] Optionally: add stale-lock guidance (PID check / manual removal) and keep Redis/Postgres backends explicitly out of scope until productized.
 
 ### Suggested implementation order
 
@@ -252,24 +252,24 @@ Product and UX gaps beyond hardening. Do **not** start these until the Next hard
 
 ### Must (after hardening)
 
-- [ ] Bring `scan-all` to delivery parity with `scan`: support history, dashboard, notifications, policy (as publish gate), and cost/audit enrichment for multi-root runs (or a clear documented subset that is production-usable). Today multi-root intentionally skips most post-scan delivery.
-- [ ] Add Terraform workspace selection and `-var` / `-var-file` passthrough (CLI + config) so one root can target multiple workspaces/env files without requiring separate directories.
+- [x] Bring `scan-all` to delivery parity with `scan`: support history, dashboard, notifications, policy (as publish gate), and cost/audit enrichment for multi-root runs (or a clear documented subset that is production-usable). Today multi-root intentionally skips most post-scan delivery.
+- [x] Add Terraform workspace selection and `-var` / `-var-file` passthrough (CLI + config) so one root can target multiple workspaces/env files without requiring separate directories.
 
 ### Should
 
-- [ ] Stop treating bootstrap no-drift as the default meaningful result: either require `--terraform-exec` for real scans, or keep bootstrap only behind an explicit dry-run/bootstrap flag and fail/warn loudly otherwise.
-- [ ] Make Slack/Teams/webhook notifications actionable: include top-N resource addresses, risk levels, and a pointer to the report (still redacted; no secret attribute values).
-- [ ] Support per-root settings in manifests (at least profile / plan_mode / var-files), so mono-repos are not forced into one global flag set.
+- [x] Stop treating bootstrap no-drift as the default meaningful result: either require `--terraform-exec` for real scans, or keep bootstrap only behind an explicit dry-run/bootstrap flag and fail/warn loudly otherwise.
+- [x] Make Slack/Teams/webhook notifications actionable: include top-N resource addresses, risk levels, and a pointer to the report (still redacted; no secret attribute values).
+- [x] Support per-root settings in manifests (at least profile / plan_mode / var-files), so mono-repos are not forced into one global flag set.
 
 ### UX / DX (cheap wins)
 
-- [ ] Rewrite README current-status section to reflect what is production-usable today; demote “foundation only” language that undersells shipped features.
-- [ ] Emit scan phase progress lines (`init`, `plan`, `show`, `parse`) so long Terraform runs do not look hung (compatible with `--redact-paths`).
-- [ ] Fix stale docs/examples that claim reports lack attributes (e.g. policy examples) so they match `attribute_changes`.
-- [ ] Ship one end-to-end example: scheduled multi-root + Slack + severity gate (config + GitHub Actions).
-- [ ] Clarify exit codes vs `--failure-severity` with one concrete CI example near the flags/docs.
-- [ ] Improve `scan-all` aggregate table/JSON so partial failure vs drift per root is obvious without reading every nested report.
-- [ ] Group advanced `scan` flags in help/docs (core / delivery / enrichment) to reduce flag overload.
+- [x] Rewrite README current-status section to reflect what is production-usable today; demote “foundation only” language that undersells shipped features.
+- [x] Emit scan phase progress lines (`init`, `plan`, `show`, `parse`) so long Terraform runs do not look hung (compatible with `--redact-paths`).
+- [x] Fix stale docs/examples that claim reports lack attributes (e.g. policy examples) so they match `attribute_changes`.
+- [x] Ship one end-to-end example: scheduled multi-root + Slack + severity gate (config + GitHub Actions).
+- [x] Clarify exit codes vs `--failure-severity` with one concrete CI example near the flags/docs.
+- [x] Improve `scan-all` aggregate table/JSON so partial failure vs drift per root is obvious without reading every nested report.
+- [x] Group advanced `scan` flags in help/docs (core / delivery / enrichment) to reduce flag overload.
 
 ### Explicitly out of scope for now
 

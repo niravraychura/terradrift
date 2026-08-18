@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/niravraychura/terradrift/internal/command"
 	"github.com/niravraychura/terradrift/internal/ioutil"
 	"github.com/niravraychura/terradrift/internal/report"
 	"github.com/niravraychura/terradrift/internal/scanner"
@@ -36,10 +37,36 @@ func newScanAllCommand(stdout io.Writer) *cobra.Command {
 	var planMode string
 	var lockBackendName string
 	var skipTerraformInit bool
+	var historyDir string
+	var historyRetention int
+	var historyCompressed bool
+	var dashboardHTMLPath string
+	var notifyTarget string
+	var slackWebhookURL string
+	var teamsWebhookURL string
+	var webhookURL string
+	var webhookCACert string
+	var policyCommand string
+	var policyArgs []string
+	var costCommand string
+	var costArgs []string
+	var auditCommand string
+	var auditArgs []string
+	var allowedCommands []string
+	var trustedCommandDirs []string
+	var attributeValues bool
+	var terraformWorkspace string
+	var varFiles []string
+	var vars []string
+	var scanConfigPath string
 
 	cmd := &cobra.Command{
 		Use:   "scan-all",
 		Short: "Scan Terraform roots from a manifest",
+		Long: `Scan multiple Terraform roots from a text or JSON manifest, or by discovery.
+
+Text manifests list one root directory per line. JSON manifests (version 1) can set
+per-root profile, plan_mode, workspace, var_files, and vars. Named profiles require --config.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if (manifest == "") == (discover == "") {
 				return fmt.Errorf("provide exactly one of --manifest or --discover")
@@ -51,21 +78,39 @@ func newScanAllCommand(stdout io.Writer) *cobra.Command {
 				}
 				incrementalState = normalized
 			}
-			var directories []string
+			for _, path := range []*string{&dashboardHTMLPath, &historyDir} {
+				if *path == "" {
+					continue
+				}
+				normalized, err := normalizeOutputPath(*path)
+				if err != nil {
+					return err
+				}
+				*path = normalized
+			}
+			var roots []manifestRoot
 			var err error
 			if manifest != "" {
-				directories, err = loadScanManifest(manifest)
+				roots, err = loadScanManifest(manifest)
 			} else {
-				directories, err = discoverTerraformRoots(discover, includes, excludes)
+				directories, discoverErr := discoverTerraformRoots(discover, includes, excludes)
+				if discoverErr != nil {
+					return discoverErr
+				}
+				roots = make([]manifestRoot, 0, len(directories))
+				for _, directory := range directories {
+					roots = append(roots, manifestRoot{Directory: directory})
+				}
 			}
 			if err != nil {
 				return err
 			}
 			if incrementalState != "" {
-				directories, err = incrementalRoots(incrementalState, directories)
+				directories, err := incrementalRoots(incrementalState, directoriesFromRoots(roots))
 				if err != nil {
 					return err
 				}
+				roots = filterRoots(roots, directories)
 			}
 			parsedFormat, err := parseOutputFormat(format)
 			if err != nil {
@@ -76,6 +121,13 @@ func newScanAllCommand(stdout io.Writer) *cobra.Command {
 			}
 			if concurrency <= 0 {
 				return fmt.Errorf("concurrency must be greater than zero")
+			}
+			for _, external := range []string{costCommand, policyCommand, auditCommand} {
+				if external != "" {
+					if err := command.Validate(external, allowedCommands, trustedCommandDirs); err != nil {
+						return err
+					}
+				}
 			}
 
 			mode, err := terraform.ParsePlanMode(planMode)
@@ -98,9 +150,37 @@ func newScanAllCommand(stdout io.Writer) *cobra.Command {
 				return err
 			}
 			if terraformExec {
-				options.Runner = terraform.NewCLIRunner(terraformBin)
+				runner := terraform.NewCLIRunner(terraformBin)
+				runner.Workspace = terraformWorkspace
+				runner.VarFiles = append([]string(nil), varFiles...)
+				runner.Vars = append([]string(nil), vars...)
+				options.Runner = runner
+			} else {
+				_, _ = fmt.Fprintln(cmd.ErrOrStderr(), "warning: bootstrap report only; pass --terraform-exec for a real drift scan")
 			}
-			aggregate := scanAll(cmd.Context(), directories, options, concurrency, redactPaths)
+			delivery := deliveryOptions{
+				AttributeValues:   attributeValues,
+				HistoryDir:        historyDir,
+				HistoryRetention:  historyRetention,
+				HistoryCompressed: historyCompressed,
+				DashboardHTMLPath: dashboardHTMLPath,
+				PolicyCommand:     policyCommand,
+				PolicyArgs:        policyArgs,
+				NotifyTarget:      notifyTarget,
+				SlackWebhookURL:   slackWebhookURL,
+				TeamsWebhookURL:   teamsWebhookURL,
+				WebhookURL:        webhookURL,
+				WebhookCACert:     webhookCACert,
+				historyMu:         &sync.Mutex{},
+			}
+			defaults := rootDefaults{
+				PlanMode:  planMode,
+				Workspace: terraformWorkspace,
+				VarFiles:  append([]string(nil), varFiles...),
+				Vars:      append([]string(nil), vars...),
+				Config:    scanConfigPath,
+			}
+			aggregate := scanAll(cmd.Context(), roots, options, defaults, concurrency, redactPaths, costCommand, costArgs, auditCommand, auditArgs, delivery)
 			if err := writeMultiScanReport(stdout, aggregate, parsedFormat); err != nil {
 				return err
 			}
@@ -121,7 +201,7 @@ func newScanAllCommand(stdout io.Writer) *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().StringVar(&manifest, "manifest", "", "newline-delimited Terraform root manifest")
+	cmd.Flags().StringVar(&manifest, "manifest", "", "text or JSON Terraform root manifest")
 	cmd.Flags().StringVar(&discover, "discover", "", "workspace root to discover Terraform roots")
 	cmd.Flags().StringArrayVar(&includes, "include", nil, "root-relative include pattern; repeatable")
 	cmd.Flags().StringArrayVar(&excludes, "exclude", nil, "root-relative exclude pattern; repeatable")
@@ -129,13 +209,33 @@ func newScanAllCommand(stdout io.Writer) *cobra.Command {
 	cmd.Flags().DurationVar(&timeout, "timeout", scanner.DefaultTimeout, "maximum scan duration per root")
 	cmd.Flags().IntVar(&concurrency, "concurrency", 4, "maximum concurrent scans")
 	cmd.Flags().BoolVar(&terraformExec, "terraform-exec", false, "run Terraform-compatible scans")
-	cmd.Flags().StringVar(&planMode, "plan-mode", string(terraform.PlanModeRefreshOnly), "plan mode: refresh-only (remote drift) or normal (configuration reconciliation)")
+	cmd.Flags().StringVar(&planMode, "plan-mode", string(terraform.PlanModeRefreshOnly), "default plan mode: refresh-only or normal (overridable per root)")
 	cmd.Flags().StringVar(&terraformBin, "terraform-bin", "", "Terraform-compatible executable to run (default: terraform)")
 	cmd.Flags().StringVar(&workspaceRoot, "workspace-root", "", "require roots to resolve inside this workspace root")
 	cmd.Flags().BoolVar(&redactPaths, "redact-paths", false, "redact local filesystem paths from scan output")
 	cmd.Flags().StringVar(&incrementalState, "incremental-state", "", "JSON state file; retry only roots previously drifted or failed")
-	cmd.Flags().StringVar(&lockBackendName, "lock-backend", "local", "scan lock backend: local")
+	cmd.Flags().StringVar(&lockBackendName, "lock-backend", "local", "scan lock backend: local (single-host file lock)")
 	cmd.Flags().BoolVar(&skipTerraformInit, "skip-terraform-init", false, "skip terraform init when .terraform is already valid")
+	cmd.Flags().StringVar(&historyDir, "history-dir", "", "write per-root JSON scan history to this directory")
+	cmd.Flags().IntVar(&historyRetention, "history-retention", 0, "maximum history reports to retain (0 keeps all)")
+	cmd.Flags().BoolVar(&historyCompressed, "history-compressed", false, "store history reports as gzip-compressed JSON")
+	cmd.Flags().StringVar(&dashboardHTMLPath, "dashboard-html", "", "write the last successful root dashboard HTML to this path")
+	cmd.Flags().StringVar(&notifyTarget, "notify", "", "notification target: slack, teams, webhook")
+	cmd.Flags().StringVar(&slackWebhookURL, "slack-webhook-url", "", "Slack incoming webhook URL")
+	cmd.Flags().StringVar(&teamsWebhookURL, "teams-webhook-url", "", "Microsoft Teams incoming webhook URL")
+	cmd.Flags().StringVar(&webhookURL, "webhook-url", "", "generic HTTPS webhook URL")
+	cmd.Flags().StringVar(&webhookCACert, "webhook-ca-cert", "", "PEM CA certificate file for webhook TLS verification")
+	cmd.Flags().StringVar(&policyCommand, "policy-command", "", "policy command run per root before history/notify")
+	cmd.Flags().StringArrayVar(&policyArgs, "policy-arg", nil, "policy command argument; repeat for multiple arguments")
+	cmd.Flags().StringVar(&costCommand, "cost-command", "", "cost command to enrich each root report")
+	cmd.Flags().StringArrayVar(&costArgs, "cost-arg", nil, "cost command argument; repeat for multiple arguments")
+	cmd.Flags().StringVar(&auditCommand, "audit-command", "", "audit correlation command to enrich each root report")
+	cmd.Flags().StringArrayVar(&auditArgs, "audit-arg", nil, "audit command argument; repeat for multiple arguments")
+	cmd.Flags().BoolVar(&attributeValues, "attribute-values", false, "include safe attribute values in persisted/automation output")
+	cmd.Flags().StringVar(&terraformWorkspace, "workspace", "", "default Terraform workspace (overridable per root)")
+	cmd.Flags().StringArrayVar(&varFiles, "var-file", nil, "default Terraform -var-file path; repeatable (overridable per root)")
+	cmd.Flags().StringArrayVar(&vars, "var", nil, "default Terraform -var assignment; repeatable (overridable per root)")
+	cmd.Flags().StringVar(&scanConfigPath, "config", "", "config file used to resolve per-root profile names")
 	return cmd
 }
 
@@ -259,29 +359,6 @@ func writeIncrementalState(path string, aggregate multiScanReport) error {
 	return nil
 }
 
-func loadScanManifest(path string) ([]string, error) {
-	data, err := ioutil.ReadLimitedFile(path, int64(maxManifestBytes))
-	if err != nil {
-		return nil, fmt.Errorf("read scan manifest %s: %w", path, err)
-	}
-	base := filepath.Dir(path)
-	directories := make([]string, 0)
-	for _, line := range strings.Split(string(data), "\n") {
-		directory := strings.TrimSpace(line)
-		if directory == "" || strings.HasPrefix(directory, "#") {
-			continue
-		}
-		if !filepath.IsAbs(directory) {
-			directory = filepath.Join(base, directory)
-		}
-		directories = append(directories, directory)
-	}
-	if len(directories) == 0 {
-		return nil, fmt.Errorf("scan manifest %s has no Terraform roots", path)
-	}
-	return directories, nil
-}
-
 func discoverTerraformRoots(root string, includes []string, excludes []string) ([]string, error) {
 	for _, pattern := range append(append([]string{}, includes...), excludes...) {
 		if _, err := filepath.Match(filepath.Clean(pattern), ""); err != nil {
@@ -348,18 +425,28 @@ func matchesPath(path string, patterns []string) bool {
 	return false
 }
 
-func scanAll(ctx context.Context, directories []string, options scanner.Options, concurrency int, redactPaths bool) multiScanReport {
-	roots := make([]multiScanRoot, len(directories))
+func scanAll(ctx context.Context, specs []manifestRoot, options scanner.Options, defaults rootDefaults, concurrency int, redactPaths bool, costCommand string, costArgs []string, auditCommand string, auditArgs []string, delivery deliveryOptions) multiScanReport {
+	roots := make([]multiScanRoot, len(specs))
 	jobs := make(chan int)
 	var workers sync.WaitGroup
-	for range min(concurrency, len(directories)) {
+	for range min(concurrency, len(specs)) {
 		workers.Add(1)
 		go func() {
 			defer workers.Done()
 			for index := range jobs {
-				root := multiScanRoot{Directory: directories[index]}
-				rootOptions := options
-				rootOptions.Directory = directories[index]
+				spec := specs[index]
+				root := multiScanRoot{Directory: spec.Directory}
+				rootOptions, resolveErr := resolveRootOptions(spec, defaults, options)
+				if resolveErr != nil {
+					if redactPaths {
+						root.Directory = "[REDACTED]"
+						root.Error = "scan failed"
+					} else {
+						root.Error = resolveErr.Error()
+					}
+					roots[index] = root
+					continue
+				}
 				result, err := scanner.Scan(ctx, rootOptions)
 				if err != nil {
 					if redactPaths {
@@ -369,17 +456,30 @@ func scanAll(ctx context.Context, directories []string, options scanner.Options,
 						root.Error = err.Error()
 					}
 				} else {
-					root.Report = result.Report
+					scanReport := result.Report
+					enriched, enrichErr := enrichReport(ctx, scanReport, costCommand, costArgs, auditCommand, auditArgs)
+					if enrichErr != nil {
+						root.Error = enrichErr.Error()
+					} else {
+						scanReport = enriched
+						if redactPaths {
+							scanReport.Directory = "[REDACTED]"
+						}
+						if finalizeErr := finalizeRootScan(ctx, scanReport, delivery); finalizeErr != nil {
+							root.Error = finalizeErr.Error()
+						} else {
+							root.Report = scanReport
+						}
+					}
 					if redactPaths {
 						root.Directory = "[REDACTED]"
-						root.Report.Directory = "[REDACTED]"
 					}
 				}
 				roots[index] = root
 			}
 		}()
 	}
-	for index := range directories {
+	for index := range specs {
 		jobs <- index
 	}
 	close(jobs)

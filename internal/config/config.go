@@ -59,6 +59,10 @@ type Config struct {
 	AuditArgs            []string                   `json:"audit_args"`
 	AllowedCommands      []string                   `json:"allowed_commands"`
 	TrustedCommandDirs   []string                   `json:"trusted_command_dirs"`
+	AttributeValues      bool                       `json:"attribute_values"`
+	Workspace            string                     `json:"workspace"`
+	VarFiles             []string                   `json:"var_files"`
+	Vars                 []string                   `json:"vars"`
 	Profiles             map[string]json.RawMessage `json:"profiles,omitempty"`
 }
 

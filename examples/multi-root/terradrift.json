@@ -1,0 +1,36 @@
+{
+  "output": "json",
+  "timeout": "15m",
+  "terraform_exec": true,
+  "plan_mode": "refresh-only",
+  "redact_paths": true,
+  "workspace_root": ".",
+  "notification_throttle": true,
+  "history_dir": ".terradrift-history",
+  "failure_severity": "high",
+  "notify": "slack",
+  "profiles": {
+    "development": {
+      "directory": "terraform/dev",
+      "output": "json",
+      "timeout": "10m",
+      "terraform_exec": true,
+      "plan_mode": "refresh-only",
+      "redact_paths": true,
+      "workspace": "dev",
+      "var_files": ["dev.tfvars"],
+      "failure_severity": "high"
+    },
+    "production": {
+      "directory": "terraform/prod",
+      "output": "json",
+      "timeout": "15m",
+      "terraform_exec": true,
+      "plan_mode": "refresh-only",
+      "redact_paths": true,
+      "workspace": "prod",
+      "var_files": ["prod.tfvars"],
+      "failure_severity": "high"
+    }
+  }
+}

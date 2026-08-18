@@ -16,10 +16,11 @@ const (
 )
 
 // AttributeChange describes one attribute path that differs between before and after.
+// Before/After are omitempty so paths-only persistence omits cleared values.
 type AttributeChange struct {
 	Path   string `json:"path"`
-	Before string `json:"before"`
-	After  string `json:"after"`
+	Before string `json:"before,omitempty"`
+	After  string `json:"after,omitempty"`
 }
 
 // ResourceChange describes a Terraform resource with a relevant plan change.

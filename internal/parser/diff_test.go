@@ -1,6 +1,8 @@
 package parser
 
 import (
+	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/niravraychura/terradrift/internal/report"
@@ -97,4 +99,89 @@ func TestAttributeChangesRedactUnknownAndCreateDelete(t *testing.T) {
 	if got := deleted["ami"]; got.Before != `"ami-old"` || got.After != "(absent)" {
 		t.Fatalf("delete ami = %#v", got)
 	}
+}
+
+func TestAttributeChangesRedactConnectionString(t *testing.T) {
+	beforeValue := "fixture-connection-string-v1"
+	afterValue := "fixture-connection-string-v2"
+	plan := []byte(`{
+		"resource_changes":[{
+			"address":"aws_db_instance.main",
+			"type":"aws_db_instance",
+			"name":"main",
+			"mode":"managed",
+			"change":{
+				"actions":["update"],
+				"before":{"connection_string":"` + beforeValue + `","engine":"postgres"},
+				"after":{"connection_string":"` + afterValue + `","engine":"postgres"}
+			}
+		}]
+	}`)
+	changes, _, _, _, err := ParsePlan(plan, terraform.PlanModeNormal)
+	if err != nil || len(changes) != 1 {
+		t.Fatalf("parse plan: %#v err=%v", changes, err)
+	}
+	attrs := map[string]report.AttributeChange{}
+	for _, attr := range changes[0].AttributeChanges {
+		attrs[attr.Path] = attr
+	}
+	if got := attrs["connection_string"]; got.Before != "[REDACTED]" || got.After != "[REDACTED]" {
+		t.Fatalf("connection_string = %#v", got)
+	}
+	encoded := string(mustMarshal(t, changes))
+	if strings.Contains(encoded, beforeValue) || strings.Contains(encoded, afterValue) {
+		t.Fatalf("connection string leaked: %s", encoded)
+	}
+}
+
+func TestAttributeChangesSummarizeLargeBlobs(t *testing.T) {
+	blob := strings.Repeat("a", 4128)
+	plan := []byte(`{
+		"resource_changes":[{
+			"address":"aws_iam_policy.main",
+			"type":"aws_iam_policy",
+			"name":"main",
+			"mode":"managed",
+			"change":{
+				"actions":["update"],
+				"before":{"policy":` + mustQuoteJSON(blob) + `,"name":"main"},
+				"after":{"policy":` + mustQuoteJSON(blob+"x") + `,"name":"main"}
+			}
+		}]
+	}`)
+	changes, _, _, _, err := ParsePlan(plan, terraform.PlanModeNormal)
+	if err != nil || len(changes) != 1 {
+		t.Fatalf("parse plan: %#v err=%v", changes, err)
+	}
+	attrs := map[string]report.AttributeChange{}
+	for _, attr := range changes[0].AttributeChanges {
+		attrs[attr.Path] = attr
+	}
+	if got := attrs["policy"]; got.Before != "[changed, 4128B]" || got.After != "[changed, 4129B]" {
+		t.Fatalf("policy summary = %#v", got)
+	}
+	if strings.Contains(gotString(attrs["policy"]), "aaaa") {
+		t.Fatal("expected blob summary without partial dump")
+	}
+}
+
+func mustMarshal(t *testing.T, value any) []byte {
+	t.Helper()
+	data, err := json.Marshal(value)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	return data
+}
+
+func mustQuoteJSON(value string) string {
+	data, err := json.Marshal(value)
+	if err != nil {
+		panic(err)
+	}
+	return string(data)
+}
+
+func gotString(attr report.AttributeChange) string {
+	return attr.Before + attr.After
 }

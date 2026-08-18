@@ -65,6 +65,48 @@ printf '%s' "$*" > "$TERRADRIFT_ARGS"
 	}
 }
 
+func TestCLIRunnerPlanSelectsWorkspaceAndPassesVars(t *testing.T) {
+	commandsPath := filepath.Join(t.TempDir(), "commands")
+	runner := NewCLIRunner(writeTerraformStub(t, `#!/bin/sh
+printf '%s\n' "$*" >> "$TERRADRIFT_COMMANDS"
+`))
+	runner.Workspace = "staging"
+	runner.VarFiles = []string{"prod.tfvars"}
+	runner.Vars = []string{"region=us-east-1"}
+	t.Setenv("TERRADRIFT_COMMANDS", commandsPath)
+	if _, err := runner.Plan(context.Background(), t.TempDir(), "plan.tfplan", PlanModeNormal); err != nil {
+		t.Fatalf("plan: %v", err)
+	}
+	data, err := os.ReadFile(commandsPath)
+	if err != nil {
+		t.Fatalf("read commands: %v", err)
+	}
+	lines := strings.Split(strings.TrimSpace(string(data)), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("expected workspace select then plan, got %q", data)
+	}
+	if lines[0] != "workspace select staging" {
+		t.Fatalf("workspace command = %q", lines[0])
+	}
+	if !strings.Contains(lines[1], "-var-file=prod.tfvars") || !strings.Contains(lines[1], "-var=region=us-east-1") {
+		t.Fatalf("plan args = %q", lines[1])
+	}
+}
+
+func TestCLIRunnerWorkspaceSelectFailure(t *testing.T) {
+	runner := NewCLIRunner(writeTerraformStub(t, `#!/bin/sh
+if [ "$1" = "workspace" ]; then
+  printf 'no such workspace' >&2
+  exit 1
+fi
+`))
+	runner.Workspace = "missing"
+	_, err := runner.Plan(context.Background(), t.TempDir(), "plan.tfplan", PlanModeNormal)
+	if err == nil || !strings.Contains(err.Error(), `workspace select "missing"`) {
+		t.Fatalf("expected workspace select error, got %v", err)
+	}
+}
+
 func TestParsePlanModeRejectsInvalidValue(t *testing.T) {
 	if _, err := ParsePlanMode("apply"); err == nil {
 		t.Fatal("expected invalid mode error")
