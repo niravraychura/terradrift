@@ -243,6 +243,8 @@ terradrift scan-all --discover . --terraform-exec --concurrency 4
 
 More detail and examples: [`examples/multi-root`](examples/multi-root).
 
+`scan-all` uses the same per-root delivery path as `scan` (history, notify, policy, ignore/owners, GitHub, artifacts, audit-log). Shared `--dashboard-html` / `--github-pr` still apply once per root — prefer `dashboard-index` and comment upsert for quieter multi-root CI.
+
 Cross-root HTML index from history:
 
 ```bash
@@ -340,7 +342,7 @@ Compare both modes when unsure whether a finding is out-of-band change vs unappl
 | Audit adapters | [docs/AUDIT_ADAPTERS.md](docs/AUDIT_ADAPTERS.md) |
 | All `scan` flags | `terradrift scan --help` |
 
-Advanced features (baselines, ignore rules, owner routing, GitHub PR/issue comments, approvals, artifact upload) are configured via `.terradrift.json` / flags — see `terradrift scan --help` and [examples/config](examples/config/README.md).
+Advanced features (baselines, ignore rules, owner routing, GitHub PR/issue comments, approvals, artifact upload) are configured via `.terradrift.json` / flags — see `terradrift scan --help` / `terradrift scan-all --help` and [examples/config](examples/config/README.md).
 
 ---
 
