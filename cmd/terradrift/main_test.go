@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -1125,6 +1126,99 @@ func TestScanAllWritesAuditLog(t *testing.T) {
 	}
 	if !strings.Contains(string(data), `"event":"scan_completed"`) {
 		t.Fatalf("expected audit event, got %s", data)
+	}
+}
+
+func TestScanAllRedactsPathsBeforeHistory(t *testing.T) {
+	root := t.TempDir()
+	directory := filepath.Join(root, "development")
+	if err := os.Mkdir(directory, 0o700); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	manifest := filepath.Join(root, "roots.txt")
+	if err := os.WriteFile(manifest, []byte("development\n"), 0o600); err != nil {
+		t.Fatalf("manifest: %v", err)
+	}
+	historyDir := filepath.Join(t.TempDir(), "history")
+	stdout, _, err := executeCommand(
+		"scan-all", "--manifest", manifest, "--output", "json", "--concurrency", "1",
+		"--redact-paths", "--history-dir", historyDir,
+	)
+	if err != nil {
+		t.Fatalf("scan-all: %v", err)
+	}
+	if strings.Contains(stdout, root) || strings.Contains(stdout, directory) {
+		t.Fatalf("path leaked into stdout: %s", stdout)
+	}
+	entries, err := os.ReadDir(historyDir)
+	if err != nil || len(entries) != 1 {
+		t.Fatalf("history entries: %v %#v", err, entries)
+	}
+	data, err := os.ReadFile(filepath.Join(historyDir, entries[0].Name()))
+	if err != nil {
+		t.Fatalf("read history: %v", err)
+	}
+	if strings.Contains(string(data), root) || strings.Contains(string(data), directory) {
+		t.Fatalf("path leaked into history: %s", data)
+	}
+	if !strings.Contains(string(data), `[REDACTED]`) {
+		t.Fatalf("expected redacted directory in history, got %s", data)
+	}
+}
+
+func TestScanAllSurfacesAuditLogWriteErrors(t *testing.T) {
+	root := t.TempDir()
+	directory := filepath.Join(root, "development")
+	if err := os.Mkdir(directory, 0o700); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	manifest := filepath.Join(root, "roots.txt")
+	if err := os.WriteFile(manifest, []byte("development\n"), 0o600); err != nil {
+		t.Fatalf("manifest: %v", err)
+	}
+	auditLog := t.TempDir() // existing directory; OpenFile for append must fail
+	stdout, _, err := executeCommand(
+		"scan-all", "--manifest", manifest, "--output", "json", "--concurrency", "1",
+		"--audit-log", auditLog,
+	)
+	if err == nil {
+		t.Fatal("expected audit log write failure to fail the multi-root scan")
+	}
+	var aggregate multiScanReport
+	if unmarshalErr := json.Unmarshal([]byte(stdout), &aggregate); unmarshalErr != nil {
+		t.Fatalf("aggregate json: %v stdout=%q", unmarshalErr, stdout)
+	}
+	if aggregate.FailedRoots != 1 || aggregate.Roots[0].Error == "" {
+		t.Fatalf("expected failed root from audit write, got %#v", aggregate)
+	}
+}
+
+func TestAppendScanAllAuditUsesProvidedReportStatus(t *testing.T) {
+	auditLog := filepath.Join(t.TempDir(), "audit.jsonl")
+	err := appendScanAllAudit(
+		scanAllParams{
+			Enrichment: reportEnrichmentOptions{AuditLogPath: auditLog},
+			Delivery:   deliveryOptions{historyMu: &sync.Mutex{}},
+		},
+		multiScanRoot{
+			Directory: "development",
+			Report: report.DriftReport{
+				ScanID: "scan-1",
+				Status: report.ScanStatusDriftDetected,
+			},
+		},
+		"",
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("append audit: %v", err)
+	}
+	data, err := os.ReadFile(auditLog)
+	if err != nil {
+		t.Fatalf("read audit: %v", err)
+	}
+	if !strings.Contains(string(data), `"status":"drift_detected"`) {
+		t.Fatalf("expected pre-ignore drift status in audit log, got %s", data)
 	}
 }
 

@@ -631,10 +631,11 @@ func scanAll(ctx context.Context, params scanAllParams) multiScanReport {
 					if params.RedactPaths {
 						root.Directory = "[REDACTED]"
 						root.Error = "scan failed"
+						_ = appendScanAllAudit(params, root, spec.Profile, nil)
 					} else {
 						root.Error = resolveErr.Error()
+						_ = appendScanAllAudit(params, root, spec.Profile, resolveErr)
 					}
-					appendScanAllAudit(params, root, spec.Profile, resolveErr)
 					roots[index] = root
 					continue
 				}
@@ -643,25 +644,27 @@ func scanAll(ctx context.Context, params scanAllParams) multiScanReport {
 					if params.RedactPaths {
 						root.Directory = "[REDACTED]"
 						root.Error = "scan failed"
+						_ = appendScanAllAudit(params, root, spec.Profile, nil)
 					} else {
 						root.Error = err.Error()
+						_ = appendScanAllAudit(params, root, spec.Profile, err)
 					}
-					appendScanAllAudit(params, root, spec.Profile, err)
 				} else {
+					auditReport := result.Report
 					scanReport := result.Report
+					if params.RedactPaths {
+						scanReport.Directory = "[REDACTED]"
+						root.Directory = "[REDACTED]"
+					}
 					processErr := enrichAndFinalizeRoot(ctx, &scanReport, params)
 					if processErr != nil {
 						root.Error = processErr.Error()
-						appendScanAllAudit(params, multiScanRoot{Directory: root.Directory, Report: scanReport, Error: processErr.Error()}, spec.Profile, processErr)
+						_ = appendScanAllAudit(params, multiScanRoot{Directory: root.Directory, Report: auditReport, Error: processErr.Error()}, spec.Profile, processErr)
 					} else {
-						if params.RedactPaths {
-							scanReport.Directory = "[REDACTED]"
-						}
 						root.Report = scanReport
-						appendScanAllAudit(params, root, spec.Profile, nil)
-					}
-					if params.RedactPaths {
-						root.Directory = "[REDACTED]"
+						if auditErr := appendScanAllAudit(params, multiScanRoot{Directory: root.Directory, Report: auditReport}, spec.Profile, nil); auditErr != nil {
+							root.Error = auditErr.Error()
+						}
 					}
 				}
 				roots[index] = root
@@ -724,16 +727,23 @@ func enrichAndFinalizeRoot(ctx context.Context, scanReport *report.DriftReport, 
 	return finalizeRootScan(ctx, *scanReport, params.Delivery)
 }
 
-func appendScanAllAudit(params scanAllParams, root multiScanRoot, profile string, runErr error) {
+func appendScanAllAudit(params scanAllParams, root multiScanRoot, profile string, runErr error) error {
 	if params.Enrichment.AuditLogPath == "" {
-		return
+		return nil
+	}
+	workspace := root.Directory
+	if root.Report.Directory != "" {
+		workspace = root.Report.Directory
+	}
+	if workspace != "" && workspace != "[REDACTED]" {
+		workspace = filepath.Base(workspace)
 	}
 	event := auditlog.Event{
 		Event:            "scan_completed",
 		ScanID:           root.Report.ScanID,
 		Status:           string(root.Report.Status),
 		PlanMode:         root.Report.PlanMode,
-		Workspace:        filepath.Base(root.Directory),
+		Workspace:        workspace,
 		Config:           filepath.Base(params.Enrichment.ConfigPath),
 		Profile:          profile,
 		TerraformVersion: root.Report.TerraformVersion,
@@ -747,7 +757,7 @@ func appendScanAllAudit(params scanAllParams, root multiScanRoot, profile string
 			event.Error = root.Error
 		}
 	}
-	_ = withHistoryLock(params.Delivery.historyMu, func() error {
+	return withHistoryLock(params.Delivery.historyMu, func() error {
 		return auditlog.Append(params.Enrichment.AuditLogPath, event)
 	})
 }
