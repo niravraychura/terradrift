@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `terradrift --version` / `-v` (release builds inject the tag via `-ldflags`)
 
+### Fixed
+
+- Refresh-only JSON/table reports now include attribute diffs when Terraform puts values on `resource_changes`, identity fields, or `relevant_attributes` instead of `resource_drift`
+
 ## [0.1.0] - 2026-08-19
 
 First public tagged release of the self-hosted TerraDrift CLI.

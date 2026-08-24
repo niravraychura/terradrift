@@ -23,6 +23,7 @@ cmd/terradrift -> config -> scanner -> terraform -> parser -> report
 - **Always redacted**: Terraform sensitive marks and name heuristics (`password`, `secret`, `token`, `connection_string`, `db_url`, `user_data`, `private_key_pem`, `oauth`, and related markers).
 - **Summarized**: large strings / encoded objects over 200 characters become `[changed, NB]`.
 - **Stdout**: may include safe scalars and redacted/summarized values.
+- **Refresh-only**: reports prefer `resource_drift`. When those entries omit `before`/`after`, TerraDrift copies diffs from the matching `resource_changes` address, then `before_identity`/`after_identity`, then `relevant_attributes` paths.
 - **Default persistence/automation** (history, artifacts, policy stdin, dashboards, notifications): attribute **paths only** unless `--attribute-values` / `attribute_values` is set. Even then, secrets remain redacted.
 
 External policy, cost, and audit adapters receive report JSON on standard input. They are explicit commands only; use configuration allowlists and trusted command directories in CI. Adapter stdout/stderr that exceeds the size budget fails closed.

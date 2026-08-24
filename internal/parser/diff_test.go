@@ -171,6 +171,35 @@ func TestAttributeChangesRedactNovelSecretNames(t *testing.T) {
 	}
 }
 
+func TestAttributeChangesIncludeIdentityDiffs(t *testing.T) {
+	plan := []byte(`{
+		"resource_drift":[{
+			"address":"aws_lb.main",
+			"type":"aws_lb",
+			"name":"main",
+			"mode":"managed",
+			"change":{
+				"actions":["update"],
+				"before":{"idle_timeout":120},
+				"after":{"idle_timeout":120},
+				"before_identity":{"id":"old-id"},
+				"after_identity":{"id":"new-id"}
+			}
+		}]
+	}`)
+	changes, _, _, _, err := ParsePlan(plan, terraform.PlanModeRefreshOnly)
+	if err != nil || len(changes) != 1 {
+		t.Fatalf("parse plan: %#v err=%v", changes, err)
+	}
+	attrs := map[string]report.AttributeChange{}
+	for _, attr := range changes[0].AttributeChanges {
+		attrs[attr.Path] = attr
+	}
+	if got := attrs["identity.id"]; got.Before != `"old-id"` || got.After != `"new-id"` {
+		t.Fatalf("identity.id = %#v attrs=%#v", got, attrs)
+	}
+}
+
 func TestAttributeChangesSummarizeLargeBlobs(t *testing.T) {
 	blob := strings.Repeat("a", 4128)
 	plan := []byte(`{
