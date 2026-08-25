@@ -34,3 +34,4 @@ Notes:
 - Keep webhook URLs in secrets, never in the JSON files.
 - Attribute values stay paths-only in history/notifications unless you pass `--attribute-values`.
 - Per-root `profile` values are resolved from `--config`.
+- `--config` also loads shared delivery defaults (ignore/baseline, owners, GitHub, audit-log, allowlists) for every root.
