@@ -237,6 +237,73 @@ func TestParsePlanSkipsUnusedTopLevelFields(t *testing.T) {
 	}
 }
 
+func TestParsePlanRefreshOnlyCopiesAttributeDiffsFromResourceChanges(t *testing.T) {
+	plan := []byte(`{
+		"resource_drift":[{
+			"address":"aws_lb.main",
+			"type":"aws_lb",
+			"name":"main",
+			"mode":"managed",
+			"change":{"actions":["update"]}
+		}],
+		"resource_changes":[{
+			"address":"aws_lb.main",
+			"type":"aws_lb",
+			"name":"main",
+			"mode":"managed",
+			"change":{
+				"actions":["update"],
+				"before":{"idle_timeout":120,"tags":{"Environment":"dev"}},
+				"after":{"idle_timeout":600,"tags":{"Environment":"dev","aws-apn-id":"pc-example"}}
+			}
+		}]
+	}`)
+	changes, _, _, _, err := ParsePlan(plan, terraform.PlanModeRefreshOnly)
+	if err != nil || len(changes) != 1 || changes[0].Address != "aws_lb.main" {
+		t.Fatalf("parse plan: %#v err=%v", changes, err)
+	}
+	attrs := map[string]report.AttributeChange{}
+	for _, attr := range changes[0].AttributeChanges {
+		attrs[attr.Path] = attr
+	}
+	if got := attrs["idle_timeout"]; got.Before != "120" || got.After != "600" {
+		t.Fatalf("idle_timeout = %#v", got)
+	}
+	if got := attrs[`tags["aws-apn-id"]`]; got.Before != "(absent)" || got.After != `"pc-example"` {
+		t.Fatalf("tags aws-apn-id = %#v attrs=%#v", got, attrs)
+	}
+}
+
+func TestParsePlanRefreshOnlyUsesRelevantAttributePaths(t *testing.T) {
+	plan := []byte(`{
+		"resource_drift":[{
+			"address":"aws_lb.main",
+			"type":"aws_lb",
+			"name":"main",
+			"mode":"managed",
+			"change":{"actions":["update"]}
+		}],
+		"relevant_attributes":[
+			{"resource":"aws_lb.main","attribute":["idle_timeout"]},
+			{"resource":"aws_lb.main","attribute":["tags","aws-apn-id"]}
+		]
+	}`)
+	changes, _, _, _, err := ParsePlan(plan, terraform.PlanModeRefreshOnly)
+	if err != nil || len(changes) != 1 {
+		t.Fatalf("parse plan: %#v err=%v", changes, err)
+	}
+	paths := map[string]bool{}
+	for _, attr := range changes[0].AttributeChanges {
+		paths[attr.Path] = true
+		if attr.Before != "" || attr.After != "" {
+			t.Fatalf("expected path-only fallback, got %#v", attr)
+		}
+	}
+	if !paths["idle_timeout"] || !paths[`tags["aws-apn-id"]`] {
+		t.Fatalf("expected relevant attribute paths, got %#v", changes[0].AttributeChanges)
+	}
+}
+
 func TestParsePlanReaderMatchesParsePlan(t *testing.T) {
 	plan := []byte(`{"prior_state":{"values":{"root_module":{"resources":[{"mode":"managed"}]}}},"resource_changes":[{"address":"aws_instance.web","type":"aws_instance","name":"web","mode":"managed","change":{"actions":["update"]}}]}`)
 	aChanges, aOutputs, aTotal, aExact, aErr := ParsePlan(plan, terraform.PlanModeNormal)

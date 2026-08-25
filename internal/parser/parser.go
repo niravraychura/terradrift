@@ -29,14 +29,24 @@ type terraformChange struct {
 	AfterUnknown    json.RawMessage `json:"after_unknown"`
 	BeforeSensitive json.RawMessage `json:"before_sensitive"`
 	AfterSensitive  json.RawMessage `json:"after_sensitive"`
+	BeforeIdentity  json.RawMessage `json:"before_identity"`
+	AfterIdentity   json.RawMessage `json:"after_identity"`
+}
+
+type terraformRelevantAttr struct {
+	Resource  string          `json:"resource"`
+	Attribute json.RawMessage `json:"attribute"`
 }
 
 // ParsePlan converts the subset of Terraform plan JSON needed for reports.
 //
 // Refresh-only plans use resource_drift when it is present. Older Terraform and
 // OpenTofu JSON renderers can omit that field, so only then do we fall back to
-// resource_changes. Prior-state inventory is exact when its root module exists;
-// otherwise resource_changes supplies a clearly marked estimate.
+// resource_changes. Drift entries sometimes omit before/after (Terraform 1.14+
+// identity-only or compact drift objects); we then copy diffs from the matching
+// resource_changes address, identity fields, or relevant_attributes paths.
+// Prior-state inventory is exact when its root module exists; otherwise
+// resource_changes supplies a clearly marked estimate.
 //
 // Parsing is token-streamed: unused top-level fields (configuration, planned_values,
 // etc.) and prior_state resource value blobs are skipped without materializing them.
@@ -63,6 +73,7 @@ func ParsePlanReader(reader io.Reader, mode terraform.PlanMode) ([]report.Resour
 	var resourceDrift []terraformResourceChange
 	var haveResourceDrift bool
 	var outputChanges map[string]terraformChange
+	var relevantAttrs []terraformRelevantAttr
 	priorTotal := 0
 	priorExact := false
 
@@ -81,6 +92,11 @@ func ParsePlanReader(reader io.Reader, mode terraform.PlanMode) ([]report.Resour
 		case "resource_drift":
 			haveResourceDrift = true
 			resourceDrift, err = decodeResourceChangesArray(decoder)
+		case "relevant_attributes":
+			err = decoder.Decode(&relevantAttrs)
+			if err != nil {
+				err = fmt.Errorf("parse terraform relevant attributes: %w", err)
+			}
 		case "output_changes":
 			err = decoder.Decode(&outputChanges)
 			if err != nil {
@@ -104,6 +120,9 @@ func ParsePlanReader(reader io.Reader, mode terraform.PlanMode) ([]report.Resour
 		selected = resourceDrift
 	}
 	changes := relevantChanges(selected)
+	if mode == terraform.PlanModeRefreshOnly && haveResourceDrift {
+		fillMissingAttributeChanges(changes, resourceChanges, relevantAttrs)
+	}
 	sort.Slice(changes, func(i, j int) bool { return changes[i].Address < changes[j].Address })
 
 	outputs := make([]report.OutputChange, 0, len(outputChanges))
@@ -167,6 +186,99 @@ func relevantChanges(source []terraformResourceChange) []report.ResourceChange {
 		})
 	}
 	return changes
+}
+
+func fillMissingAttributeChanges(changes []report.ResourceChange, fallback []terraformResourceChange, relevant []terraformRelevantAttr) {
+	if len(changes) == 0 {
+		return
+	}
+	byAddr := make(map[string][]report.AttributeChange, len(fallback))
+	for _, resourceChange := range fallback {
+		diffs := attributeChangesFor(resourceChange.Change)
+		if len(diffs) > 0 {
+			byAddr[resourceChange.Address] = diffs
+		}
+	}
+	relevantByAddr := relevantAttributePaths(relevant)
+	for i := range changes {
+		if extra := byAddr[changes[i].Address]; len(extra) > 0 {
+			changes[i].AttributeChanges = mergeAttributeChanges(changes[i].AttributeChanges, extra)
+			if len(changes[i].AttributeChanges) > maxAttributeDiffsPerResource {
+				changes[i].AttributeChanges = changes[i].AttributeChanges[:maxAttributeDiffsPerResource]
+			}
+		}
+		if len(changes[i].AttributeChanges) > 0 {
+			continue
+		}
+		paths := relevantByAddr[changes[i].Address]
+		if len(paths) == 0 {
+			continue
+		}
+		attrs := make([]report.AttributeChange, 0, len(paths))
+		for _, path := range paths {
+			attrs = append(attrs, report.AttributeChange{Path: path})
+		}
+		changes[i].AttributeChanges = attrs
+	}
+}
+
+func mergeAttributeChanges(dst, src []report.AttributeChange) []report.AttributeChange {
+	if len(src) == 0 {
+		return dst
+	}
+	if len(dst) == 0 {
+		return src
+	}
+	seen := make(map[string]struct{}, len(dst))
+	for _, attr := range dst {
+		seen[attr.Path] = struct{}{}
+	}
+	for _, attr := range src {
+		if _, ok := seen[attr.Path]; ok {
+			continue
+		}
+		dst = append(dst, attr)
+	}
+	return dst
+}
+
+func relevantAttributePaths(relevant []terraformRelevantAttr) map[string][]string {
+	out := make(map[string][]string)
+	for _, attr := range relevant {
+		path := flattenAttributePath(attr.Attribute)
+		if attr.Resource == "" || path == "" {
+			continue
+		}
+		out[attr.Resource] = append(out[attr.Resource], path)
+	}
+	return out
+}
+
+func flattenAttributePath(raw json.RawMessage) string {
+	trimmed := bytes.TrimSpace(raw)
+	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {
+		return ""
+	}
+	var steps []any
+	if err := json.Unmarshal(trimmed, &steps); err != nil {
+		var single string
+		if err := json.Unmarshal(trimmed, &single); err != nil || single == "" {
+			return ""
+		}
+		return single
+	}
+	path := ""
+	for _, step := range steps {
+		switch typed := step.(type) {
+		case string:
+			path = joinPath(path, typed)
+		case float64:
+			path = joinIndex(path, int(typed))
+		default:
+			return ""
+		}
+	}
+	return path
 }
 
 func countPriorStateFromDecoder(decoder *json.Decoder) (int, bool, error) {
