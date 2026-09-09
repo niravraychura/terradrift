@@ -130,6 +130,10 @@ terradrift scan -d ./terraform/prod --terraform-exec --output sarif
 terradrift scan -d ./terraform/prod --terraform-exec --output prometheus
 ```
 
+Prometheus series use a bounded `root_id` hash per Terraform root (never a directory path). `scan-all --output prometheus` adds `terradrift_roots{result="total|drifted|changed|failed"}` plus one sample set per successful root.
+
+Scan progress (`scan started`, `terraform init` / `plan` / `show`, parse) goes to **stderr**. Use `--quiet` to keep only errors. `--redact-paths` redacts directories in those logs too.
+
 Report JSON stability notes: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ---
@@ -238,6 +242,7 @@ environments/production
 
 ```bash
 terradrift scan-all --manifest terraform-roots.txt --concurrency 4 --terraform-exec --output json
+terradrift scan-all --manifest terraform-roots.txt --terraform-exec --output prometheus
 ```
 
 **Option B — JSON manifest** (per-root workspace / vars / profile):
@@ -262,7 +267,7 @@ More detail and examples: [`examples/multi-root`](examples/multi-root).
 
 `scan-all` uses the same per-root delivery path as `scan` (history, notify, policy, ignore/owners, GitHub, artifacts, audit-log). Shared `--dashboard-html` is overwritten by the last successful root when concurrency > 1; `--github-pr` upserts one TerraDrift comment on that PR.
 
-Cross-root HTML index from history:
+Cross-root HTML index from history (grouped by directory):
 
 ```bash
 terradrift dashboard-index --history-dir .terradrift-history --output terradrift-index.html

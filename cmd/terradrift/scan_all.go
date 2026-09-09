@@ -228,8 +228,8 @@ TerraDrift comment on that pull request (last successful root wins).`,
 			if err != nil {
 				return err
 			}
-			if parsedFormat != outputFormatTable && parsedFormat != outputFormatJSON {
-				return fmt.Errorf("scan-all supports table and json output")
+			if parsedFormat != outputFormatTable && parsedFormat != outputFormatJSON && parsedFormat != outputFormatPrometheus {
+				return fmt.Errorf("scan-all supports table, json, and prometheus output")
 			}
 			if concurrency <= 0 {
 				return fmt.Errorf("concurrency must be greater than zero")
@@ -267,6 +267,7 @@ TerraDrift comment on that pull request (last successful root wins).`,
 				PlanMode:      mode,
 				LockBackend:   lockBackend,
 				SkipInit:      skipTerraformInit,
+				RedactPaths:   redactPaths,
 			}
 			options, err = scanner.PrepareOptions(options)
 			if err != nil {
@@ -371,7 +372,7 @@ TerraDrift comment on that pull request (last successful root wins).`,
 	cmd.Flags().StringVar(&discover, "discover", "", "workspace root to discover Terraform roots")
 	cmd.Flags().StringArrayVar(&includes, "include", nil, "root-relative include pattern; repeatable")
 	cmd.Flags().StringArrayVar(&excludes, "exclude", nil, "root-relative exclude pattern; repeatable")
-	cmd.Flags().StringVarP(&format, "output", "o", string(outputFormatTable), "output format: table, json")
+	cmd.Flags().StringVarP(&format, "output", "o", string(outputFormatTable), "output format: table, json, prometheus")
 	cmd.Flags().DurationVar(&timeout, "timeout", scanner.DefaultTimeout, "maximum scan duration per root")
 	cmd.Flags().IntVar(&concurrency, "concurrency", 4, "maximum concurrent scans")
 	cmd.Flags().BoolVar(&terraformExec, "terraform-exec", false, "run Terraform-compatible scans")

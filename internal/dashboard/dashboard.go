@@ -30,6 +30,13 @@ var reportTemplate = template.Must(template.New("dashboard").Parse(`<!doctype ht
 <head>
   <meta charset="utf-8">
   <title>TerraDrift Report</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 1.5rem; color: #1a1a1a; line-height: 1.4; }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { border: 1px solid #d0d0d0; padding: 0.4rem 0.6rem; text-align: left; }
+    th { background: #f3f3f3; }
+    h2 { margin-top: 1.5rem; }
+  </style>
 </head>
 <body>
   <main>
@@ -57,16 +64,38 @@ var reportTemplate = template.Must(template.New("dashboard").Parse(`<!doctype ht
 </html>
 `))
 
+type indexGroup struct {
+	Directory string
+	Entries   []history.Entry
+}
+
+type indexData struct {
+	Groups []indexGroup
+}
+
 var indexTemplate = template.Must(template.New("dashboard-index").Parse(`<!doctype html>
 <html lang="en">
-<head><meta charset="utf-8"><title>TerraDrift Dashboard Index</title></head>
+<head>
+  <meta charset="utf-8">
+  <title>TerraDrift Dashboard Index</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 1.5rem; color: #1a1a1a; line-height: 1.4; }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { border: 1px solid #d0d0d0; padding: 0.4rem 0.6rem; text-align: left; }
+    th { background: #f3f3f3; }
+    h2 { margin-top: 1.5rem; font-size: 1.1rem; }
+  </style>
+</head>
 <body>
   <main>
     <h1>TerraDrift Dashboard Index</h1>
+    {{range .Groups}}
+    <h2>{{.Directory}}</h2>
     <table>
-      <thead><tr><th>Scan ID</th><th>Directory</th><th>Completed at</th><th>Status</th><th>Plan mode</th><th>Resources checked</th><th>Changed resources</th></tr></thead>
-      <tbody>{{range .}}<tr><td>{{.Report.ScanID}}</td><td>{{.Report.Directory}}</td><td>{{.Report.CompletedAt}}</td><td>{{.Report.Status}}</td><td>{{.Report.PlanMode}}</td><td>{{.Report.TotalResourcesChecked}}</td><td>{{.Report.TotalChangedResources}}</td></tr>{{else}}<tr><td colspan="7">No history available</td></tr>{{end}}</tbody>
+      <thead><tr><th>Scan ID</th><th>Completed at</th><th>Status</th><th>Plan mode</th><th>Resources checked</th><th>Changed resources</th></tr></thead>
+      <tbody>{{range .Entries}}<tr><td>{{.Report.ScanID}}</td><td>{{.Report.CompletedAt}}</td><td>{{.Report.Status}}</td><td>{{.Report.PlanMode}}</td><td>{{.Report.TotalResourcesChecked}}</td><td>{{.Report.TotalChangedResources}}</td></tr>{{end}}</tbody>
     </table>
+    {{else}}<p>No history available</p>{{end}}
   </main>
 </body>
 </html>
@@ -96,10 +125,27 @@ func trendFor(entries []history.Entry) Trend {
 	return trend
 }
 
-// RenderIndex writes an escaped static index across recent scan history.
+// RenderIndex writes an escaped static index grouped by Terraform root directory.
 func RenderIndex(w io.Writer, entries []history.Entry) error {
-	if err := indexTemplate.Execute(w, entries); err != nil {
+	if err := indexTemplate.Execute(w, indexData{Groups: groupIndexEntries(entries)}); err != nil {
 		return fmt.Errorf("render dashboard index: %w", err)
 	}
 	return nil
+}
+
+func groupIndexEntries(entries []history.Entry) []indexGroup {
+	order := make([]string, 0)
+	byDir := make(map[string][]history.Entry)
+	for _, entry := range entries {
+		dir := entry.Report.Directory
+		if _, ok := byDir[dir]; !ok {
+			order = append(order, dir)
+		}
+		byDir[dir] = append(byDir[dir], entry)
+	}
+	groups := make([]indexGroup, 0, len(order))
+	for _, dir := range order {
+		groups = append(groups, indexGroup{Directory: dir, Entries: byDir[dir]})
+	}
+	return groups
 }

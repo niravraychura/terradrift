@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"os"
@@ -17,6 +18,7 @@ import (
 	"github.com/niravraychura/terradrift/internal/dashboard"
 	"github.com/niravraychura/terradrift/internal/history"
 	"github.com/niravraychura/terradrift/internal/ioutil"
+	"github.com/niravraychura/terradrift/internal/logger"
 	"github.com/niravraychura/terradrift/internal/redact"
 	"github.com/niravraychura/terradrift/internal/report"
 	"github.com/spf13/cobra"
@@ -64,15 +66,28 @@ func exitCodeForError(err error) int {
 }
 
 func newRootCommand(stdout, stderr io.Writer) *cobra.Command {
+	var quiet bool
 	cmd := &cobra.Command{
 		Use:           "terradrift",
 		Short:         "Self-hosted Terraform drift detection",
 		Version:       version,
 		SilenceUsage:  true,
 		SilenceErrors: true,
+		PersistentPreRun: func(cmd *cobra.Command, _ []string) {
+			ctx := cmd.Context()
+			if ctx == nil {
+				ctx = context.Background()
+			}
+			level := slog.LevelInfo
+			if quiet {
+				level = slog.LevelError
+			}
+			cmd.SetContext(logger.With(ctx, slog.New(slog.NewTextHandler(cmd.ErrOrStderr(), &slog.HandlerOptions{Level: level}))))
+		},
 	}
 	cmd.SetOut(stdout)
 	cmd.SetErr(stderr)
+	cmd.PersistentFlags().BoolVar(&quiet, "quiet", false, "suppress scan progress logs on stderr")
 	cmd.AddCommand(newScanCommand(stdout))
 	cmd.AddCommand(newScanAllCommand(stdout))
 	cmd.AddCommand(newDashboardIndexCommand(stdout))

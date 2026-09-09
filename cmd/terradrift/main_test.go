@@ -56,6 +56,38 @@ func TestCompletionCommand(t *testing.T) {
 	}
 }
 
+func TestScanProgressLogsOnStderr(t *testing.T) {
+	dir := t.TempDir()
+	_, stderr, err := executeCommand("scan", "-d", dir)
+	if err != nil {
+		t.Fatalf("scan: %v", err)
+	}
+	if !strings.Contains(stderr, "scan started") || !strings.Contains(stderr, dir) {
+		t.Fatalf("expected directory progress on stderr, got %q", stderr)
+	}
+}
+
+func TestScanQuietSuppressesProgress(t *testing.T) {
+	_, stderr, err := executeCommand("--quiet", "scan", "-d", t.TempDir())
+	if err != nil {
+		t.Fatalf("scan: %v", err)
+	}
+	if strings.Contains(stderr, "scan started") {
+		t.Fatalf("quiet should suppress progress, got %q", stderr)
+	}
+}
+
+func TestScanRedactsProgressPaths(t *testing.T) {
+	dir := t.TempDir()
+	_, stderr, err := executeCommand("scan", "-d", dir, "--redact-paths")
+	if err != nil {
+		t.Fatalf("scan: %v", err)
+	}
+	if strings.Contains(stderr, dir) || !strings.Contains(stderr, "[REDACTED]") {
+		t.Fatalf("expected redacted progress path, got %q", stderr)
+	}
+}
+
 func TestScanDefaultsToCurrentDirectory(t *testing.T) {
 	wd, err := os.Getwd()
 	if err != nil {
@@ -642,10 +674,35 @@ func TestWriteScanReportPrometheus(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected Prometheus output to succeed: %v", err)
 	}
-	for _, want := range []string{"# TYPE terradrift_scan_status gauge", `terradrift_scan_status{status="drift_detected"} 1`, "terradrift_resources_checked 4", "terradrift_resources_changed 2"} {
+	for _, want := range []string{"# TYPE terradrift_scan_status gauge", `terradrift_scan_status{status="drift_detected",root_id="default"} 1`, "terradrift_resources_checked{root_id=\"default\"} 4", "terradrift_resources_changed{root_id=\"default\"} 2"} {
 		if !strings.Contains(output.String(), want) {
 			t.Fatalf("expected Prometheus output to contain %q, got %q", want, output.String())
 		}
+	}
+}
+
+func TestWriteMultiScanReportPrometheus(t *testing.T) {
+	var output bytes.Buffer
+	err := writeMultiScanReport(&output, multiScanReport{
+		TotalRoots:   2,
+		DriftedRoots: 1,
+		FailedRoots:  1,
+		Roots: []multiScanRoot{
+			{Report: report.DriftReport{RootID: "root-a", Status: report.ScanStatusDriftDetected, TotalResourcesChecked: 3, TotalChangedResources: 1}},
+			{Error: "scan failed"},
+		},
+	}, outputFormatPrometheus)
+	if err != nil {
+		t.Fatalf("prometheus multi-root: %v", err)
+	}
+	got := output.String()
+	for _, want := range []string{`terradrift_roots{result="total"} 2`, `terradrift_roots{result="failed"} 1`, `root_id="root-a"`, "never a filesystem path"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("expected %q in prometheus output, got %q", want, got)
+		}
+	}
+	if strings.Count(got, "# HELP terradrift_scan_status") != 1 {
+		t.Fatalf("expected HELP once, got %q", got)
 	}
 }
 

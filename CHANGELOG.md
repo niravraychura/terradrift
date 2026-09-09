@@ -15,6 +15,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - GitHub PR comments are upserted (one TerraDrift comment per PR) instead of posting a new comment every scan
 - Release archives for `linux_arm64` and `darwin_amd64`
 - Checksum-verifying `scripts/install.sh` and documented `terradrift completion`
+- Scan progress on stderr (`init` / `plan` / `show` / parse), with `--quiet` to suppress it
+- Prometheus `root_id` labels (bounded hash, never a filesystem path) and `scan-all --output prometheus`
+- Dashboard HTML styling and `dashboard-index` grouping by Terraform root directory
 
 ## [0.2.0] - 2026-09-09
 
