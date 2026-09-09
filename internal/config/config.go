@@ -18,10 +18,14 @@ import (
 // DefaultPath is the default local TerraDrift configuration filename.
 const DefaultPath = ".terradrift.json"
 
+// SchemaURL is the published JSON Schema for editor validation of .terradrift.json.
+const SchemaURL = "https://raw.githubusercontent.com/niravraychura/terradrift/main/docs/terradrift.schema.json"
+
 const maxConfigBytes = 32 << 20
 
 // Config stores repeatable TerraDrift CLI settings for local and CI usage.
 type Config struct {
+	Schema               string                     `json:"$schema,omitempty"`
 	Directory            string                     `json:"directory"`
 	Output               string                     `json:"output"`
 	Timeout              string                     `json:"timeout"`
@@ -68,7 +72,7 @@ type Config struct {
 
 // Default returns a safe bootstrap configuration.
 func Default() Config {
-	return Config{Directory: ".", Output: "table", Timeout: "5m", RedactPaths: false, PlanMode: string(terraform.PlanModeRefreshOnly)}
+	return Config{Schema: SchemaURL, Directory: ".", Output: "table", Timeout: "5m", RedactPaths: false, PlanMode: string(terraform.PlanModeRefreshOnly)}
 }
 
 // Load reads a TerraDrift JSON configuration file.

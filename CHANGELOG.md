@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `terradrift init` and example configs include `"$schema"` for editor validation
+- OpenTofu GitHub Actions example (`examples/github-actions/terradrift-opentofu.yml`)
+
 ## [0.2.0] - 2026-09-09
 
 ### Added

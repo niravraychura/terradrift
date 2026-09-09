@@ -686,8 +686,8 @@ func TestInitCreatesDefaultConfig(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected config file to exist: %v", err)
 	}
-	if !strings.Contains(string(data), `"directory": "."`) {
-		t.Fatalf("expected default config content, got %q", data)
+	if !strings.Contains(string(data), `"directory": "."`) || !strings.Contains(string(data), `"$schema": "`+config.SchemaURL+`"`) {
+		t.Fatalf("expected default config content with $schema, got %q", data)
 	}
 }
 
