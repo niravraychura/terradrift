@@ -79,6 +79,7 @@ func newRootCommand(stdout, stderr io.Writer) *cobra.Command {
 	cmd.AddCommand(newServeCommand(stdout))
 	cmd.AddCommand(newApproveCommand(stdout))
 	cmd.AddCommand(newInitCommand(stdout))
+	cmd.InitDefaultCompletionCmd()
 	return cmd
 }
 

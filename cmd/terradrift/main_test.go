@@ -46,6 +46,16 @@ func TestVersionFlag(t *testing.T) {
 	}
 }
 
+func TestCompletionCommand(t *testing.T) {
+	stdout, _, err := executeCommand("completion", "bash")
+	if err != nil {
+		t.Fatalf("expected completion bash to succeed: %v", err)
+	}
+	if !strings.Contains(stdout, "_terradrift") {
+		t.Fatalf("expected bash completion script, got %q", stdout)
+	}
+}
+
 func TestScanDefaultsToCurrentDirectory(t *testing.T) {
 	wd, err := os.Getwd()
 	if err != nil {

@@ -34,7 +34,13 @@ TerraDrift runs `terraform plan` (or OpenTofu), turns the plan into a clear repo
 
 ### Step 1 — Install TerraDrift
 
-Download a binary from [GitHub Releases](https://github.com/niravraychura/terradrift/releases) (Linux amd64 / macOS arm64), or build from source:
+Download a binary from [GitHub Releases](https://github.com/niravraychura/terradrift/releases) (Linux amd64/arm64, macOS amd64/arm64), or install with checksum verification:
+
+```bash
+TERRADRIFT_VERSION=v0.2.0 PREFIX=/usr/local ./scripts/install.sh
+```
+
+Homebrew: there is no published tap; see [`contrib/homebrew/README.md`](contrib/homebrew/README.md). Or build from source:
 
 ```bash
 git clone https://github.com/niravraychura/terradrift.git
@@ -42,6 +48,13 @@ cd terradrift
 make build
 ./bin/terradrift --help
 ./bin/terradrift --version   # local builds report "dev"; release binaries use the tag
+```
+
+Shell completion (bash, zsh, fish, powershell):
+
+```bash
+terradrift completion bash
+terradrift completion zsh
 ```
 
 ### Step 2 — Have Terraform (or OpenTofu) ready
