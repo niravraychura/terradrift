@@ -37,7 +37,7 @@ TerraDrift runs `terraform plan` (or OpenTofu), turns the plan into a clear repo
 Download a binary from [GitHub Releases](https://github.com/niravraychura/terradrift/releases) (Linux amd64/arm64, macOS amd64/arm64), or install with checksum verification:
 
 ```bash
-TERRADRIFT_VERSION=v0.2.0 PREFIX=/usr/local ./scripts/install.sh
+TERRADRIFT_VERSION=v0.3.0 PREFIX=/usr/local ./scripts/install.sh
 ```
 
 Homebrew: there is no published tap; see [`contrib/homebrew/README.md`](contrib/homebrew/README.md). Or build from source:
@@ -312,7 +312,7 @@ Image: `ghcr.io/niravraychura/terradrift:<version>` (also `latest` from releases
 The runtime image does **not** include Terraform. For `--terraform-exec`, mount a binary or extend the image:
 
 ```dockerfile
-FROM ghcr.io/niravraychura/terradrift:v0.2.0
+FROM ghcr.io/niravraychura/terradrift:v0.3.0
 USER root
 RUN apk --no-cache add curl unzip \
   && curl -fsSLo /tmp/terraform.zip https://releases.hashicorp.com/terraform/1.10.5/terraform_1.10.5_linux_amd64.zip \
