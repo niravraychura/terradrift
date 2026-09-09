@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `terradrift init` and example configs include `"$schema"` for editor validation
 - OpenTofu GitHub Actions example (`examples/github-actions/terradrift-opentofu.yml`)
+- Release archives for `linux_arm64` and `darwin_amd64`
+- Checksum-verifying `scripts/install.sh` and documented `terradrift completion`
 
 ## [0.2.0] - 2026-09-09
 
