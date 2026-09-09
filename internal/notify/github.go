@@ -81,33 +81,59 @@ func (notifier GitHubPRNotifier) Notify(ctx context.Context, scanReport report.D
 }
 
 func findTerraDriftPRCommentID(ctx context.Context, client HTTPDoer, token, listURL, repository string) (int64, error) {
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, listURL, nil)
-	if err != nil {
-		return 0, fmt.Errorf("list GitHub pull request comments: %w", err)
-	}
-	setGitHubJSONHeaders(request, token)
-	response, err := client.Do(request)
-	if err != nil {
-		return 0, fmt.Errorf("list GitHub pull request comments on %s: %s", redact.String(repository), redact.String(err.Error()))
-	}
-	defer func() { _ = closeResponseBody(response.Body) }()
-	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
-		return 0, fmt.Errorf("list GitHub pull request comments on %s: unexpected status %s", redact.String(repository), response.Status)
-	}
-	var comments []struct {
-		ID   int64  `json:"id"`
-		Body string `json:"body"`
-	}
-	if err := json.NewDecoder(response.Body).Decode(&comments); err != nil {
-		return 0, fmt.Errorf("decode GitHub pull request comments: %w", err)
-	}
 	var found int64
-	for _, comment := range comments {
-		if strings.Contains(comment.Body, githubPRCommentMarker) || strings.Contains(comment.Body, githubPRCommentHeading) {
-			found = comment.ID
+	currentURL := listURL
+	for currentURL != "" {
+		request, err := http.NewRequestWithContext(ctx, http.MethodGet, currentURL, nil)
+		if err != nil {
+			return 0, fmt.Errorf("list GitHub pull request comments: %w", err)
 		}
+		setGitHubJSONHeaders(request, token)
+		response, err := client.Do(request)
+		if err != nil {
+			return 0, fmt.Errorf("list GitHub pull request comments on %s: %s", redact.String(repository), redact.String(err.Error()))
+		}
+		if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
+			_ = closeResponseBody(response.Body)
+			return 0, fmt.Errorf("list GitHub pull request comments on %s: unexpected status %s", redact.String(repository), response.Status)
+		}
+		var comments []struct {
+			ID   int64  `json:"id"`
+			Body string `json:"body"`
+		}
+		if err := json.NewDecoder(response.Body).Decode(&comments); err != nil {
+			_ = closeResponseBody(response.Body)
+			return 0, fmt.Errorf("decode GitHub pull request comments: %w", err)
+		}
+		for _, comment := range comments {
+			if strings.Contains(comment.Body, githubPRCommentMarker) || strings.Contains(comment.Body, githubPRCommentHeading) {
+				found = comment.ID
+			}
+		}
+		currentURL = parseGitHubNextLink(response.Header.Get("Link"))
+		_ = closeResponseBody(response.Body)
 	}
 	return found, nil
+}
+
+func parseGitHubNextLink(linkHeader string) string {
+	if linkHeader == "" {
+		return ""
+	}
+	links := strings.Split(linkHeader, ",")
+	for _, link := range links {
+		parts := strings.Split(strings.TrimSpace(link), ";")
+		if len(parts) != 2 {
+			continue
+		}
+		if strings.Contains(parts[1], `rel="next"`) {
+			url := strings.TrimSpace(parts[0])
+			if len(url) > 2 && url[0] == '<' && url[len(url)-1] == '>' {
+				return url[1 : len(url)-1]
+			}
+		}
+	}
+	return ""
 }
 
 func setGitHubJSONHeaders(request *http.Request, token string) {

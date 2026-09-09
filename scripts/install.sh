@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Checksum-verifying installer for TerraDrift GitHub Release archives.
-# Usage: TERRADRIFT_VERSION=v0.2.0 PREFIX=/usr/local ./scripts/install.sh
+# Usage: TERRADRIFT_VERSION=v0.3.0 PREFIX=/usr/local ./scripts/install.sh
 set -euo pipefail
 
-VERSION="${TERRADRIFT_VERSION:-v0.2.0}"
+VERSION="${TERRADRIFT_VERSION:-v0.3.0}"
 PREFIX="${PREFIX:-/usr/local}"
 REPO="${TERRADRIFT_REPO:-niravraychura/terradrift}"
 BASE="https://github.com/${REPO}/releases/download/${VERSION}"
