@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `terradrift init` and example configs include `"$schema"` for editor validation
 - OpenTofu GitHub Actions example (`examples/github-actions/terradrift-opentofu.yml`)
+- Ignore/baseline addresses accept globs (`module.vpc.*`) in addition to exact matches
+- GitHub PR comments are upserted (one TerraDrift comment per PR) instead of posting a new comment every scan
 - Release archives for `linux_arm64` and `darwin_amd64`
 - Checksum-verifying `scripts/install.sh` and documented `terradrift completion`
 

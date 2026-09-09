@@ -117,8 +117,8 @@ runbooks, approvals, GitHub PR/issue summaries, --artifact-url, --audit-log, not
 throttle (via config), attribute-values, workspace/var-file defaults, and --failure-severity.
 
 Prefer terradrift dashboard-index for multi-root HTML. A shared --dashboard-html path is
-overwritten by the last successful root when concurrency > 1. Shared --github-pr posts one
-comment per root; prefer upsert (or scan) when that is noisy.`,
+overwritten by the last successful root when concurrency > 1. Shared --github-pr upserts one
+TerraDrift comment on that pull request (last successful root wins).`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if (manifest == "") == (discover == "") {
 				return fmt.Errorf("provide exactly one of --manifest or --discover")
@@ -392,7 +392,7 @@ comment per root; prefer upsert (or scan) when that is noisy.`,
 	cmd.Flags().StringVar(&webhookURL, "webhook-url", "", "generic HTTPS webhook URL")
 	cmd.Flags().StringVar(&webhookCACert, "webhook-ca-cert", "", "PEM CA certificate file for webhook TLS verification")
 	cmd.Flags().StringVar(&githubRepository, "github-repository", "", "GitHub repository for pull request summary (owner/repo)")
-	cmd.Flags().IntVar(&githubPR, "github-pr", 0, "GitHub pull request number for scan summary (one comment per root)")
+	cmd.Flags().IntVar(&githubPR, "github-pr", 0, "GitHub pull request number; upserts one shared TerraDrift summary comment")
 	cmd.Flags().IntVar(&githubIssueAfter, "github-issue-after", 0, "create a GitHub issue after this many consecutive matching drift scans per root")
 	cmd.Flags().StringVar(&artifactURL, "artifact-url", "", "presigned HTTPS URL to upload each root JSON report")
 	cmd.Flags().StringVar(&approvalFile, "approval-file", "", "review-only approval artifact to attach to each root report")
