@@ -74,6 +74,13 @@ func logDirectory(redact bool, directory string) string {
 	return directory
 }
 
+func logError(redactPaths bool, err error) error {
+	if !redactPaths || err == nil {
+		return err
+	}
+	return fmt.Errorf("operation failed")
+}
+
 // PrepareOptions validates invariant options and resolves the workspace root once.
 func PrepareOptions(options Options) (Options, error) {
 	if err := options.Validate(); err != nil {
@@ -129,36 +136,36 @@ func Scan(ctx context.Context, options Options) (Result, error) {
 
 	absDir, err := ValidateDirectory(options.Directory)
 	if err != nil {
-		logger.Error(ctx, "scan failed", "directory", logDirectory(options.RedactPaths, options.Directory), "error", err)
+		logger.Error(ctx, "scan failed", "directory", logDirectory(options.RedactPaths, options.Directory), "error", logError(options.RedactPaths, err))
 		return Result{Outcome: OutcomeFailed}, err
 	}
 	logger.Info(ctx, "scan started", "directory", logDirectory(options.RedactPaths, absDir))
 	if options.WorkspaceRoot != "" {
 		if err := validateResolvedWorkspaceRoot(absDir, options.WorkspaceRoot); err != nil {
-			logger.Error(ctx, "scan failed", "directory", logDirectory(options.RedactPaths, absDir), "error", err)
+			logger.Error(ctx, "scan failed", "directory", logDirectory(options.RedactPaths, absDir), "error", logError(options.RedactPaths, err))
 			return Result{Outcome: OutcomeFailed}, err
 		}
 	}
 	if options.RequireTerraformFiles {
 		matches, err := filepath.Glob(filepath.Join(absDir, "*.tf"))
 		if err != nil {
-			logger.Error(ctx, "scan failed", "directory", logDirectory(options.RedactPaths, absDir), "error", err)
+			logger.Error(ctx, "scan failed", "directory", logDirectory(options.RedactPaths, absDir), "error", logError(options.RedactPaths, err))
 			return Result{Outcome: OutcomeFailed}, fmt.Errorf("list Terraform files: %w", err)
 		}
 		jsonMatches, err := filepath.Glob(filepath.Join(absDir, "*.tf.json"))
 		if err != nil {
-			logger.Error(ctx, "scan failed", "directory", logDirectory(options.RedactPaths, absDir), "error", err)
+			logger.Error(ctx, "scan failed", "directory", logDirectory(options.RedactPaths, absDir), "error", logError(options.RedactPaths, err))
 			return Result{Outcome: OutcomeFailed}, fmt.Errorf("list Terraform JSON files: %w", err)
 		}
 		if len(matches)+len(jsonMatches) == 0 {
 			err := fmt.Errorf("terraform directory has no .tf or .tf.json files: %s", absDir)
-			logger.Error(ctx, "scan failed", "directory", logDirectory(options.RedactPaths, absDir), "error", err)
+			logger.Error(ctx, "scan failed", "directory", logDirectory(options.RedactPaths, absDir), "error", logError(options.RedactPaths, err))
 			return Result{Outcome: OutcomeFailed}, err
 		}
 	}
 	scanID, err := newScanID()
 	if err != nil {
-		logger.Error(ctx, "scan failed", "directory", logDirectory(options.RedactPaths, absDir), "error", err)
+		logger.Error(ctx, "scan failed", "directory", logDirectory(options.RedactPaths, absDir), "error", logError(options.RedactPaths, err))
 		return Result{Outcome: OutcomeFailed}, fmt.Errorf("create scan ID: %w", err)
 	}
 
@@ -189,7 +196,7 @@ func Scan(ctx context.Context, options Options) (Result, error) {
 	}
 	unlock, err := lock.Acquire(absDir)
 	if err != nil {
-		logger.Error(ctx, "scan failed", "directory", logDirectory(options.RedactPaths, absDir), "error", err)
+		logger.Error(ctx, "scan failed", "directory", logDirectory(options.RedactPaths, absDir), "error", logError(options.RedactPaths, err))
 		return Result{Outcome: OutcomeFailed}, err
 	}
 	defer unlock()
@@ -197,19 +204,19 @@ func Scan(ctx context.Context, options Options) (Result, error) {
 	// Re-validate after lock acquire to harden TOCTOU between initial checks and Terraform execution.
 	absDir, err = ValidateDirectory(options.Directory)
 	if err != nil {
-		logger.Error(ctx, "scan failed", "directory", logDirectory(options.RedactPaths, options.Directory), "error", err)
+		logger.Error(ctx, "scan failed", "directory", logDirectory(options.RedactPaths, options.Directory), "error", logError(options.RedactPaths, err))
 		return Result{Outcome: OutcomeFailed}, err
 	}
 	if options.WorkspaceRoot != "" {
 		if err := validateResolvedWorkspaceRoot(absDir, options.WorkspaceRoot); err != nil {
-			logger.Error(ctx, "scan failed", "directory", logDirectory(options.RedactPaths, absDir), "error", err)
+			logger.Error(ctx, "scan failed", "directory", logDirectory(options.RedactPaths, absDir), "error", logError(options.RedactPaths, err))
 			return Result{Outcome: OutcomeFailed}, err
 		}
 	}
 
 	scanReport, err := runTerraformScan(ctx, options.Runner, absDir, scanID, options.PlanMode, options.SkipInit, options.RedactPaths)
 	if err != nil {
-		logger.Error(ctx, "scan failed", "directory", logDirectory(options.RedactPaths, absDir), "error", err)
+		logger.Error(ctx, "scan failed", "directory", logDirectory(options.RedactPaths, absDir), "error", logError(options.RedactPaths, err))
 		return Result{Outcome: OutcomeFailed, Report: scanReport}, err
 	}
 	if scanReport.TotalChangedResources > 0 {
