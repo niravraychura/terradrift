@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-09-09
+
+### Added
+
+- `terradrift init` and example configs include `"$schema"` for editor validation
+- OpenTofu GitHub Actions example (`examples/github-actions/terradrift-opentofu.yml`)
+- Ignore/baseline addresses accept globs (`module.vpc.*`) in addition to exact matches
+- GitHub PR comments are upserted (one TerraDrift comment per PR) instead of posting a new comment every scan
+- Release archives for `linux_arm64` and `darwin_amd64`
+- Checksum-verifying `scripts/install.sh` and documented `terradrift completion`
+- Scan progress on stderr (`init` / `plan` / `show` / parse), with `--quiet` to suppress it
+- `scan-all --output prometheus`
+- Dashboard HTML styling and `dashboard-index` grouping by Terraform root directory
+
+### Changed
+
+- Prometheus scan metrics include a bounded `root_id` label (hash, never a filesystem path). Unlabeled series from v0.2.0 will not receive new samples.
+
 ## [0.2.0] - 2026-09-09
 
 ### Added
@@ -43,6 +61,7 @@ First public tagged release of the self-hosted TerraDrift CLI.
 - SSRF-safe GitHub HTTP client, fail-closed truncated I/O, attribute value heuristics
 - Size budgets and redaction defaults for user-facing output
 
-[Unreleased]: https://github.com/niravraychura/terradrift/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/niravraychura/terradrift/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/niravraychura/terradrift/releases/tag/v0.3.0
 [0.2.0]: https://github.com/niravraychura/terradrift/releases/tag/v0.2.0
 [0.1.0]: https://github.com/niravraychura/terradrift/releases/tag/v0.1.0

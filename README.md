@@ -34,7 +34,13 @@ TerraDrift runs `terraform plan` (or OpenTofu), turns the plan into a clear repo
 
 ### Step 1 — Install TerraDrift
 
-Download a binary from [GitHub Releases](https://github.com/niravraychura/terradrift/releases) (Linux amd64 / macOS arm64), or build from source:
+Download a binary from [GitHub Releases](https://github.com/niravraychura/terradrift/releases) (Linux amd64/arm64, macOS amd64/arm64), or install with checksum verification:
+
+```bash
+TERRADRIFT_VERSION=v0.3.0 PREFIX=/usr/local ./scripts/install.sh
+```
+
+Homebrew: there is no published tap; see [`contrib/homebrew/README.md`](contrib/homebrew/README.md). Or build from source:
 
 ```bash
 git clone https://github.com/niravraychura/terradrift.git
@@ -42,6 +48,13 @@ cd terradrift
 make build
 ./bin/terradrift --help
 ./bin/terradrift --version   # local builds report "dev"; release binaries use the tag
+```
+
+Shell completion (bash, zsh, fish, powershell):
+
+```bash
+terradrift completion bash
+terradrift completion zsh
 ```
 
 ### Step 2 — Have Terraform (or OpenTofu) ready
@@ -80,6 +93,8 @@ terradrift init --directory ./terraform/prod --terraform-exec --history-dir .ter
 terradrift scan --config .terradrift.json
 ```
 
+The generated file includes `"$schema"` pointing at [`docs/terradrift.schema.json`](docs/terradrift.schema.json) for editor validation. More samples: [`examples/config`](examples/config/README.md).
+
 ---
 
 ## 2. Understand the result
@@ -115,6 +130,10 @@ terradrift scan -d ./terraform/prod --terraform-exec --output sarif
 terradrift scan -d ./terraform/prod --terraform-exec --output prometheus
 ```
 
+Prometheus series use a bounded `root_id` hash per Terraform root (never a directory path). `scan-all --output prometheus` adds `terradrift_roots{result="total|drifted|changed|failed"}` plus one sample set per successful root.
+
+Scan progress (`scan started`, `terraform init` / `plan` / `show`, parse) goes to **stderr**. Use `--quiet` to keep only errors. `--redact-paths` redacts directories in those logs too.
+
 Report JSON stability notes: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ---
@@ -134,10 +153,12 @@ Minimal pattern:
 Full scheduled examples:
 
 - GitHub Actions: [`examples/github-actions/terradrift-scheduled.yml`](examples/github-actions/terradrift-scheduled.yml)
+- OpenTofu (same `init` / `plan` / `show -json` contract, `--terraform-bin tofu`): [`examples/github-actions/terradrift-opentofu.yml`](examples/github-actions/terradrift-opentofu.yml)
+- Pull request comment (upsert): [`examples/github-actions/terradrift-pr.yml`](examples/github-actions/terradrift-pr.yml)
 - Multi-root + Slack: [`examples/github-actions/terradrift-scheduled-multi-root.yml`](examples/github-actions/terradrift-scheduled-multi-root.yml)
 - Cron: [`examples/cron/terradrift.cron`](examples/cron/terradrift.cron)
 
-Pin TerraDrift, Terraform/OpenTofu, and provider versions. Keep cloud credentials and webhook URLs in CI secrets.
+Pin TerraDrift, Terraform/OpenTofu, and provider versions. Keep cloud credentials and webhook URLs in CI secrets. OpenTofu is a drop-in planner: set `--terraform-bin tofu` (or `terraform_bin` in config) and keep using `--terraform-exec`.
 
 ---
 
@@ -221,6 +242,7 @@ environments/production
 
 ```bash
 terradrift scan-all --manifest terraform-roots.txt --concurrency 4 --terraform-exec --output json
+terradrift scan-all --manifest terraform-roots.txt --terraform-exec --output prometheus
 ```
 
 **Option B — JSON manifest** (per-root workspace / vars / profile):
@@ -243,9 +265,9 @@ terradrift scan-all --discover . --terraform-exec --concurrency 4
 
 More detail and examples: [`examples/multi-root`](examples/multi-root).
 
-`scan-all` uses the same per-root delivery path as `scan` (history, notify, policy, ignore/owners, GitHub, artifacts, audit-log). Shared `--dashboard-html` / `--github-pr` still apply once per root — prefer `dashboard-index` and comment upsert for quieter multi-root CI.
+`scan-all` uses the same per-root delivery path as `scan` (history, notify, policy, ignore/owners, GitHub, artifacts, audit-log). Shared `--dashboard-html` is overwritten by the last successful root when concurrency > 1; `--github-pr` upserts one TerraDrift comment on that PR.
 
-Cross-root HTML index from history:
+Cross-root HTML index from history (grouped by directory):
 
 ```bash
 terradrift dashboard-index --history-dir .terradrift-history --output terradrift-index.html
@@ -290,7 +312,7 @@ Image: `ghcr.io/niravraychura/terradrift:<version>` (also `latest` from releases
 The runtime image does **not** include Terraform. For `--terraform-exec`, mount a binary or extend the image:
 
 ```dockerfile
-FROM ghcr.io/niravraychura/terradrift:v0.2.0
+FROM ghcr.io/niravraychura/terradrift:v0.3.0
 USER root
 RUN apk --no-cache add curl unzip \
   && curl -fsSLo /tmp/terraform.zip https://releases.hashicorp.com/terraform/1.10.5/terraform_1.10.5_linux_amd64.zip \
@@ -342,7 +364,7 @@ Compare both modes when unsure whether a finding is out-of-band change vs unappl
 | Audit adapters | [docs/AUDIT_ADAPTERS.md](docs/AUDIT_ADAPTERS.md) |
 | All `scan` flags | `terradrift scan --help` |
 
-Advanced features (baselines, ignore rules, owner routing, GitHub PR/issue comments, approvals, artifact upload) are configured via `.terradrift.json` / flags — see `terradrift scan --help` / `terradrift scan-all --help` and [examples/config](examples/config/README.md).
+Advanced features (baselines, ignore rules with exact or glob addresses like `module.vpc.*`, owner routing, GitHub PR/issue comments, approvals, artifact upload) are configured via `.terradrift.json` / flags — see `terradrift scan --help` / `terradrift scan-all --help` and [examples/config](examples/config/README.md).
 
 ---
 

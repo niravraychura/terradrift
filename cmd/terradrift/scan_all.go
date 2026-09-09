@@ -117,8 +117,8 @@ runbooks, approvals, GitHub PR/issue summaries, --artifact-url, --audit-log, not
 throttle (via config), attribute-values, workspace/var-file defaults, and --failure-severity.
 
 Prefer terradrift dashboard-index for multi-root HTML. A shared --dashboard-html path is
-overwritten by the last successful root when concurrency > 1. Shared --github-pr posts one
-comment per root; prefer upsert (or scan) when that is noisy.`,
+overwritten by the last successful root when concurrency > 1. Shared --github-pr upserts one
+TerraDrift comment on that pull request (last successful root wins).`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if (manifest == "") == (discover == "") {
 				return fmt.Errorf("provide exactly one of --manifest or --discover")
@@ -228,8 +228,8 @@ comment per root; prefer upsert (or scan) when that is noisy.`,
 			if err != nil {
 				return err
 			}
-			if parsedFormat != outputFormatTable && parsedFormat != outputFormatJSON {
-				return fmt.Errorf("scan-all supports table and json output")
+			if parsedFormat != outputFormatTable && parsedFormat != outputFormatJSON && parsedFormat != outputFormatPrometheus {
+				return fmt.Errorf("scan-all supports table, json, and prometheus output")
 			}
 			if concurrency <= 0 {
 				return fmt.Errorf("concurrency must be greater than zero")
@@ -267,6 +267,7 @@ comment per root; prefer upsert (or scan) when that is noisy.`,
 				PlanMode:      mode,
 				LockBackend:   lockBackend,
 				SkipInit:      skipTerraformInit,
+				RedactPaths:   redactPaths,
 			}
 			options, err = scanner.PrepareOptions(options)
 			if err != nil {
@@ -371,7 +372,7 @@ comment per root; prefer upsert (or scan) when that is noisy.`,
 	cmd.Flags().StringVar(&discover, "discover", "", "workspace root to discover Terraform roots")
 	cmd.Flags().StringArrayVar(&includes, "include", nil, "root-relative include pattern; repeatable")
 	cmd.Flags().StringArrayVar(&excludes, "exclude", nil, "root-relative exclude pattern; repeatable")
-	cmd.Flags().StringVarP(&format, "output", "o", string(outputFormatTable), "output format: table, json")
+	cmd.Flags().StringVarP(&format, "output", "o", string(outputFormatTable), "output format: table, json, prometheus")
 	cmd.Flags().DurationVar(&timeout, "timeout", scanner.DefaultTimeout, "maximum scan duration per root")
 	cmd.Flags().IntVar(&concurrency, "concurrency", 4, "maximum concurrent scans")
 	cmd.Flags().BoolVar(&terraformExec, "terraform-exec", false, "run Terraform-compatible scans")
@@ -392,7 +393,7 @@ comment per root; prefer upsert (or scan) when that is noisy.`,
 	cmd.Flags().StringVar(&webhookURL, "webhook-url", "", "generic HTTPS webhook URL")
 	cmd.Flags().StringVar(&webhookCACert, "webhook-ca-cert", "", "PEM CA certificate file for webhook TLS verification")
 	cmd.Flags().StringVar(&githubRepository, "github-repository", "", "GitHub repository for pull request summary (owner/repo)")
-	cmd.Flags().IntVar(&githubPR, "github-pr", 0, "GitHub pull request number for scan summary (one comment per root)")
+	cmd.Flags().IntVar(&githubPR, "github-pr", 0, "GitHub pull request number; upserts one shared TerraDrift summary comment")
 	cmd.Flags().IntVar(&githubIssueAfter, "github-issue-after", 0, "create a GitHub issue after this many consecutive matching drift scans per root")
 	cmd.Flags().StringVar(&artifactURL, "artifact-url", "", "presigned HTTPS URL to upload each root JSON report")
 	cmd.Flags().StringVar(&approvalFile, "approval-file", "", "review-only approval artifact to attach to each root report")

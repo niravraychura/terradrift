@@ -3,6 +3,7 @@
   "title": "TerraDrift configuration",
   "type": "object",
   "properties": {
+    "$schema": { "type": "string", "description": "Optional JSON Schema URL for editor validation" },
     "directory": { "type": "string" },
     "output": { "enum": ["table", "json", "junit", "sarif", "prometheus"] },
     "timeout": { "type": "string" },
@@ -49,7 +50,7 @@
         "type": "object",
         "required": ["address", "owner", "reason", "expires_at"],
         "properties": {
-          "address": { "type": "string" }, "owner": { "type": "string" },
+          "address": { "type": "string", "description": "Exact Terraform address, or a glob (* ?) matched with Go path.Match" }, "owner": { "type": "string" },
           "reason": { "type": "string" }, "expires_at": { "type": "string", "format": "date-time" }
         },
         "additionalProperties": false

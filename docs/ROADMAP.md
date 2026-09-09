@@ -12,9 +12,10 @@ Completed engineering history (through v0.1.0): [archive/PLAN-v0.1.md](archive/P
 |---------|--------|
 | **v0.1.0** | Shipped — first public tagged CLI release |
 | **v0.2.0** | Shipped — `--version`, scan-all delivery parity, refresh-only attribute diffs |
+| **v0.3.0** | Shipped — operator UX, glob ignores, GitHub PR upsert, install.sh / extra GOARCH |
 | **v1.0.0** | Stability promise for CLI flags and published JSON consumers rely on — open a milestone when work starts |
 
-Remaining polish (no GitHub milestone until work is scheduled): richer ignore/baselines, GitHub PR comment upsert, install.sh/Homebrew, extra GOARCH targets, and the other open enhancement issues.
+No open GitHub issues. Next scheduled work is **v1.0.0** when the CLI/JSON stability promise starts.
 
 ## Out of scope (for now)
 

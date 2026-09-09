@@ -39,6 +39,29 @@ func TestApplyIgnoreRulesRejectsExpired(t *testing.T) {
 	}
 }
 
+func TestApplyIgnoreRulesMatchesGlob(t *testing.T) {
+	expires := time.Now().UTC().Add(time.Hour).Format(time.RFC3339)
+	scanReport := DriftReport{
+		Status: ScanStatusDriftDetected,
+		ResourceChanges: []ResourceChange{
+			{Address: "module.vpc.aws_instance.web", Actions: []string{"update"}},
+			{Address: "aws_s3_bucket.logs", Actions: []string{"update"}},
+		},
+		TotalChangedResources: 2,
+	}
+	if err := ApplyIgnoreRules(&scanReport, []IgnoreRule{{
+		Address: "module.vpc.*", Owner: "platform", Reason: "vpc baseline", ExpiresAt: expires,
+	}}); err != nil {
+		t.Fatalf("ApplyIgnoreRules: %v", err)
+	}
+	if !scanReport.ResourceChanges[0].Ignored || scanReport.ResourceChanges[1].Ignored {
+		t.Fatalf("glob should ignore only vpc resources: %#v", scanReport.ResourceChanges)
+	}
+	if scanReport.TotalChangedResources != 1 || scanReport.Status != ScanStatusDriftDetected {
+		t.Fatalf("unexpected counts after glob ignore: %#v", scanReport)
+	}
+}
+
 func TestApplyOwnersPrefersExactAddress(t *testing.T) {
 	scanReport := DriftReport{ResourceChanges: []ResourceChange{
 		{Address: "aws_instance.web", Type: "aws_instance"},

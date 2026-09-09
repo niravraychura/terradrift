@@ -30,7 +30,7 @@ jobs:
       - name: Build release archives
         run: |
           ldflags="-s -w -X main.version=${GITHUB_REF_NAME}"
-          for target in linux_amd64 darwin_arm64; do
+          for target in linux_amd64 linux_arm64 darwin_amd64 darwin_arm64; do
             os="${target%_*}"
             arch="${target#*_}"
             directory="dist/terradrift_${os}_${arch}"
