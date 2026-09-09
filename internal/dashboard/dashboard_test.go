@@ -32,6 +32,9 @@ func TestRenderEscapesResourceFields(t *testing.T) {
 	if !strings.Contains(output.String(), "scan-123") || !strings.Contains(output.String(), "drift_detected") {
 		t.Fatalf("expected status in dashboard, got %q", output.String())
 	}
+	if !strings.Contains(output.String(), "system-ui") {
+		t.Fatalf("expected dashboard CSS, got %q", output.String())
+	}
 }
 
 func TestRenderIndexEscapesDirectories(t *testing.T) {
@@ -42,6 +45,40 @@ func TestRenderIndexEscapesDirectories(t *testing.T) {
 	}
 	if strings.Contains(output.String(), "<script>") {
 		t.Fatalf("expected index output to escape script tags, got %q", output.String())
+	}
+	if !strings.Contains(output.String(), "system-ui") {
+		t.Fatalf("expected index CSS, got %q", output.String())
+	}
+}
+
+func TestRenderIndexGroupsByDirectory(t *testing.T) {
+	var output bytes.Buffer
+	err := RenderIndex(&output, []history.Entry{
+		{Report: report.DriftReport{Directory: "terraform/prod", ScanID: "scan-prod-1"}},
+		{Report: report.DriftReport{Directory: "terraform/dev", ScanID: "scan-dev-1"}},
+		{Report: report.DriftReport{Directory: "terraform/prod", ScanID: "scan-prod-2"}},
+	})
+	if err != nil {
+		t.Fatalf("render dashboard index: %v", err)
+	}
+	got := output.String()
+	prod := strings.Index(got, "terraform/prod")
+	dev := strings.Index(got, "terraform/dev")
+	if prod < 0 || dev < 0 || prod > dev {
+		t.Fatalf("expected first-seen directory grouping, got %q", got)
+	}
+	if !strings.Contains(got, "scan-prod-1") || !strings.Contains(got, "scan-prod-2") || !strings.Contains(got, "scan-dev-1") {
+		t.Fatalf("expected all scan IDs, got %q", got)
+	}
+}
+
+func TestRenderIndexEmpty(t *testing.T) {
+	var output bytes.Buffer
+	if err := RenderIndex(&output, nil); err != nil {
+		t.Fatalf("render dashboard index: %v", err)
+	}
+	if !strings.Contains(output.String(), "No history available") {
+		t.Fatalf("expected empty index message, got %q", output.String())
 	}
 }
 

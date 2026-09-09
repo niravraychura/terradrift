@@ -78,33 +78,7 @@ func writeScanReport(stdout io.Writer, scanReport report.DriftReport, format out
 		}
 		return nil
 	case outputFormatPrometheus:
-		duration := scanReport.CompletedAt.Sub(scanReport.StartedAt).Seconds()
-		failures := 0
-		if scanReport.Status == report.ScanStatusFailed {
-			failures = 1
-		}
-		for _, line := range []string{
-			"# HELP terradrift_scan_status Scan result status.",
-			"# TYPE terradrift_scan_status gauge",
-			fmt.Sprintf("terradrift_scan_status{status=%q} 1", scanReport.Status),
-			"# HELP terradrift_scan_duration_seconds Scan duration in seconds.",
-			"# TYPE terradrift_scan_duration_seconds gauge",
-			fmt.Sprintf("terradrift_scan_duration_seconds %g", duration),
-			"# HELP terradrift_resources_checked Resources checked by the scan.",
-			"# TYPE terradrift_resources_checked gauge",
-			fmt.Sprintf("terradrift_resources_checked %d", scanReport.TotalResourcesChecked),
-			"# HELP terradrift_resources_changed Resources changed by the scan.",
-			"# TYPE terradrift_resources_changed gauge",
-			fmt.Sprintf("terradrift_resources_changed %d", scanReport.TotalChangedResources),
-			"# HELP terradrift_scan_failures Failed scans.",
-			"# TYPE terradrift_scan_failures gauge",
-			fmt.Sprintf("terradrift_scan_failures %d", failures),
-		} {
-			if _, err := fmt.Fprintln(stdout, line); err != nil {
-				return fmt.Errorf("write scan output: %w", err)
-			}
-		}
-		return nil
+		return writePrometheusScan(stdout, scanReport)
 	case outputFormatTable:
 		if _, err := fmt.Fprintln(stdout, "TerraDrift scan initialized"); err != nil {
 			return fmt.Errorf("write scan output: %w", err)
@@ -176,6 +150,9 @@ func writeScanReport(stdout io.Writer, scanReport report.DriftReport, format out
 }
 
 func writeMultiScanReport(stdout io.Writer, aggregate multiScanReport, format outputFormat) error {
+	if format == outputFormatPrometheus {
+		return writePrometheusMultiScan(stdout, aggregate)
+	}
 	if format == outputFormatJSON {
 		encoder := json.NewEncoder(stdout)
 		encoder.SetIndent("", "  ")
@@ -208,6 +185,87 @@ func writeMultiScanReport(stdout io.Writer, aggregate multiScanReport, format ou
 			if _, err := fmt.Fprintf(stdout, "%s  %s  changed=%d\n", strings.ToUpper(string(root.Report.Status)), root.Directory, root.Report.TotalChangedResources); err != nil {
 				return fmt.Errorf("write scan output: %w", err)
 			}
+		}
+	}
+	return nil
+}
+
+func prometheusRootID(id string) string {
+	if id == "" {
+		return "default"
+	}
+	return id
+}
+
+func writePrometheusScan(stdout io.Writer, scanReport report.DriftReport) error {
+	for _, line := range prometheusScanHelp() {
+		if _, err := fmt.Fprintln(stdout, line); err != nil {
+			return fmt.Errorf("write scan output: %w", err)
+		}
+	}
+	return writePrometheusScanSamples(stdout, scanReport)
+}
+
+func prometheusScanHelp() []string {
+	return []string{
+		"# HELP terradrift_scan_status Scan result status. root_id is a bounded hash per Terraform root, never a filesystem path.",
+		"# TYPE terradrift_scan_status gauge",
+		"# HELP terradrift_scan_duration_seconds Scan duration in seconds.",
+		"# TYPE terradrift_scan_duration_seconds gauge",
+		"# HELP terradrift_resources_checked Resources checked by the scan.",
+		"# TYPE terradrift_resources_checked gauge",
+		"# HELP terradrift_resources_changed Resources changed by the scan.",
+		"# TYPE terradrift_resources_changed gauge",
+		"# HELP terradrift_scan_failures Failed scans.",
+		"# TYPE terradrift_scan_failures gauge",
+	}
+}
+
+func writePrometheusScanSamples(stdout io.Writer, scanReport report.DriftReport) error {
+	rootID := prometheusRootID(scanReport.RootID)
+	duration := scanReport.CompletedAt.Sub(scanReport.StartedAt).Seconds()
+	failures := 0
+	if scanReport.Status == report.ScanStatusFailed {
+		failures = 1
+	}
+	for _, line := range []string{
+		fmt.Sprintf("terradrift_scan_status{status=%q,root_id=%q} 1", scanReport.Status, rootID),
+		fmt.Sprintf("terradrift_scan_duration_seconds{root_id=%q} %g", rootID, duration),
+		fmt.Sprintf("terradrift_resources_checked{root_id=%q} %d", rootID, scanReport.TotalResourcesChecked),
+		fmt.Sprintf("terradrift_resources_changed{root_id=%q} %d", rootID, scanReport.TotalChangedResources),
+		fmt.Sprintf("terradrift_scan_failures{root_id=%q} %d", rootID, failures),
+	} {
+		if _, err := fmt.Fprintln(stdout, line); err != nil {
+			return fmt.Errorf("write scan output: %w", err)
+		}
+	}
+	return nil
+}
+
+func writePrometheusMultiScan(stdout io.Writer, aggregate multiScanReport) error {
+	for _, line := range []string{
+		"# HELP terradrift_roots Multi-root scan counts. result is a bounded enum.",
+		"# TYPE terradrift_roots gauge",
+		fmt.Sprintf("terradrift_roots{result=%q} %d", "total", aggregate.TotalRoots),
+		fmt.Sprintf("terradrift_roots{result=%q} %d", "drifted", aggregate.DriftedRoots),
+		fmt.Sprintf("terradrift_roots{result=%q} %d", "changed", aggregate.ChangedRoots),
+		fmt.Sprintf("terradrift_roots{result=%q} %d", "failed", aggregate.FailedRoots),
+	} {
+		if _, err := fmt.Fprintln(stdout, line); err != nil {
+			return fmt.Errorf("write scan output: %w", err)
+		}
+	}
+	for _, line := range prometheusScanHelp() {
+		if _, err := fmt.Fprintln(stdout, line); err != nil {
+			return fmt.Errorf("write scan output: %w", err)
+		}
+	}
+	for _, root := range aggregate.Roots {
+		if root.Error != "" {
+			continue
+		}
+		if err := writePrometheusScanSamples(stdout, root.Report); err != nil {
+			return err
 		}
 	}
 	return nil

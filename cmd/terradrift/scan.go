@@ -239,6 +239,7 @@ input, and notifications store attribute paths only unless --attribute-values is
 				PlanMode:      mode,
 				LockBackend:   lockBackend,
 				SkipInit:      skipTerraformInit,
+				RedactPaths:   redactPaths,
 			}
 			scanOptions, err = scanner.PrepareOptions(scanOptions)
 			if err != nil {
