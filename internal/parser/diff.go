@@ -20,23 +20,38 @@ const (
 )
 
 func attributeChangesFor(change terraformChange) []report.AttributeChange {
-	before, err := decodeOptionalJSON(change.Before)
+	diffs := diffLeaves(change.Before, change.After, change.BeforeSensitive, change.AfterSensitive, change.AfterUnknown)
+	for _, idDiff := range diffLeaves(change.BeforeIdentity, change.AfterIdentity, nil, nil, nil) {
+		idDiff.Path = prefixPath("identity", idDiff.Path)
+		diffs = append(diffs, idDiff)
+	}
+	if len(diffs) > 1 {
+		sort.Slice(diffs, func(i, j int) bool { return diffs[i].Path < diffs[j].Path })
+	}
+	if len(diffs) > maxAttributeDiffsPerResource {
+		return diffs[:maxAttributeDiffsPerResource]
+	}
+	return diffs
+}
+
+func diffLeaves(beforeRaw, afterRaw, beforeSensitiveRaw, afterSensitiveRaw, afterUnknownRaw json.RawMessage) []report.AttributeChange {
+	before, err := decodeOptionalJSON(beforeRaw)
 	if err != nil {
 		return nil
 	}
-	after, err := decodeOptionalJSON(change.After)
+	after, err := decodeOptionalJSON(afterRaw)
 	if err != nil {
 		return nil
 	}
-	beforeSensitive, err := decodeOptionalJSON(change.BeforeSensitive)
+	beforeSensitive, err := decodeOptionalJSON(beforeSensitiveRaw)
 	if err != nil {
 		beforeSensitive = false
 	}
-	afterSensitive, err := decodeOptionalJSON(change.AfterSensitive)
+	afterSensitive, err := decodeOptionalJSON(afterSensitiveRaw)
 	if err != nil {
 		afterSensitive = false
 	}
-	afterUnknown, err := decodeOptionalJSON(change.AfterUnknown)
+	afterUnknown, err := decodeOptionalJSON(afterUnknownRaw)
 	if err != nil {
 		afterUnknown = false
 	}
@@ -223,6 +238,16 @@ func joinIndex(parent string, index int) string {
 		return "[" + strconv.Itoa(index) + "]"
 	}
 	return parent + "[" + strconv.Itoa(index) + "]"
+}
+
+func prefixPath(prefix, path string) string {
+	if path == "" {
+		return prefix
+	}
+	if path[0] == '[' {
+		return prefix + path
+	}
+	return prefix + "." + path
 }
 
 func needsBracket(key string) bool {

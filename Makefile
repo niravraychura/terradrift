@@ -1,11 +1,13 @@
 BINARY_NAME := terradrift
 BIN_DIR := bin
 GO_PACKAGES := ./...
+VERSION ?= dev
+LDFLAGS := -s -w -X main.version=$(VERSION)
 
 .PHONY: build run test test-race fmt vet lint vuln ci clean docker-build help
 
 build: ## Build the terradrift binary
-	go build -o $(BIN_DIR)/$(BINARY_NAME) ./cmd/terradrift
+	go build -trimpath -ldflags="$(LDFLAGS)" -o $(BIN_DIR)/$(BINARY_NAME) ./cmd/terradrift
 
 run: ## Run the CLI
 	go run ./cmd/terradrift --help
@@ -36,7 +38,7 @@ clean: ## Remove build artifacts
 	rm -rf $(BIN_DIR) dist coverage.out
 
 docker-build: ## Build the Docker image
-	docker build -t terradrift:local .
+	docker build --build-arg VERSION=$(VERSION) -t terradrift:local .
 
 help: ## Show this help
 	@awk 'BEGIN {FS = ":.*##"} /^[a-zA-Z_-]+:.*##/ {printf "%-18s %s\n", $$1, $$2}' $(MAKEFILE_LIST)

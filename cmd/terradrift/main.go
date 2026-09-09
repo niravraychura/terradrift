@@ -28,6 +28,10 @@ var (
 	errMultiScanFailed = errors.New("one or more scans failed")
 )
 
+// version is set at link time for release builds (-X main.version=...).
+// Local builds without ldflags report "dev".
+var version = "dev"
+
 const (
 	exitCodeOK            = 0
 	exitCodeFailure       = 1
@@ -63,6 +67,7 @@ func newRootCommand(stdout, stderr io.Writer) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:           "terradrift",
 		Short:         "Self-hosted Terraform drift detection",
+		Version:       version,
 		SilenceUsage:  true,
 		SilenceErrors: true,
 	}

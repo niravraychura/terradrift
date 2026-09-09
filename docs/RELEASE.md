@@ -38,7 +38,8 @@ git push origin v0.1.0
 ```
 
 4. Confirm the GitHub Release and artifacts from `release.yml`.
-5. Back-merge `main` into `dev` if `main` gained commits (changelog, hotfixes) not already on `dev`.
+5. Confirm release binaries report the tag: `terradrift --version` (injected via `-ldflags` / Docker `VERSION` build-arg).
+6. Back-merge `main` into `dev` if `main` gained commits (changelog, hotfixes) not already on `dev`.
 
 Do not force-push tags that have already been published with artifacts.
 

@@ -1,14 +1,17 @@
 # syntax=docker/dockerfile:1
 FROM golang:1.26-alpine AS builder
+ARG VERSION=dev
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
-RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/terradrift ./cmd/terradrift
+RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o /out/terradrift ./cmd/terradrift
 
 FROM alpine:3.24
 RUN addgroup -S terradrift && adduser -S -G terradrift terradrift
-RUN apk --no-cache add ca-certificates
+# Upgrade OpenSSL with the base image so Docker Scout's critical/high gate stays green.
+RUN apk --no-cache upgrade \
+    && apk --no-cache add --upgrade ca-certificates openssl libssl3 libcrypto3
 # Terraform is intentionally not bundled; provide a trusted binary for --terraform-exec.
 # Production: derive FROM this image and install a pinned terraform/tofu, or mount one on PATH.
 # See README "Docker" for a derived-image example.
