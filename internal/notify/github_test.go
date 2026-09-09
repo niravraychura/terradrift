@@ -37,7 +37,7 @@ func TestGitHubPRNotifierPostsSummary(t *testing.T) {
 			if err != nil {
 				t.Fatalf("read request body: %v", err)
 			}
-			if !strings.Contains(string(body), "Changed resources: 2") || !strings.Contains(string(body), githubPRCommentMarker) {
+			if !strings.Contains(string(body), "Changed resources: 2") || !strings.Contains(string(body), "terradrift-pr-comment") {
 				t.Fatalf("unexpected summary: %q", body)
 			}
 			return &http.Response{StatusCode: http.StatusCreated, Status: "201 Created", Body: io.NopCloser(strings.NewReader("{}"))}, nil

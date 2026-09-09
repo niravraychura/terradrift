@@ -80,6 +80,8 @@ terradrift init --directory ./terraform/prod --terraform-exec --history-dir .ter
 terradrift scan --config .terradrift.json
 ```
 
+The generated file includes `"$schema"` pointing at [`docs/terradrift.schema.json`](docs/terradrift.schema.json) for editor validation. More samples: [`examples/config`](examples/config/README.md).
+
 ---
 
 ## 2. Understand the result
@@ -134,11 +136,12 @@ Minimal pattern:
 Full scheduled examples:
 
 - GitHub Actions: [`examples/github-actions/terradrift-scheduled.yml`](examples/github-actions/terradrift-scheduled.yml)
+- OpenTofu (same `init` / `plan` / `show -json` contract, `--terraform-bin tofu`): [`examples/github-actions/terradrift-opentofu.yml`](examples/github-actions/terradrift-opentofu.yml)
 - Pull request comment (upsert): [`examples/github-actions/terradrift-pr.yml`](examples/github-actions/terradrift-pr.yml)
 - Multi-root + Slack: [`examples/github-actions/terradrift-scheduled-multi-root.yml`](examples/github-actions/terradrift-scheduled-multi-root.yml)
 - Cron: [`examples/cron/terradrift.cron`](examples/cron/terradrift.cron)
 
-Pin TerraDrift, Terraform/OpenTofu, and provider versions. Keep cloud credentials and webhook URLs in CI secrets.
+Pin TerraDrift, Terraform/OpenTofu, and provider versions. Keep cloud credentials and webhook URLs in CI secrets. OpenTofu is a drop-in planner: set `--terraform-bin tofu` (or `terraform_bin` in config) and keep using `--terraform-exec`.
 
 ---
 
