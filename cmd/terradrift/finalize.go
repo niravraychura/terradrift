@@ -127,5 +127,7 @@ func finalizeRootScan(ctx context.Context, scanReport report.DriftReport, opts d
 	}
 
 	shouldNotify := !opts.NotificationThrottle || report.ShouldNotify(scanReport, previousReport)
-	return deliverNotifications(ctx, opts.NotifyTarget, opts.SlackWebhookURL, opts.TeamsWebhookURL, opts.WebhookURL, opts.WebhookCACert, opts.GitHubRepository, opts.GitHubPR, opts.OwnerWebhooks, opts.NotificationThrottle, deliveryReport, previousReport, shouldNotify)
+	return withHistoryLock(opts.historyMu, func() error {
+		return deliverNotifications(ctx, opts.NotifyTarget, opts.SlackWebhookURL, opts.TeamsWebhookURL, opts.WebhookURL, opts.WebhookCACert, opts.GitHubRepository, opts.GitHubPR, opts.OwnerWebhooks, opts.NotificationThrottle, deliveryReport, previousReport, shouldNotify)
+	})
 }
