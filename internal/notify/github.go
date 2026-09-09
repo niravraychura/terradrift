@@ -16,8 +16,10 @@ import (
 )
 
 const (
-	githubAPIURL      = "https://api.github.com"
-	githubHTTPTimeout = 30 * time.Second
+	githubAPIURL           = "https://api.github.com"
+	githubHTTPTimeout      = 30 * time.Second
+	githubPRCommentMarker  = "<!-- terradrift-pr-comment -->"
+	githubPRCommentHeading = "## TerraDrift Scan"
 )
 
 // GitHubPRNotifier posts a scan summary to a pull request comment thread.
@@ -29,7 +31,7 @@ type GitHubPRNotifier struct {
 	APIURL     string
 }
 
-// Notify posts a concise, redacted drift summary to the configured pull request.
+// Notify upserts a concise, redacted drift summary on the configured pull request.
 func (notifier GitHubPRNotifier) Notify(ctx context.Context, scanReport report.DriftReport) error {
 	repository, token, err := validateGitHubNotifier(notifier.Repository, notifier.Token)
 	if err != nil {
@@ -42,25 +44,31 @@ func (notifier GitHubPRNotifier) Notify(ctx context.Context, scanReport report.D
 	if apiURL == "" {
 		apiURL = githubAPIURL
 	}
-	body, err := json.Marshal(struct {
-		Body string `json:"body"`
-	}{Body: "## TerraDrift Scan\n\n" + RedactedNotificationMessage(scanReport)})
-	if err != nil {
-		return fmt.Errorf("encode GitHub pull request summary: %w", err)
-	}
-	request, err := http.NewRequestWithContext(ctx, http.MethodPost, fmt.Sprintf("%s/repos/%s/issues/%d/comments", apiURL, repository, notifier.Number), bytes.NewReader(body))
-	if err != nil {
-		return fmt.Errorf("create GitHub pull request summary: %w", err)
-	}
-	request.Header.Set("Accept", "application/vnd.github+json")
-	request.Header.Set("Authorization", "Bearer "+token)
-	request.Header.Set("X-GitHub-Api-Version", "2022-11-28")
-	request.Header.Set("User-Agent", "terradrift")
-	request.Header.Set("Content-Type", "application/json")
 	client, err := githubHTTPClient(notifier.Client)
 	if err != nil {
 		return err
 	}
+	commentID, err := findTerraDriftPRCommentID(ctx, client, token, fmt.Sprintf("%s/repos/%s/issues/%d/comments?per_page=100", apiURL, repository, notifier.Number), repository)
+	if err != nil {
+		return err
+	}
+	body, err := json.Marshal(struct {
+		Body string `json:"body"`
+	}{Body: githubPRCommentMarker + "\n" + githubPRCommentHeading + "\n\n" + RedactedNotificationMessage(scanReport)})
+	if err != nil {
+		return fmt.Errorf("encode GitHub pull request summary: %w", err)
+	}
+	method := http.MethodPost
+	target := fmt.Sprintf("%s/repos/%s/issues/%d/comments", apiURL, repository, notifier.Number)
+	if commentID != 0 {
+		method = http.MethodPatch
+		target = fmt.Sprintf("%s/repos/%s/issues/comments/%d", apiURL, repository, commentID)
+	}
+	request, err := http.NewRequestWithContext(ctx, method, target, bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("create GitHub pull request summary: %w", err)
+	}
+	setGitHubJSONHeaders(request, token)
 	response, err := client.Do(request)
 	if err != nil {
 		return fmt.Errorf("send GitHub pull request summary to %s: %s", redact.String(repository), redact.String(err.Error()))
@@ -70,6 +78,44 @@ func (notifier GitHubPRNotifier) Notify(ctx context.Context, scanReport report.D
 		return fmt.Errorf("send GitHub pull request summary to %s: unexpected status %s", redact.String(repository), response.Status)
 	}
 	return nil
+}
+
+func findTerraDriftPRCommentID(ctx context.Context, client HTTPDoer, token, listURL, repository string) (int64, error) {
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, listURL, nil)
+	if err != nil {
+		return 0, fmt.Errorf("list GitHub pull request comments: %w", err)
+	}
+	setGitHubJSONHeaders(request, token)
+	response, err := client.Do(request)
+	if err != nil {
+		return 0, fmt.Errorf("list GitHub pull request comments on %s: %s", redact.String(repository), redact.String(err.Error()))
+	}
+	defer func() { _ = closeResponseBody(response.Body) }()
+	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
+		return 0, fmt.Errorf("list GitHub pull request comments on %s: unexpected status %s", redact.String(repository), response.Status)
+	}
+	var comments []struct {
+		ID   int64  `json:"id"`
+		Body string `json:"body"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&comments); err != nil {
+		return 0, fmt.Errorf("decode GitHub pull request comments: %w", err)
+	}
+	var found int64
+	for _, comment := range comments {
+		if strings.Contains(comment.Body, githubPRCommentMarker) || strings.Contains(comment.Body, githubPRCommentHeading) {
+			found = comment.ID
+		}
+	}
+	return found, nil
+}
+
+func setGitHubJSONHeaders(request *http.Request, token string) {
+	request.Header.Set("Accept", "application/vnd.github+json")
+	request.Header.Set("Authorization", "Bearer "+token)
+	request.Header.Set("X-GitHub-Api-Version", "2022-11-28")
+	request.Header.Set("User-Agent", "terradrift")
+	request.Header.Set("Content-Type", "application/json")
 }
 
 // GitHubIssueNotifier creates an issue for persistent drift.

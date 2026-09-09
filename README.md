@@ -137,6 +137,7 @@ Full scheduled examples:
 
 - GitHub Actions: [`examples/github-actions/terradrift-scheduled.yml`](examples/github-actions/terradrift-scheduled.yml)
 - OpenTofu (same `init` / `plan` / `show -json` contract, `--terraform-bin tofu`): [`examples/github-actions/terradrift-opentofu.yml`](examples/github-actions/terradrift-opentofu.yml)
+- Pull request comment (upsert): [`examples/github-actions/terradrift-pr.yml`](examples/github-actions/terradrift-pr.yml)
 - Multi-root + Slack: [`examples/github-actions/terradrift-scheduled-multi-root.yml`](examples/github-actions/terradrift-scheduled-multi-root.yml)
 - Cron: [`examples/cron/terradrift.cron`](examples/cron/terradrift.cron)
 
@@ -246,7 +247,7 @@ terradrift scan-all --discover . --terraform-exec --concurrency 4
 
 More detail and examples: [`examples/multi-root`](examples/multi-root).
 
-`scan-all` uses the same per-root delivery path as `scan` (history, notify, policy, ignore/owners, GitHub, artifacts, audit-log). Shared `--dashboard-html` / `--github-pr` still apply once per root — prefer `dashboard-index` and comment upsert for quieter multi-root CI.
+`scan-all` uses the same per-root delivery path as `scan` (history, notify, policy, ignore/owners, GitHub, artifacts, audit-log). Shared `--dashboard-html` is overwritten by the last successful root when concurrency > 1; `--github-pr` upserts one TerraDrift comment on that PR.
 
 Cross-root HTML index from history:
 
@@ -345,7 +346,7 @@ Compare both modes when unsure whether a finding is out-of-band change vs unappl
 | Audit adapters | [docs/AUDIT_ADAPTERS.md](docs/AUDIT_ADAPTERS.md) |
 | All `scan` flags | `terradrift scan --help` |
 
-Advanced features (baselines, ignore rules, owner routing, GitHub PR/issue comments, approvals, artifact upload) are configured via `.terradrift.json` / flags — see `terradrift scan --help` / `terradrift scan-all --help` and [examples/config](examples/config/README.md).
+Advanced features (baselines, ignore rules with exact or glob addresses like `module.vpc.*`, owner routing, GitHub PR/issue comments, approvals, artifact upload) are configured via `.terradrift.json` / flags — see `terradrift scan --help` / `terradrift scan-all --help` and [examples/config](examples/config/README.md).
 
 ---
 

@@ -2,13 +2,15 @@ package report
 
 import (
 	"fmt"
+	"path"
 	"strings"
 	"time"
 )
 
 // ApplyIgnoreRules annotates active temporary exceptions and recalculates drift counts.
+// Address is an exact match, or a glob (* ?) using Go's path.Match (for example module.vpc.*).
 func ApplyIgnoreRules(scanReport *DriftReport, rules []IgnoreRule) error {
-	active := make(map[string]IgnoreRule, len(rules))
+	active := make([]IgnoreRule, 0, len(rules))
 	now := time.Now().UTC()
 	for _, rule := range rules {
 		rule.Address = strings.TrimSpace(rule.Address)
@@ -21,13 +23,18 @@ func ApplyIgnoreRules(scanReport *DriftReport, rules []IgnoreRule) error {
 		if err != nil || !expiresAt.After(now) {
 			return fmt.Errorf("ignore rule for %s must have a future RFC3339 expires_at", rule.Address)
 		}
-		active[rule.Address] = rule
+		if strings.ContainsAny(rule.Address, "*?[") {
+			if _, err := path.Match(rule.Address, "probe"); err != nil {
+				return fmt.Errorf("ignore rule for %s: invalid glob: %w", rule.Address, err)
+			}
+		}
+		active = append(active, rule)
 	}
 
 	changed := 0
 	for i := range scanReport.ResourceChanges {
 		change := &scanReport.ResourceChanges[i]
-		rule, ok := active[change.Address]
+		rule, ok := matchIgnoreRule(active, change.Address)
 		if !ok {
 			changed++
 			continue
@@ -47,6 +54,23 @@ func ApplyIgnoreRules(scanReport *DriftReport, rules []IgnoreRule) error {
 		}
 	}
 	return nil
+}
+
+func matchIgnoreRule(rules []IgnoreRule, address string) (IgnoreRule, bool) {
+	for _, rule := range rules {
+		if ignoreAddressMatches(rule.Address, address) {
+			return rule, true
+		}
+	}
+	return IgnoreRule{}, false
+}
+
+func ignoreAddressMatches(pattern, address string) bool {
+	if strings.ContainsAny(pattern, "*?[") {
+		ok, err := path.Match(pattern, address)
+		return err == nil && ok
+	}
+	return pattern == address
 }
 
 // ApplyOwners assigns exact-address owners before resource-type owners.

@@ -13,20 +13,31 @@ import (
 )
 
 func TestGitHubPRNotifierPostsSummary(t *testing.T) {
+	calls := 0
 	notifier := GitHubPRNotifier{
 		Repository: "owner/repo",
 		Number:     12,
 		Token:      "secret-token",
 		APIURL:     "https://github.test",
 		Client: roundTripFunc(func(request *http.Request) (*http.Response, error) {
-			if request.URL.Path != "/repos/owner/repo/issues/12/comments" || request.Header.Get("Authorization") != "Bearer secret-token" {
-				t.Fatalf("unexpected GitHub request: %s %#v", request.URL, request.Header)
+			calls++
+			if request.Header.Get("Authorization") != "Bearer secret-token" {
+				t.Fatalf("unexpected GitHub auth: %#v", request.Header)
+			}
+			if calls == 1 {
+				if request.Method != http.MethodGet || request.URL.Path != "/repos/owner/repo/issues/12/comments" {
+					t.Fatalf("expected comment list, got %s %s", request.Method, request.URL)
+				}
+				return &http.Response{StatusCode: http.StatusOK, Status: "200 OK", Body: io.NopCloser(strings.NewReader("[]"))}, nil
+			}
+			if request.Method != http.MethodPost || request.URL.Path != "/repos/owner/repo/issues/12/comments" {
+				t.Fatalf("unexpected GitHub request: %s %s", request.Method, request.URL)
 			}
 			body, err := io.ReadAll(request.Body)
 			if err != nil {
 				t.Fatalf("read request body: %v", err)
 			}
-			if !strings.Contains(string(body), "Changed resources: 2") {
+			if !strings.Contains(string(body), "Changed resources: 2") || !strings.Contains(string(body), "terradrift-pr-comment") {
 				t.Fatalf("unexpected summary: %q", body)
 			}
 			return &http.Response{StatusCode: http.StatusCreated, Status: "201 Created", Body: io.NopCloser(strings.NewReader("{}"))}, nil
@@ -34,6 +45,38 @@ func TestGitHubPRNotifierPostsSummary(t *testing.T) {
 	}
 	if err := notifier.Notify(context.Background(), report.DriftReport{TotalChangedResources: 2}); err != nil {
 		t.Fatalf("post pull request summary: %v", err)
+	}
+	if calls != 2 {
+		t.Fatalf("expected list then create, got %d calls", calls)
+	}
+}
+
+func TestGitHubPRNotifierPatchesExistingComment(t *testing.T) {
+	calls := 0
+	notifier := GitHubPRNotifier{
+		Repository: "owner/repo",
+		Number:     12,
+		Token:      "secret-token",
+		APIURL:     "https://github.test",
+		Client: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+			calls++
+			if calls == 1 {
+				if request.Method != http.MethodGet {
+					t.Fatalf("expected GET, got %s", request.Method)
+				}
+				return &http.Response{StatusCode: http.StatusOK, Status: "200 OK", Body: io.NopCloser(strings.NewReader(`[{"id":99,"body":"## TerraDrift Scan\nold"}]`))}, nil
+			}
+			if request.Method != http.MethodPatch || request.URL.Path != "/repos/owner/repo/issues/comments/99" {
+				t.Fatalf("unexpected upsert: %s %s", request.Method, request.URL)
+			}
+			return &http.Response{StatusCode: http.StatusOK, Status: "200 OK", Body: io.NopCloser(strings.NewReader("{}"))}, nil
+		}),
+	}
+	if err := notifier.Notify(context.Background(), report.DriftReport{TotalChangedResources: 1}); err != nil {
+		t.Fatalf("upsert pull request summary: %v", err)
+	}
+	if calls != 2 {
+		t.Fatalf("expected list then patch, got %d calls", calls)
 	}
 }
 
