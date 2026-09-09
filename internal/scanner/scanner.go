@@ -82,6 +82,9 @@ func logError(redactPaths bool, err error, paths ...string) error {
 	for _, path := range paths {
 		if path != "" {
 			msg = strings.ReplaceAll(msg, path, "[REDACTED]")
+			if absPath, err := filepath.Abs(path); err == nil && absPath != path {
+				msg = strings.ReplaceAll(msg, absPath, "[REDACTED]")
+			}
 		}
 	}
 	return errors.New(msg)
