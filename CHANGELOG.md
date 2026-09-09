@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Ignore/baseline addresses accept globs (`module.vpc.*`) in addition to exact matches
+- GitHub PR comments are upserted (one TerraDrift comment per PR) instead of posting a new comment every scan
+
 ## [0.2.0] - 2026-09-09
 
 ### Added

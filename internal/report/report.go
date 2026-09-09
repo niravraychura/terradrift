@@ -52,7 +52,7 @@ type OutputChange struct {
 	Actions []string `json:"actions"`
 }
 
-// IgnoreRule records a temporary, auditable exception for one resource address.
+// IgnoreRule records a temporary, auditable exception for a resource address or glob.
 type IgnoreRule struct {
 	Address   string `json:"address"`
 	Owner     string `json:"owner"`
