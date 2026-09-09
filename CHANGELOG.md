@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-09-09
+
 ### Added
 
 - `terradrift --version` / `-v` (release builds inject the tag via `-ldflags`)
@@ -15,6 +17,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Refresh-only JSON/table reports now include attribute diffs when Terraform puts values on `resource_changes`, identity fields, or `relevant_attributes` instead of `resource_drift`
+
+### Security
+
+- Runtime container image upgrades Alpine OpenSSL with the base image so known critical/high CVEs are not shipped in GHCR
 
 ## [0.1.0] - 2026-08-19
 
@@ -37,5 +43,6 @@ First public tagged release of the self-hosted TerraDrift CLI.
 - SSRF-safe GitHub HTTP client, fail-closed truncated I/O, attribute value heuristics
 - Size budgets and redaction defaults for user-facing output
 
-[Unreleased]: https://github.com/niravraychura/terradrift/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/niravraychura/terradrift/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/niravraychura/terradrift/releases/tag/v0.2.0
 [0.1.0]: https://github.com/niravraychura/terradrift/releases/tag/v0.1.0
