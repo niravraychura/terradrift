@@ -1,4 +1,5 @@
 {
+  "$schema": "https://raw.githubusercontent.com/niravraychura/terradrift/main/docs/terradrift.schema.json",
   "output": "json",
   "timeout": "15m",
   "terraform_exec": true,
