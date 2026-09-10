@@ -43,6 +43,7 @@ make ci    # full local gate when tooling is available
 |--------|------|
 | Contribute / PR expectations | `CONTRIBUTING.md` |
 | Release / SemVer | `docs/RELEASE.md` |
+| v1.0 compatibility | `docs/COMPATIBILITY.md` |
 | Roadmap | `docs/ROADMAP.md` |
 | Security posture | `SECURITY.md` |
 | Architecture | `docs/ARCHITECTURE.md` |

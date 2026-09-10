@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `--github-issue-after` upserts one issue per Terraform root + drift fingerprint and closes it when that root later scans clean (#100)
 - `terraform show -json` is piped into `ParsePlanReader` so the raw plan JSON is not held as a second full buffer (32 MiB fail-closed cap unchanged) (#104)
 - Document that `approve` / `--approval-file` is review-only; ignores/baselines are the CI pass path (exit 2 unchanged) (#92)
+- Document the v1.0 compatibility contract for flags, exit codes, and published JSON (`docs/COMPATIBILITY.md`) (#95)
 
 ## [0.4.1] - 2026-09-10
 
