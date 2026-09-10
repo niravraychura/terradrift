@@ -2,6 +2,7 @@ package terraform
 
 import (
 	"context"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -29,7 +30,12 @@ func TestCLIRunnerIntegration(t *testing.T) {
 	if err != nil || exitCode != 0 {
 		t.Fatalf("terraform plan: exit=%d err=%v", exitCode, err)
 	}
-	if _, err := runner.ShowJSON(ctx, directory, planPath); err != nil {
+	rc, err := runner.ShowJSON(ctx, directory, planPath)
+	if err != nil {
 		t.Fatalf("terraform show: %v", err)
+	}
+	defer func() { _ = rc.Close() }()
+	if _, err := io.ReadAll(rc); err != nil {
+		t.Fatalf("terraform show JSON: %v", err)
 	}
 }

@@ -1,8 +1,10 @@
 package scanner
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -41,10 +43,13 @@ func (runner *fakeRunner) Plan(ctx context.Context, directory string, outputPath
 	return runner.planExit, runner.planErr
 }
 
-func (runner *fakeRunner) ShowJSON(ctx context.Context, directory string, planPath string) ([]byte, error) {
+func (runner *fakeRunner) ShowJSON(ctx context.Context, directory string, planPath string) (io.ReadCloser, error) {
 	runner.showCalled = true
 	runner.showPath = planPath
-	return runner.showJSON, runner.showErr
+	if runner.showErr != nil {
+		return nil, runner.showErr
+	}
+	return io.NopCloser(bytes.NewReader(runner.showJSON)), nil
 }
 
 func TestScanReturnsNoDriftBootstrapResult(t *testing.T) {

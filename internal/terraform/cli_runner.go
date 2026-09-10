@@ -6,10 +6,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/niravraychura/terradrift/internal/ioutil"
@@ -114,9 +116,74 @@ func (runner CLIRunner) selectWorkspace(ctx context.Context, directory string) e
 	return nil
 }
 
-// ShowJSON returns the JSON rendering of a Terraform plan file.
-func (runner CLIRunner) ShowJSON(ctx context.Context, directory string, planPath string) ([]byte, error) {
-	return runner.run(ctx, directory, "show", "-json", planPath)
+// ShowJSON streams the JSON rendering of a Terraform plan file.
+func (runner CLIRunner) ShowJSON(ctx context.Context, directory string, planPath string) (io.ReadCloser, error) {
+	return runner.start(ctx, directory, maxCommandOutputBytes, "show", "-json", planPath)
+}
+
+type streamingOutput struct {
+	pr        *io.PipeReader
+	done      <-chan error
+	closeOnce sync.Once
+	closeErr  error
+}
+
+func (s *streamingOutput) Read(p []byte) (int, error) {
+	return s.pr.Read(p)
+}
+
+func (s *streamingOutput) Close() error {
+	s.closeOnce.Do(func() {
+		_, _ = io.Copy(io.Discard, s.pr)
+		_ = s.pr.Close()
+		s.closeErr = <-s.done
+	})
+	return s.closeErr
+}
+
+func (runner CLIRunner) start(ctx context.Context, directory string, limit int64, args ...string) (io.ReadCloser, error) {
+	cmd := exec.CommandContext(ctx, runner.Path, withNoColor(args)...)
+	cmd.Dir = directory
+	cmd.Env = withPlannerAutomation(os.Environ(), runner.Path)
+
+	pr, pw := io.Pipe()
+	stdoutWriter := &ioutil.LimitedWriter{W: pw, Remaining: limit}
+	var stderr bytes.Buffer
+	stderrWriter := &ioutil.LimitedWriter{W: &stderr, Remaining: limit}
+	cmd.Stdout = stdoutWriter
+	cmd.Stderr = stderrWriter
+
+	if err := cmd.Start(); err != nil {
+		_ = pw.Close()
+		_ = pr.Close()
+		return nil, fmt.Errorf("terraform %v: %w", args, err)
+	}
+
+	done := make(chan error, 1)
+	go func() {
+		err := cmd.Wait()
+		if stdoutWriter.Truncated || stderrWriter.Truncated {
+			runErr := fmt.Errorf("terraform %v: command output exceeded %d bytes", args, limit)
+			_ = pw.CloseWithError(runErr)
+			done <- runErr
+			return
+		}
+		if err != nil {
+			if stderr.Len() > 0 {
+				runErr := fmt.Errorf("terraform %v: %w: %s", args, err, redact.String(stderr.String()))
+				_ = pw.CloseWithError(runErr)
+				done <- runErr
+				return
+			}
+			runErr := fmt.Errorf("terraform %v: %w", args, err)
+			_ = pw.CloseWithError(runErr)
+			done <- runErr
+			return
+		}
+		_ = pw.Close()
+		done <- nil
+	}()
+	return &streamingOutput{pr: pr, done: done}, nil
 }
 
 // Inventory returns CLI version data and the initialized module manifest.

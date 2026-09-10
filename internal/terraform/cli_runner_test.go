@@ -28,8 +28,35 @@ done
 	if err != nil {
 		t.Fatalf("expected show to succeed: %v", err)
 	}
-	if string(output) != `{"resource_changes":[]}` {
-		t.Fatalf("unexpected output %q", output)
+	defer func() { _ = output.Close() }()
+	data, err := io.ReadAll(output)
+	if err != nil {
+		t.Fatalf("read show JSON: %v", err)
+	}
+	if string(data) != `{"resource_changes":[]}` {
+		t.Fatalf("unexpected output %q", data)
+	}
+}
+
+func TestCLIRunnerShowJSONStreamTruncates(t *testing.T) {
+	runner := NewCLIRunner(writeTerraformStub(t, `#!/bin/sh
+printf 'abcdefghij'
+`))
+	output, err := runner.start(context.Background(), t.TempDir(), 4, "show", "-json", "plan.tfplan")
+	if err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	_, readErr := io.ReadAll(output)
+	closeErr := output.Close()
+	if readErr == nil && closeErr == nil {
+		t.Fatal("expected truncation error")
+	}
+	err = closeErr
+	if err == nil {
+		err = readErr
+	}
+	if !strings.Contains(err.Error(), "command output exceeded") {
+		t.Fatalf("expected cap error, got %v", err)
 	}
 }
 
