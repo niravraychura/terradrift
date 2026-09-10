@@ -32,10 +32,6 @@ Happy-path GitHub delivery uses `GITHUB_TOKEN` from the job (`--github-pr` / `--
 
 ## Marketplace
 
-GitHub Marketplace listing needs a public repo, root `action.yml` with branding (this file), and a tagged release. v0.4.0 includes `action.yml`; listing is a GitHub UI step on that release:
+Listed: [TerraDrift Scan](https://github.com/marketplace/actions/terradrift-scan) (free Action listing). Pin `uses: niravraychura/terradrift@v0.4.0`.
 
-1. Open https://github.com/niravraychura/terradrift/releases
-2. Use **Publish this Action to the GitHub Marketplace** on that release
-3. Add the Marketplace badge/link to the README
-
-The listing URL will be `https://github.com/marketplace/actions/terradrift-scan` (name from `action.yml`).
+To refresh the listing after a new tag, edit that release and keep **Publish this release to the GitHub Marketplace** checked.

@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - GitLab CI scheduled scan example (`examples/gitlab-ci/`) (#110)
+- GitHub Marketplace listing for the official Action ([TerraDrift Scan](https://github.com/marketplace/actions/terradrift-scan)) (#111)
 
 ## [0.4.0] - 2026-09-10
 
