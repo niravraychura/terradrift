@@ -1455,6 +1455,15 @@ func TestScanAllRequiresGitHubToken(t *testing.T) {
 	}
 }
 
+func TestScanRejectsInvalidGitHubAPIURL(t *testing.T) {
+	t.Setenv("GITHUB_TOKEN", "token")
+	t.Setenv("GITHUB_API_URL", "http://ghes.example.test/api/v3")
+	_, _, err := executeCommand("scan", "-d", t.TempDir(), "--github-repository", "example/terradrift", "--github-pr", "1")
+	if err == nil || !strings.Contains(err.Error(), "GITHUB_API_URL") {
+		t.Fatalf("expected GITHUB_API_URL error, got %v", err)
+	}
+}
+
 func TestScanAllLoadsAllowedCommandsFromConfig(t *testing.T) {
 	root := t.TempDir()
 	if err := os.Mkdir(filepath.Join(root, "development"), 0o700); err != nil {

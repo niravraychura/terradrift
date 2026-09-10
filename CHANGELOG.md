@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Honor `GITHUB_API_URL` for `--github-pr` / `--github-issue-after` so GHES and GHEC API hosts work (#101)
+
 ### Changed
 
 - `--github-issue-after` upserts one issue per Terraform root + drift fingerprint and closes it when that root later scans clean (#100)

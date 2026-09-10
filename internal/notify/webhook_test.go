@@ -177,3 +177,11 @@ func TestWebhookNotifierRedactsURLInErrors(t *testing.T) {
 		t.Fatalf("expected webhook URL query secret to be redacted from error, got %v", err)
 	}
 }
+
+func TestGitHubAPIURLDoesNotWeakenWebhookSSRF(t *testing.T) {
+	t.Setenv("GITHUB_API_URL", "https://ghes.example.test/api/v3")
+	err := WebhookNotifier{WebhookURL: "https://10.0.0.1/hook"}.Notify(context.Background(), report.DriftReport{})
+	if err == nil {
+		t.Fatal("expected private webhook URL to stay blocked")
+	}
+}
