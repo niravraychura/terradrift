@@ -296,6 +296,34 @@ func TestMultiScanStatusReportsNormalChanges(t *testing.T) {
 	}
 }
 
+func TestStableMultiScanReportJSONKeys(t *testing.T) {
+	data, err := json.Marshal(multiScanReport{
+		Status:                multiScanStatusComplete,
+		Roots:                 []multiScanRoot{},
+		TotalRoots:            0,
+		DriftedRoots:          0,
+		ChangedRoots:          0,
+		FailedRoots:           0,
+		TotalResourcesChecked: 0,
+		TotalChangedResources: 0,
+	})
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	var got map[string]any
+	if err := json.Unmarshal(data, &got); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	for _, key := range []string{
+		"status", "roots", "total_roots", "drifted_roots", "changed_roots", "failed_roots",
+		"total_resources_checked", "total_changed_resources",
+	} {
+		if _, ok := got[key]; !ok {
+			t.Fatalf("missing stable field %q in %s", key, data)
+		}
+	}
+}
+
 func TestScanAllReportsPartialOutcome(t *testing.T) {
 	valid := t.TempDir()
 	missing := filepath.Join(t.TempDir(), "missing")
@@ -1294,6 +1322,12 @@ func TestExitCodeConstants(t *testing.T) {
 func TestExitCodeForDriftDetected(t *testing.T) {
 	if got := exitCodeForError(errDriftDetected); got != exitCodeDriftDetected {
 		t.Fatalf("expected drift exit code %d, got %d", exitCodeDriftDetected, got)
+	}
+	if got := exitCodeForError(errChangesDetected); got != exitCodeDriftDetected {
+		t.Fatalf("expected changes exit code %d, got %d", exitCodeDriftDetected, got)
+	}
+	if got := exitCodeForError(errMultiScanFailed); got != exitCodeFailure {
+		t.Fatalf("expected failure exit code %d, got %d", exitCodeFailure, got)
 	}
 }
 

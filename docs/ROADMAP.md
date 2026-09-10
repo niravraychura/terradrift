@@ -14,9 +14,9 @@ Completed engineering history (through v0.1.0): [archive/PLAN-v0.1.md](archive/P
 | **v0.2.0** | Shipped — `--version`, scan-all delivery parity, refresh-only attribute diffs |
 | **v0.3.0** | Shipped — operator UX, glob ignores, GitHub PR upsert, install.sh / extra GOARCH |
 | **v0.4.0** | Shipped — CI honesty, lock/plan honesty, GitHub Action, `--plan-file`, CLI Cosign |
-| **v1.0.0** | Stability promise for CLI flags and published JSON — [#95](https://github.com/niravraychura/terradrift/issues/95); open a milestone when freeze work starts |
+| **v1.0.0** | Stability promise for CLI flags, exit codes, and published JSON — contract: [COMPATIBILITY.md](COMPATIBILITY.md); ticket [#95](https://github.com/niravraychura/terradrift/issues/95); milestone [v1.0.0](https://github.com/niravraychura/terradrift/milestone/5) (close when the tag ships) |
 
-Triage: [TerraDrift Project](https://github.com/users/niravraychura/projects/1). **Ready** is empty. **Backlog** is later (v1.0 freeze).
+Triage: [TerraDrift Project](https://github.com/users/niravraychura/projects/1). **Ready** is the v1.0 freeze (#95). Cutting the `v1.0.0` tag is a separate release. LinkedIn stays parked until the maintainer asks.
 
 ## Out of scope (for now)
 

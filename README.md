@@ -449,6 +449,7 @@ Compare both modes when unsure whether a finding is out-of-band change vs unappl
 | PagerDuty / Opsgenie webhook mapping | [examples/webhooks](examples/webhooks/README.md) |
 | vs plan / driftctl / HCP / rootsami | [docs/COMPARE.md](docs/COMPARE.md) |
 | Architecture & report JSON | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
+| v1.0 flags, exit codes, JSON | [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md) |
 | Roadmap / out of scope | [docs/ROADMAP.md](docs/ROADMAP.md) |
 | Release cycle (`dev` → `main` → tag) | [docs/RELEASE.md](docs/RELEASE.md) |
 | Changelog | [CHANGELOG.md](CHANGELOG.md) |
