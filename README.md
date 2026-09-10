@@ -26,7 +26,7 @@ TerraDrift runs `terraform plan` or `tofu plan` (refresh-only by default), turns
 9. [Security defaults](#9-security-defaults)
 10. [More documentation](#10-more-documentation)
 11. [Develop from source](#11-develop-from-source)
-12. [Contributing & license](#12-contributing--license)
+12. [Contributing, license, and trademarks](#12-contributing-license-and-trademarks)
 
 ---
 
@@ -445,9 +445,15 @@ make ci             # fmt check, vet, test, race, vuln, lint
 
 ---
 
-## 12. Contributing & license
+## 12. Contributing, license, and trademarks
 
 - PRs target **`dev`** — see [CONTRIBUTING.md](CONTRIBUTING.md)
 - Security reports: [SECURITY.md](SECURITY.md)
 - Agents / Cursor defaults: [AGENTS.md](AGENTS.md)
 - License: [MIT](LICENSE)
+
+TerraDrift is an independent project. It is **not** affiliated with, endorsed by, or sponsored by HashiCorp, the Linux Foundation, OpenTofu, or GitHub.
+
+[Terraform](https://www.terraform.io/) is a trademark of HashiCorp, Inc. [OpenTofu](https://opentofu.org/) is a Linux Foundation project. GitHub is a trademark of GitHub, Inc. Those names appear here only to describe compatibility: TerraDrift runs the `terraform` or `tofu` binary **you** install and does not redistribute HashiCorp Terraform.
+
+You are responsible for having permission and credentials to plan the roots you scan, and for complying with your cloud provider terms and with the licenses of the planner binaries you run.
