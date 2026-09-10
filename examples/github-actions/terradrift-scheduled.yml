@@ -13,6 +13,7 @@ on:
 permissions:
   contents: read
   id-token: write
+  # issues: write  # required for --github-issue-after
 
 jobs:
   drift-scan:
@@ -51,6 +52,9 @@ jobs:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
         run: |
           mkdir -p "${TF_PLUGIN_CACHE_DIR}"
+          # Persistent GitHub issues: uncomment issues: write above, then add
+          # --history-dir .terradrift-history --github-repository "${{ github.repository }}"
+          # --github-issue-after 3 --github-issue-label terradrift
           terradrift scan \
             --directory ./terraform/prod \
             --workspace-root "$PWD" \

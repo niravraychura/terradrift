@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- `--github-issue-after` upserts one issue per Terraform root + drift fingerprint and closes it when that root later scans clean (#100)
+
 ## [0.4.1] - 2026-09-10
 
 ### Added

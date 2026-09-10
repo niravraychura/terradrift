@@ -133,6 +133,16 @@ func TestLoadBaselineRules(t *testing.T) {
 	}
 }
 
+func TestLoadRejectsTooManyGitHubIssueLabels(t *testing.T) {
+	path := filepath.Join(t.TempDir(), DefaultPath)
+	if err := os.WriteFile(path, []byte(`{"github_issue_labels":["a","b","c","d","e","f","g","h","i"]}`), 0o600); err != nil {
+		t.Fatalf("write config fixture: %v", err)
+	}
+	if _, err := Load(path); err == nil {
+		t.Fatal("expected too many github_issue_labels to fail")
+	}
+}
+
 func TestLoadRejectsOversizedConfig(t *testing.T) {
 	path := filepath.Join(t.TempDir(), DefaultPath)
 	if err := os.WriteFile(path, make([]byte, maxConfigBytes+1), 0o600); err != nil {

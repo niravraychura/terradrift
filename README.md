@@ -429,7 +429,7 @@ Compare both modes when unsure whether a finding is out-of-band change vs unappl
 | Audit adapters | [docs/AUDIT_ADAPTERS.md](docs/AUDIT_ADAPTERS.md) |
 | All `scan` flags | `terradrift scan --help` |
 
-Advanced features (baselines, ignore rules with exact or glob addresses like `module.vpc.*`, owner routing, GitHub PR/issue comments, approvals, artifact upload) are configured via `.terradrift.json` / flags — see `terradrift scan --help` / `terradrift scan-all --help` and [examples/config](examples/config/README.md).
+Advanced features (baselines, ignore rules with exact or glob addresses like `module.vpc.*`, owner routing, GitHub PR comments, persistent GitHub drift issues, approvals, artifact upload) are configured via `.terradrift.json` / flags — see `terradrift scan --help` / `terradrift scan-all --help` and [examples/config](examples/config/README.md).
 
 ---
 

@@ -3,6 +3,7 @@ package notify
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -89,19 +90,281 @@ func TestGitHubNotifierReturnsTypedValidationErrors(t *testing.T) {
 }
 
 func TestGitHubIssueNotifierCreatesIssue(t *testing.T) {
+	calls := 0
+	scanReport := report.DriftReport{
+		RootID:                "abc123",
+		TotalChangedResources: 2,
+		Status:                report.ScanStatusDriftDetected,
+		ResourceChanges:       []report.ResourceChange{{Address: "aws_instance.web", Actions: []string{"update"}, RiskLevel: "medium"}},
+	}
+	notifier := GitHubIssueNotifier{
+		Repository: "owner/repo",
+		Token:      "secret-token",
+		APIURL:     "https://github.test",
+		Labels:     []string{"terradrift"},
+		Client: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+			calls++
+			if request.Header.Get("Authorization") != "Bearer secret-token" {
+				t.Fatalf("unexpected GitHub auth: %#v", request.Header)
+			}
+			if calls == 1 {
+				if request.Method != http.MethodGet || request.URL.Path != "/repos/owner/repo/issues" {
+					t.Fatalf("expected issue list, got %s %s", request.Method, request.URL)
+				}
+				return &http.Response{StatusCode: http.StatusOK, Status: "200 OK", Body: io.NopCloser(strings.NewReader("[]"))}, nil
+			}
+			if request.Method != http.MethodPost || request.URL.Path != "/repos/owner/repo/issues" {
+				t.Fatalf("unexpected GitHub request: %s %s", request.Method, request.URL)
+			}
+			body, err := io.ReadAll(request.Body)
+			if err != nil {
+				t.Fatalf("read request body: %v", err)
+			}
+			if !strings.Contains(string(body), "terradrift-issue root=abc123") || !strings.Contains(string(body), `"labels":["terradrift"]`) {
+				t.Fatalf("unexpected issue payload: %q", body)
+			}
+			return &http.Response{StatusCode: http.StatusCreated, Status: "201 Created", Body: io.NopCloser(strings.NewReader("{}"))}, nil
+		}),
+	}
+	if err := notifier.Notify(context.Background(), scanReport); err != nil {
+		t.Fatalf("create drift issue: %v", err)
+	}
+	if calls != 2 {
+		t.Fatalf("expected list then create, got %d calls", calls)
+	}
+}
+
+func TestGitHubIssueNotifierUpsertsMatchingIssue(t *testing.T) {
+	scanReport := report.DriftReport{
+		RootID:          "abc123",
+		Status:          report.ScanStatusDriftDetected,
+		ResourceChanges: []report.ResourceChange{{Address: "aws_instance.web", Actions: []string{"update"}, RiskLevel: "medium"}},
+	}
+	marker := githubIssueMarker("abc123", githubIssueFPHash(scanReport))
+	calls := 0
 	notifier := GitHubIssueNotifier{
 		Repository: "owner/repo",
 		Token:      "secret-token",
 		APIURL:     "https://github.test",
 		Client: roundTripFunc(func(request *http.Request) (*http.Response, error) {
-			if request.URL.Path != "/repos/owner/repo/issues" || request.Header.Get("Authorization") != "Bearer secret-token" {
-				t.Fatalf("unexpected GitHub request: %s %#v", request.URL, request.Header)
+			calls++
+			if calls == 1 {
+				payload := fmt.Sprintf(`[{"number":44,"body":%q}]`, marker+"\nold")
+				return &http.Response{StatusCode: http.StatusOK, Status: "200 OK", Body: io.NopCloser(strings.NewReader(payload))}, nil
+			}
+			if request.Method != http.MethodPatch || request.URL.Path != "/repos/owner/repo/issues/44" {
+				t.Fatalf("unexpected upsert: %s %s", request.Method, request.URL)
+			}
+			body, err := io.ReadAll(request.Body)
+			if err != nil {
+				t.Fatalf("read request body: %v", err)
+			}
+			if !strings.Contains(string(body), "terradrift-issue root=abc123 fp=") {
+				t.Fatalf("expected marker in patch body, got %q", body)
+			}
+			return &http.Response{StatusCode: http.StatusOK, Status: "200 OK", Body: io.NopCloser(strings.NewReader("{}"))}, nil
+		}),
+	}
+	if err := notifier.Notify(context.Background(), scanReport); err != nil {
+		t.Fatalf("upsert drift issue: %v", err)
+	}
+	if calls != 2 {
+		t.Fatalf("expected list then patch, got %d calls", calls)
+	}
+}
+
+func TestGitHubIssueNotifierClosesStaleFingerprintThenCreates(t *testing.T) {
+	scanReport := report.DriftReport{
+		RootID:          "abc123",
+		Status:          report.ScanStatusDriftDetected,
+		ResourceChanges: []report.ResourceChange{{Address: "aws_instance.web", Actions: []string{"update"}, RiskLevel: "medium"}},
+	}
+	stale := githubIssueMarker("abc123", "cafebabe")
+	calls := 0
+	notifier := GitHubIssueNotifier{
+		Repository: "owner/repo",
+		Token:      "secret-token",
+		APIURL:     "https://github.test",
+		Client: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+			calls++
+			switch calls {
+			case 1:
+				payload := fmt.Sprintf(`[{"number":11,"body":%q}]`, stale)
+				return &http.Response{StatusCode: http.StatusOK, Status: "200 OK", Body: io.NopCloser(strings.NewReader(payload))}, nil
+			case 2:
+				if request.Method != http.MethodPatch || request.URL.Path != "/repos/owner/repo/issues/11" {
+					t.Fatalf("unexpected stale close: %s %s", request.Method, request.URL)
+				}
+				body, err := io.ReadAll(request.Body)
+				if err != nil {
+					t.Fatalf("read request body: %v", err)
+				}
+				if !strings.Contains(string(body), `"state":"closed"`) {
+					t.Fatalf("expected close payload, got %q", body)
+				}
+				return &http.Response{StatusCode: http.StatusOK, Status: "200 OK", Body: io.NopCloser(strings.NewReader("{}"))}, nil
+			case 3:
+				if request.Method != http.MethodPost || request.URL.Path != "/repos/owner/repo/issues" {
+					t.Fatalf("unexpected create: %s %s", request.Method, request.URL)
+				}
+				return &http.Response{StatusCode: http.StatusCreated, Status: "201 Created", Body: io.NopCloser(strings.NewReader("{}"))}, nil
+			default:
+				t.Fatalf("unexpected extra call %d: %s %s", calls, request.Method, request.URL)
+				return nil, nil
+			}
+		}),
+	}
+	if err := notifier.Notify(context.Background(), scanReport); err != nil {
+		t.Fatalf("replace stale issue: %v", err)
+	}
+	if calls != 3 {
+		t.Fatalf("expected list, close stale, create, got %d calls", calls)
+	}
+}
+
+func TestGitHubIssueNotifierClosesDuplicateMatches(t *testing.T) {
+	scanReport := report.DriftReport{
+		RootID:          "abc123",
+		Status:          report.ScanStatusDriftDetected,
+		ResourceChanges: []report.ResourceChange{{Address: "aws_instance.web", Actions: []string{"update"}, RiskLevel: "medium"}},
+	}
+	marker := githubIssueMarker("abc123", githubIssueFPHash(scanReport))
+	calls := 0
+	notifier := GitHubIssueNotifier{
+		Repository: "owner/repo",
+		Token:      "secret-token",
+		APIURL:     "https://github.test",
+		Client: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+			calls++
+			switch calls {
+			case 1:
+				payload := fmt.Sprintf(`[{"number":44,"body":%q},{"number":45,"body":%q}]`, marker, marker)
+				return &http.Response{StatusCode: http.StatusOK, Status: "200 OK", Body: io.NopCloser(strings.NewReader(payload))}, nil
+			case 2:
+				if request.Method != http.MethodPatch || request.URL.Path != "/repos/owner/repo/issues/45" {
+					t.Fatalf("expected duplicate close, got %s %s", request.Method, request.URL)
+				}
+				body, err := io.ReadAll(request.Body)
+				if err != nil {
+					t.Fatalf("read request body: %v", err)
+				}
+				if !strings.Contains(string(body), `"state":"closed"`) {
+					t.Fatalf("expected close payload, got %q", body)
+				}
+				return &http.Response{StatusCode: http.StatusOK, Status: "200 OK", Body: io.NopCloser(strings.NewReader("{}"))}, nil
+			case 3:
+				if request.Method != http.MethodPatch || request.URL.Path != "/repos/owner/repo/issues/44" {
+					t.Fatalf("expected upsert of first match, got %s %s", request.Method, request.URL)
+				}
+				body, err := io.ReadAll(request.Body)
+				if err != nil {
+					t.Fatalf("read request body: %v", err)
+				}
+				if !strings.Contains(string(body), "terradrift-issue root=abc123 fp=") {
+					t.Fatalf("expected marker in patch body, got %q", body)
+				}
+				return &http.Response{StatusCode: http.StatusOK, Status: "200 OK", Body: io.NopCloser(strings.NewReader("{}"))}, nil
+			default:
+				t.Fatalf("unexpected extra call %d: %s %s", calls, request.Method, request.URL)
+				return nil, nil
+			}
+		}),
+	}
+	if err := notifier.Notify(context.Background(), scanReport); err != nil {
+		t.Fatalf("dedupe matching issues: %v", err)
+	}
+	if calls != 3 {
+		t.Fatalf("expected list, close duplicate, upsert, got %d calls", calls)
+	}
+}
+
+func TestGitHubIssueNotifierFailsClosedOnTooManyIssuePages(t *testing.T) {
+	calls := 0
+	notifier := GitHubIssueNotifier{
+		Repository: "owner/repo",
+		Token:      "secret-token",
+		APIURL:     "https://github.test",
+		Client: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+			calls++
+			if request.Method != http.MethodGet {
+				t.Fatalf("expected list only, got %s %s", request.Method, request.URL)
+			}
+			header := make(http.Header)
+			header.Set("Link", `<https://github.test/repos/owner/repo/issues?page=2>; rel="next"`)
+			return &http.Response{StatusCode: http.StatusOK, Status: "200 OK", Header: header, Body: io.NopCloser(strings.NewReader("[]"))}, nil
+		}),
+	}
+	err := notifier.Notify(context.Background(), report.DriftReport{RootID: "abc123", Status: report.ScanStatusDriftDetected})
+	if err == nil || !strings.Contains(err.Error(), "too many open issues") {
+		t.Fatalf("expected fail-closed list error, got %v", err)
+	}
+	if calls != githubIssueListMaxPages {
+		t.Fatalf("listed %d pages, want %d", calls, githubIssueListMaxPages)
+	}
+}
+
+func TestGitHubIssueNotifierSkipsPullRequests(t *testing.T) {
+	scanReport := report.DriftReport{
+		RootID:          "abc123",
+		Status:          report.ScanStatusDriftDetected,
+		ResourceChanges: []report.ResourceChange{{Address: "aws_instance.web", Actions: []string{"update"}, RiskLevel: "medium"}},
+	}
+	marker := githubIssueMarker("abc123", githubIssueFPHash(scanReport))
+	calls := 0
+	notifier := GitHubIssueNotifier{
+		Repository: "owner/repo",
+		Token:      "secret-token",
+		APIURL:     "https://github.test",
+		Client: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+			calls++
+			if calls == 1 {
+				payload := fmt.Sprintf(`[{"number":7,"body":%q,"pull_request":{"url":"https://github.test/pr/7"}}]`, marker)
+				return &http.Response{StatusCode: http.StatusOK, Status: "200 OK", Body: io.NopCloser(strings.NewReader(payload))}, nil
+			}
+			if request.Method != http.MethodPost || request.URL.Path != "/repos/owner/repo/issues" {
+				t.Fatalf("expected create after skipping PR, got %s %s", request.Method, request.URL)
 			}
 			return &http.Response{StatusCode: http.StatusCreated, Status: "201 Created", Body: io.NopCloser(strings.NewReader("{}"))}, nil
 		}),
 	}
-	if err := notifier.Notify(context.Background(), report.DriftReport{TotalChangedResources: 2}); err != nil {
-		t.Fatalf("create drift issue: %v", err)
+	if err := notifier.Notify(context.Background(), scanReport); err != nil {
+		t.Fatalf("skip pull request: %v", err)
+	}
+	if calls != 2 {
+		t.Fatalf("expected list then create, got %d calls", calls)
+	}
+}
+
+func TestGitHubIssueNotifierCloseResolved(t *testing.T) {
+	calls := 0
+	notifier := GitHubIssueNotifier{
+		Repository: "owner/repo",
+		Token:      "secret-token",
+		APIURL:     "https://github.test",
+		Client: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+			calls++
+			if calls == 1 {
+				body := `[{"number":44,"body":"<!-- terradrift-issue root=abc123 fp=deadbeef -->"},{"number":9,"body":"unrelated"}]`
+				return &http.Response{StatusCode: http.StatusOK, Status: "200 OK", Body: io.NopCloser(strings.NewReader(body))}, nil
+			}
+			if request.Method != http.MethodPatch || request.URL.Path != "/repos/owner/repo/issues/44" {
+				t.Fatalf("unexpected close: %s %s", request.Method, request.URL)
+			}
+			body, err := io.ReadAll(request.Body)
+			if err != nil {
+				t.Fatalf("read request body: %v", err)
+			}
+			if !strings.Contains(string(body), `"state":"closed"`) {
+				t.Fatalf("expected close payload, got %q", body)
+			}
+			return &http.Response{StatusCode: http.StatusOK, Status: "200 OK", Body: io.NopCloser(strings.NewReader("{}"))}, nil
+		}),
+	}
+	if err := notifier.CloseResolved(context.Background(), report.DriftReport{RootID: "abc123", Status: report.ScanStatusNoDrift}); err != nil {
+		t.Fatalf("close resolved issue: %v", err)
+	}
+	if calls != 2 {
+		t.Fatalf("expected list then close, got %d calls", calls)
 	}
 }
 

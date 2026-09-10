@@ -1009,7 +1009,7 @@ func TestScanAllHelpIncludesDeliveryFlags(t *testing.T) {
 	}
 	for _, flag := range []string{
 		"--history-dir", "--notify", "--policy-command", "--cost-command", "--workspace", "--var-file", "--config",
-		"--github-repository", "--github-pr", "--github-issue-after", "--artifact-url", "--approval-file", "--audit-log",
+		"--github-repository", "--github-pr", "--github-issue-after", "--github-issue-label", "--artifact-url", "--approval-file", "--audit-log",
 	} {
 		if !strings.Contains(stdout, flag) {
 			t.Fatalf("expected scan-all help to contain %q", flag)
