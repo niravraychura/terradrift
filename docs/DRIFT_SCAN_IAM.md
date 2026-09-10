@@ -19,6 +19,22 @@ GCP: `google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093` (v3) 
 
 Pin third-party actions to SHAs in real workflows. Full scheduled examples: [examples/github-actions](../examples/github-actions/README.md).
 
+## GitLab CI OIDC
+
+Prefer ID tokens (`id_tokens`) over long-lived keys. Copy-paste job: [examples/gitlab-ci](../examples/gitlab-ci/README.md).
+
+AWS (`aud` must match the identity provider; GitLab.com shown):
+
+```yaml
+id_tokens:
+  GITLAB_OIDC_TOKEN:
+    aud: https://gitlab.com
+```
+
+Then `aws sts assume-role-with-web-identity` with `--web-identity-token "$GITLAB_OIDC_TOKEN"` against a read-only role. Self-managed GitLab: set `aud` to your GitLab URL (`$CI_SERVER_URL`). Do not use the removed `CI_JOB_JWT` / `CI_JOB_JWT_V2` variables.
+
+GCP and Azure: the same ID token against Workload Identity Federation / federated credentials. See [GitLab: connect to cloud services](https://docs.gitlab.com/ci/cloud_services/).
+
 ## AWS
 
 Use a dedicated IAM role with only the service `Describe*`, `Get*`, and `List*` permissions needed by the providers in the scanned root. Do not grant write actions, IAM administration, or unrestricted `sts:AssumeRole`. Scope resources and regions where the provider supports it.
