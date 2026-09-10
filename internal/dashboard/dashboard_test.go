@@ -35,6 +35,7 @@ func TestRenderEscapesResourceFields(t *testing.T) {
 	if !strings.Contains(output.String(), "system-ui") {
 		t.Fatalf("expected dashboard CSS, got %q", output.String())
 	}
+	assertDashboardCSP(t, output.String())
 }
 
 func TestRenderIndexEscapesDirectories(t *testing.T) {
@@ -49,6 +50,7 @@ func TestRenderIndexEscapesDirectories(t *testing.T) {
 	if !strings.Contains(output.String(), "system-ui") {
 		t.Fatalf("expected index CSS, got %q", output.String())
 	}
+	assertDashboardCSP(t, output.String())
 }
 
 func TestRenderIndexGroupsByDirectory(t *testing.T) {
@@ -79,6 +81,23 @@ func TestRenderIndexEmpty(t *testing.T) {
 	}
 	if !strings.Contains(output.String(), "No history available") {
 		t.Fatalf("expected empty index message, got %q", output.String())
+	}
+	assertDashboardCSP(t, output.String())
+}
+
+func assertDashboardCSP(t *testing.T, html string) {
+	t.Helper()
+	if !strings.Contains(html, `http-equiv="Content-Security-Policy"`) {
+		t.Fatalf("expected CSP meta tag, got %q", html)
+	}
+	if !strings.Contains(html, ContentSecurityPolicy) {
+		t.Fatalf("expected CSP policy %q, got %q", ContentSecurityPolicy, html)
+	}
+	if !strings.Contains(html, "style-src 'unsafe-inline'") {
+		t.Fatalf("expected inline CSS to be allowed, got %q", html)
+	}
+	if strings.Contains(html, "script-src 'unsafe-inline'") || !strings.Contains(html, "script-src 'none'") {
+		t.Fatalf("expected scripts to be forbidden, got %q", html)
 	}
 }
 

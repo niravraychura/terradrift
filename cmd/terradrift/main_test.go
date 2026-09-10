@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/niravraychura/terradrift/internal/config"
+	"github.com/niravraychura/terradrift/internal/dashboard"
 	"github.com/niravraychura/terradrift/internal/history"
 	"github.com/niravraychura/terradrift/internal/ioutil"
 	"github.com/niravraychura/terradrift/internal/notify"
@@ -422,6 +423,14 @@ func TestHistoryHandlerServesReadOnlyReports(t *testing.T) {
 		handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, path, nil))
 		if recorder.Code != http.StatusOK {
 			t.Fatalf("expected %s to succeed, got %d", path, recorder.Code)
+		}
+		if path == "/" {
+			if recorder.Header().Get("Content-Security-Policy") != dashboard.ContentSecurityPolicy {
+				t.Fatalf("expected HTML CSP header, got %q", recorder.Header().Get("Content-Security-Policy"))
+			}
+			if !strings.Contains(recorder.Body.String(), dashboard.ContentSecurityPolicy) {
+				t.Fatalf("expected CSP meta in HTML body")
+			}
 		}
 	}
 	recorder := httptest.NewRecorder()
