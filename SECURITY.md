@@ -2,7 +2,7 @@
 
 ## Supported versions
 
-TerraDrift is pre-1.0 until the `v1.0.0` tag. Security fixes land on `dev` first, then `main` through the normal promotion path. **Only the latest tagged release on `main`** (and `main` itself) is supported for security fixes. After 1.0, breaking CLI/JSON changes are a MAJOR — [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md). See [docs/RELEASE.md](docs/RELEASE.md) for the release cycle.
+TerraDrift **1.0** is the stability promise for CLI flags, exit codes, and published JSON ([docs/COMPATIBILITY.md](docs/COMPATIBILITY.md)). Security fixes land on `dev` first, then `main` through the normal promotion path. **Only the latest tagged release on `main`** (and `main` itself) is supported for security fixes. Breaking CLI/JSON changes after 1.0 are a MAJOR. See [docs/RELEASE.md](docs/RELEASE.md) for the release cycle.
 
 ## Reporting a vulnerability
 

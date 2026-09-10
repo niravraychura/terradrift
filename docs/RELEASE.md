@@ -15,7 +15,7 @@ TerraDrift uses SemVer (`vMAJOR.MINOR.PATCH`) and ships artifacts from annotated
 | Hotfix | Patch on `main`, then back-merge to `dev` |
 | Support | Security fixes on the latest tagged release / `main` |
 
-**Cadence (pre-1.0):** release when ready after a coherent `dev` → `main` promotion—not on a forced calendar.
+**Cadence:** release when ready after a coherent `dev` → `main` promotion—not on a forced calendar. After 1.0, breaking flags/JSON is a MAJOR ([COMPATIBILITY.md](COMPATIBILITY.md)).
 
 ## Versioning
 
