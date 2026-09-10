@@ -2,6 +2,7 @@
 
 [![CI](https://github.com/niravraychura/terradrift/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/niravraychura/terradrift/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/niravraychura/terradrift?include_prereleases&sort=semver)](https://github.com/niravraychura/terradrift/releases)
+[![GitHub Marketplace](https://img.shields.io/badge/Marketplace-TerraDrift%20Scan-blue?logo=github)](https://github.com/marketplace/actions/terradrift-scan)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 **Plan-based Terraform / OpenTofu drift CLI** for CI and cron on *your* runner. Not a SaaS, not unmanaged-resource inventory, and not the 2023 [rootsami/terradrift](https://github.com/rootsami/terradrift) server.
@@ -178,7 +179,7 @@ Preferred: the official Action (always `--terraform-exec`; fails if Terraform is
     directory: ./terraform/prod
 ```
 
-Details: [docs/GITHUB_ACTION.md](docs/GITHUB_ACTION.md) · [examples/github-actions](examples/github-actions/README.md) · [examples/gitlab-ci](examples/gitlab-ci/README.md).
+Details: [GitHub Marketplace](https://github.com/marketplace/actions/terradrift-scan) · [docs/GITHUB_ACTION.md](docs/GITHUB_ACTION.md) · [examples/github-actions](examples/github-actions/README.md) · [examples/gitlab-ci](examples/gitlab-ci/README.md).
 
 Minimal pattern without the Action:
 

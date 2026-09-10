@@ -8,7 +8,7 @@ Copy these into your infrastructure repository. Pin third-party actions to SHAs.
 
 Pin `uses: niravraychura/terradrift@v0.4.0` (first tag with `action.yml`). Empty `version:` installs that tag.
 
-Marketplace listing is a GitHub UI step on that release — see [docs/GITHUB_ACTION.md](../../docs/GITHUB_ACTION.md).
+Marketplace: [TerraDrift Scan](https://github.com/marketplace/actions/terradrift-scan).
 
 ## Copy-paste workflows
 
