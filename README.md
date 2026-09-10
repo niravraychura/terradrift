@@ -51,7 +51,13 @@ cosign verify-blob \
   terradrift_linux_amd64.tar.gz
 ```
 
-Homebrew: there is no published tap; see [`contrib/homebrew/README.md`](contrib/homebrew/README.md). Or build from source:
+Homebrew (macOS/Linux):
+
+```bash
+brew install niravraychura/terradrift/terradrift
+```
+
+Tap: [`niravraychura/homebrew-terradrift`](https://github.com/niravraychura/homebrew-terradrift). Or build from source:
 
 ```bash
 git clone https://github.com/niravraychura/terradrift.git
