@@ -44,6 +44,7 @@
       "maxItems": 8,
       "items": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,49}$" }
     },
+    "skip_if_open_pr": { "type": "boolean", "description": "Skip a root when an open GitHub PR in github_repository changes files under that root" },
     "artifact_url": { "type": "string" },
     "attribute_values": { "type": "boolean" },
     "workspace": { "type": "string" },

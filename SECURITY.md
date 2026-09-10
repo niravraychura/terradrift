@@ -53,6 +53,7 @@ Do not commit cloud credentials, webhook URLs, or `GITHUB_TOKEN` values. Keep th
 - GitHub PR/issue delivery honors `GITHUB_API_URL` (HTTPS, no userinfo; GitHub Actions sets this on GHES/GHEC). That **one** API host may resolve to a private IP. Generic `--notify webhook` destinations stay blocked.
 - Optional `--webhook-ca-cert` (or `webhook_ca_cert`) loads a PEM CA bundle for enterprise TLS interception.
 - `GITHUB_TOKEN` is read only from the environment and validated early when GitHub delivery is configured.
+- `--skip-if-open-pr` lists open pull requests and their files; it skips instead of planning when a file path sits under the Terraform root. It does not report `no_drift`.
 
 ### Policy, adapters, and publish gate
 

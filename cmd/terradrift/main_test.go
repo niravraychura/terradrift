@@ -1009,7 +1009,7 @@ func TestScanAllHelpIncludesDeliveryFlags(t *testing.T) {
 	}
 	for _, flag := range []string{
 		"--history-dir", "--notify", "--policy-command", "--cost-command", "--workspace", "--var-file", "--config",
-		"--github-repository", "--github-pr", "--github-issue-after", "--github-issue-label", "--artifact-url", "--approval-file", "--audit-log",
+		"--github-repository", "--github-pr", "--github-issue-after", "--github-issue-label", "--skip-if-open-pr", "--artifact-url", "--approval-file", "--audit-log",
 	} {
 		if !strings.Contains(stdout, flag) {
 			t.Fatalf("expected scan-all help to contain %q", flag)
@@ -1452,6 +1452,22 @@ func TestScanAllRequiresGitHubToken(t *testing.T) {
 	)
 	if err == nil || !strings.Contains(err.Error(), "GITHUB_TOKEN") {
 		t.Fatalf("expected GITHUB_TOKEN error, got %v", err)
+	}
+}
+
+func TestScanRejectsSkipIfOpenPRWithoutRepository(t *testing.T) {
+	t.Setenv("GITHUB_TOKEN", "token")
+	_, _, err := executeCommand("scan", "-d", t.TempDir(), "--skip-if-open-pr")
+	if err == nil || !strings.Contains(err.Error(), "github-repository") {
+		t.Fatalf("expected github-repository error, got %v", err)
+	}
+}
+
+func TestScanRejectsSkipIfOpenPRWithGitHubPR(t *testing.T) {
+	t.Setenv("GITHUB_TOKEN", "token")
+	_, _, err := executeCommand("scan", "-d", t.TempDir(), "--github-repository", "example/terradrift", "--github-pr", "1", "--skip-if-open-pr")
+	if err == nil || !strings.Contains(err.Error(), "skip-if-open-pr") {
+		t.Fatalf("expected skip-if-open-pr combination error, got %v", err)
 	}
 }
 

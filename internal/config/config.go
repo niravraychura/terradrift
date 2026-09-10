@@ -59,6 +59,7 @@ type Config struct {
 	GitHubPR             int                        `json:"github_pr"`
 	GitHubIssueAfter     int                        `json:"github_issue_after"`
 	GitHubIssueLabels    []string                   `json:"github_issue_labels,omitempty"`
+	SkipIfOpenPR         bool                       `json:"skip_if_open_pr,omitempty"`
 	ArtifactURL          string                     `json:"artifact_url"`
 	AuditCommand         string                     `json:"audit_command"`
 	AuditArgs            []string                   `json:"audit_args"`

@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Honor `GITHUB_API_URL` for `--github-pr` / `--github-issue-after` so GHES and GHEC API hosts work (#101)
+- `--skip-if-open-pr` skips a root when an open GitHub PR in `--github-repository` changes files under that root (`status: skipped`, exit 0) (#103)
 
 ### Changed
 

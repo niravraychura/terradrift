@@ -51,6 +51,8 @@ type scanAllParams struct {
 	AuditArgs    []string
 	Enrichment   reportEnrichmentOptions
 	Delivery     deliveryOptions
+	PRSkipper    *notify.GitHubOpenPRSkipper
+	Stderr       io.Writer
 }
 
 func newScanAllCommand(stdout io.Writer) *cobra.Command {
@@ -104,6 +106,7 @@ func newScanAllCommand(stdout io.Writer) *cobra.Command {
 	var githubPR int
 	var githubIssueAfter int
 	var githubIssueLabels []string
+	var skipIfOpenPR bool
 	var artifactURL string
 	var approvalFile string
 	var auditLogPath string
@@ -119,7 +122,7 @@ per-root profile, plan_mode, workspace, var_files, and vars. Named profiles requ
 Delivery matches scan per root: history, dashboard HTML, slack/teams/webhook notifications,
 owner webhooks, policy publish gate, cost/audit enrichment, ignore/baseline rules, owners,
 runbooks, approvals, GitHub PR/issue summaries, --artifact-url, --audit-log, notification
-throttle (via config), attribute-values, workspace/var-file defaults, and --failure-severity.
+throttle (via config), attribute-values, workspace/var-file defaults, --failure-severity, and --skip-if-open-pr.
 
 Prefer terradrift dashboard-index for multi-root HTML. Shared --dashboard-html, --artifact-url,
 and --github-pr are refused when more than one root would write the same destination.`,
@@ -177,6 +180,7 @@ and --github-pr are refused when more than one root would write the same destina
 						githubIssueLabels = append([]string(nil), cfg.GitHubIssueLabels...)
 						return nil
 					}},
+					{flag: "skip-if-open-pr", assign: func() error { skipIfOpenPR = cfg.SkipIfOpenPR; return nil }},
 					{flag: "artifact-url", assign: func() error { artifactURL = cfg.ArtifactURL; return nil }},
 					{flag: "audit-command", assign: func() error { auditCommand = cfg.AuditCommand; return nil }},
 					{flag: "audit-arg", assign: func() error { auditArgs = append([]string(nil), cfg.AuditArgs...); return nil }},
@@ -270,10 +274,16 @@ and --github-pr are refused when more than one root would write the same destina
 			if githubIssueAfter > 0 && (githubIssueAfter < 2 || githubRepository == "" || historyDir == "") {
 				return fmt.Errorf("github-issue-after requires github-repository, history-dir, and a value of at least 2")
 			}
+			if skipIfOpenPR && githubPR > 0 {
+				return fmt.Errorf("skip-if-open-pr cannot be used with github-pr")
+			}
+			if skipIfOpenPR && githubRepository == "" {
+				return fmt.Errorf("github-repository is required with skip-if-open-pr")
+			}
 			if err := validation.GitHubIssueLabels(githubIssueLabels); err != nil {
 				return err
 			}
-			if githubPR > 0 || githubIssueAfter >= 2 {
+			if githubPR > 0 || githubIssueAfter >= 2 || skipIfOpenPR {
 				if strings.TrimSpace(os.Getenv("GITHUB_TOKEN")) == "" {
 					return fmt.Errorf("GITHUB_TOKEN is required when GitHub notification delivery is configured")
 				}
@@ -363,7 +373,9 @@ and --github-pr are refused when more than one root would write the same destina
 					TerraformBin:        terraformBin,
 					PolicyCommand:       policyCommand,
 				},
-				Delivery: delivery,
+				Delivery:  delivery,
+				PRSkipper: newOpenPRSkipper(skipIfOpenPR, githubRepository),
+				Stderr:    cmd.ErrOrStderr(),
 			})
 			if err := writeMultiScanReport(stdout, aggregate, parsedFormat); err != nil {
 				return err
@@ -424,6 +436,7 @@ and --github-pr are refused when more than one root would write the same destina
 	cmd.Flags().IntVar(&githubPR, "github-pr", 0, "GitHub pull request number; single-root scan-all only")
 	cmd.Flags().IntVar(&githubIssueAfter, "github-issue-after", 0, "upsert one GitHub issue after this many consecutive matching drift scans per root; close it when the root is clean")
 	cmd.Flags().StringArrayVar(&githubIssueLabels, "github-issue-label", nil, "optional label on persistent-drift issues; repeatable, at most 8")
+	cmd.Flags().BoolVar(&skipIfOpenPR, "skip-if-open-pr", false, "skip a root when an open GitHub PR in --github-repository changes files under that root")
 	cmd.Flags().StringVar(&artifactURL, "artifact-url", "", "presigned HTTPS URL to upload the JSON report (single-root scan-all only)")
 	cmd.Flags().StringVar(&approvalFile, "approval-file", "", "review-only approval artifact to attach to each root report")
 	cmd.Flags().StringVar(&auditLogPath, "audit-log", "", "append secret-safe JSON audit events per root to this path")
@@ -497,6 +510,7 @@ const (
 	multiScanStatusChangesDetected multiScanStatus = "changes_detected"
 	multiScanStatusPartial         multiScanStatus = "partial"
 	multiScanStatusFailed          multiScanStatus = "failed"
+	multiScanStatusSkipped         multiScanStatus = "skipped"
 )
 
 type multiScanRoot struct {
@@ -562,6 +576,8 @@ func writeIncrementalState(path string, aggregate multiScanReport) error {
 			entry.Status = multiScanStatusFailed
 		} else if root.Report.Status == report.ScanStatusDriftDetected {
 			entry.Status = multiScanStatusDriftDetected
+		} else if root.Report.Status == report.ScanStatusSkipped {
+			entry.Status = multiScanStatusSkipped
 		}
 		entry.ScanID = root.Report.ScanID
 		entry.Completed = root.Report.CompletedAt
@@ -686,6 +702,25 @@ func scanAll(ctx context.Context, params scanAllParams) multiScanReport {
 						root.Error = resolveErr.Error()
 						_ = appendScanAllAudit(params, root, spec.Profile, resolveErr)
 					}
+					roots[index] = root
+					continue
+				}
+				if skipped, ok, skipErr := skipOpenPRReport(ctx, params.PRSkipper, params.Options.WorkspaceRoot, rootOptions.Directory, params.RedactPaths, params.Stderr); skipErr != nil {
+					if params.RedactPaths {
+						root.Directory = "[REDACTED]"
+						root.Error = "scan failed"
+					} else {
+						root.Error = skipErr.Error()
+					}
+					_ = appendScanAllAudit(params, root, spec.Profile, skipErr)
+					roots[index] = root
+					continue
+				} else if ok {
+					root.Report = skipped
+					if params.RedactPaths {
+						root.Directory = "[REDACTED]"
+					}
+					_ = appendScanAllAudit(params, root, spec.Profile, nil)
 					roots[index] = root
 					continue
 				}

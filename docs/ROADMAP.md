@@ -16,7 +16,7 @@ Completed engineering history (through v0.1.0): [archive/PLAN-v0.1.md](archive/P
 | **v0.4.0** | Shipped — CI honesty, lock/plan honesty, GitHub Action, `--plan-file`, CLI Cosign |
 | **v1.0.0** | Stability promise for CLI flags and published JSON — [#95](https://github.com/niravraychura/terradrift/issues/95); open a milestone when freeze work starts |
 
-Triage: [TerraDrift Project](https://github.com/users/niravraychura/projects/1). **Ready** is empty. **Backlog** is later (skip-if-PR, Terragrunt, v1.0 freeze).
+Triage: [TerraDrift Project](https://github.com/users/niravraychura/projects/1). **Ready** is empty. **Backlog** is later (Terragrunt, v1.0 freeze).
 
 ## Out of scope (for now)
 
