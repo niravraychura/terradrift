@@ -40,13 +40,16 @@ git push origin v0.1.0
 4. Confirm the GitHub Release and artifacts from `release.yml`.
 5. Confirm release binaries report the tag: `terradrift --version` (injected via `-ldflags` / Docker `VERSION` build-arg).
 6. Back-merge `main` into `dev` if `main` gained commits (changelog, hotfixes) not already on `dev`.
+7. After archives exist, PR consume-pin updates into `dev`: `scripts/install.sh` default, README install/GHCR examples, `examples/github-actions` `TERRADRIFT_VERSION`, and Action `uses:` (see [Install / consume](#install--consume)). Do not point those defaults at a tag that has no GitHub Release yet.
 
 Do not force-push tags that have already been published with artifacts.
 
 ## Install / consume
 
 - GitHub Releases: https://github.com/niravraychura/terradrift/releases
-- Container: GHCR image published by the release workflow (see Release notes for digest/tag)
+- Installer default: `scripts/install.sh` (`TERRADRIFT_VERSION`) must match the latest published tag. Bump it in a follow-up on `dev` after `release.yml` uploads archives — not in the tag commit itself if that would 404 during the gap before assets exist.
+- Official Action: `uses: niravraychura/terradrift@vX.Y.Z` after a tag that includes `action.yml`. Empty `version:` then installs that tag. Until then, pin `uses:` to `dev` (or a SHA) and set `version:` to the latest CLI release.
+- Container: GHCR image published by the release workflow (see Release notes for digest/tag). Keep the README `FROM` pin on the latest tag too.
 
 ## Related
 

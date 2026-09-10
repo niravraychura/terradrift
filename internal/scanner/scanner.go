@@ -25,6 +25,7 @@ import (
 const DefaultTimeout = 5 * time.Minute
 
 const scanLockFilename = ".terradrift-scan.lock"
+const maxPlanFileBytes int64 = 32 << 20
 
 // Outcome describes the automation-relevant result of a scan.
 type Outcome string
@@ -53,6 +54,7 @@ type Options struct {
 	LockBackend           LockBackend
 	SkipInit              bool
 	RedactPaths           bool
+	PlanFile              string
 	workspaceRootResolved bool
 }
 
@@ -178,6 +180,20 @@ func Scan(ctx context.Context, options Options) (Result, error) {
 		return Result{Outcome: OutcomeFailed}, fmt.Errorf("create scan ID: %w", err)
 	}
 
+	if strings.TrimSpace(options.PlanFile) != "" {
+		if options.Runner == nil {
+			err := fmt.Errorf("--plan-file requires --terraform-exec")
+			logger.Error(ctx, "scan failed", "directory", logDirectory(options.RedactPaths, absDir), "error", logError(options.RedactPaths, err, absDir, options.PlanFile))
+			return Result{Outcome: OutcomeFailed}, err
+		}
+		planFile, err := validatePlanFile(options.PlanFile, options.WorkspaceRoot)
+		if err != nil {
+			logger.Error(ctx, "scan failed", "directory", logDirectory(options.RedactPaths, absDir), "error", logError(options.RedactPaths, err, absDir, options.PlanFile, options.WorkspaceRoot))
+			return Result{Outcome: OutcomeFailed}, err
+		}
+		options.PlanFile = planFile
+	}
+
 	if options.Runner == nil {
 		now := time.Now().UTC()
 		status := report.ScanStatusNoDrift
@@ -222,8 +238,16 @@ func Scan(ctx context.Context, options Options) (Result, error) {
 			return Result{Outcome: OutcomeFailed}, err
 		}
 	}
+	if options.PlanFile != "" {
+		planFile, err := validatePlanFile(options.PlanFile, options.WorkspaceRoot)
+		if err != nil {
+			logger.Error(ctx, "scan failed", "directory", logDirectory(options.RedactPaths, absDir), "error", logError(options.RedactPaths, err, absDir, options.PlanFile, options.WorkspaceRoot))
+			return Result{Outcome: OutcomeFailed}, err
+		}
+		options.PlanFile = planFile
+	}
 
-	scanReport, err := runTerraformScan(ctx, options.Runner, absDir, scanID, options.PlanMode, options.SkipInit, options.RedactPaths)
+	scanReport, err := runTerraformScan(ctx, options.Runner, absDir, scanID, options.PlanMode, options.SkipInit, options.RedactPaths, options.PlanFile)
 	if err != nil {
 		logger.Error(ctx, "scan failed", "directory", logDirectory(options.RedactPaths, absDir), "error", logError(options.RedactPaths, err, absDir))
 		return Result{Outcome: OutcomeFailed, Report: scanReport}, err
@@ -298,7 +322,44 @@ func ValidateDirectory(directory string) (string, error) {
 	return resolved, nil
 }
 
-func runTerraformScan(ctx context.Context, runner terraform.Runner, directory string, scanID string, mode terraform.PlanMode, skipInit bool, redactPaths bool) (scanReport report.DriftReport, returnErr error) {
+func validatePlanFile(path string, workspaceRoot string) (string, error) {
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return "", fmt.Errorf("resolve plan file: %w", err)
+	}
+	info, err := os.Lstat(absPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "", fmt.Errorf("plan file does not exist: %s", absPath)
+		}
+		return "", fmt.Errorf("inspect plan file %s: %w", absPath, err)
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		return "", fmt.Errorf("plan file must not be a symlink: %s", absPath)
+	}
+	if !info.Mode().IsRegular() {
+		return "", fmt.Errorf("plan file is not a regular file: %s", absPath)
+	}
+	if info.Size() > maxPlanFileBytes {
+		return "", fmt.Errorf("plan file exceeds %d bytes", maxPlanFileBytes)
+	}
+	resolved, err := filepath.EvalSymlinks(absPath)
+	if err != nil {
+		return "", fmt.Errorf("resolve plan file path: %w", err)
+	}
+	if workspaceRoot != "" {
+		rel, err := filepath.Rel(workspaceRoot, resolved)
+		if err != nil {
+			return "", fmt.Errorf("compare plan file to workspace root: %w", err)
+		}
+		if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || filepath.IsAbs(rel) {
+			return "", fmt.Errorf("plan file %s is outside workspace root %s", resolved, workspaceRoot)
+		}
+	}
+	return resolved, nil
+}
+
+func runTerraformScan(ctx context.Context, runner terraform.Runner, directory string, scanID string, mode terraform.PlanMode, skipInit bool, redactPaths bool, existingPlanFile string) (scanReport report.DriftReport, returnErr error) {
 	startedAt := time.Now().UTC()
 	scanReport = report.DriftReport{
 		ScanID:          scanID,
@@ -310,11 +371,16 @@ func runTerraformScan(ctx context.Context, runner terraform.Runner, directory st
 		StartedAt:       startedAt,
 	}
 
-	if !skipInit {
-		logger.Info(ctx, "terraform init", "directory", logDirectory(redactPaths, directory))
-		if err := runner.Init(ctx, directory); err != nil {
+	if existingPlanFile == "" {
+		if !skipInit {
+			logger.Info(ctx, "terraform init", "directory", logDirectory(redactPaths, directory))
+			if err := runner.Init(ctx, directory); err != nil {
+				failReport(&scanReport, err)
+				return scanReport, fmt.Errorf("terraform init: %s", scanReport.ErrorMessage)
+			}
+		} else if err := requireInitializedTerraform(directory); err != nil {
 			failReport(&scanReport, err)
-			return scanReport, fmt.Errorf("terraform init: %s", scanReport.ErrorMessage)
+			return scanReport, fmt.Errorf("skip terraform init: %s", scanReport.ErrorMessage)
 		}
 	}
 	if inventoryRunner, ok := runner.(interface {
@@ -333,28 +399,32 @@ func runTerraformScan(ctx context.Context, runner terraform.Runner, directory st
 		}
 	}
 
-	planFile, cleanup, err := securePlanFile(directory)
-	if err != nil {
-		failReport(&scanReport, err)
-		return scanReport, errors.New(scanReport.ErrorMessage)
-	}
-	defer func() {
-		if err := cleanup(); err != nil && returnErr == nil {
+	planFile := existingPlanFile
+	if planFile == "" {
+		created, cleanup, err := securePlanFile(directory)
+		if err != nil {
 			failReport(&scanReport, err)
-			returnErr = fmt.Errorf("remove secure terraform plan file: %s", scanReport.ErrorMessage)
+			return scanReport, errors.New(scanReport.ErrorMessage)
 		}
-	}()
+		planFile = created
+		defer func() {
+			if err := cleanup(); err != nil && returnErr == nil {
+				failReport(&scanReport, err)
+				returnErr = fmt.Errorf("remove secure terraform plan file: %s", scanReport.ErrorMessage)
+			}
+		}()
 
-	logger.Info(ctx, "terraform plan", "directory", logDirectory(redactPaths, directory), "plan_mode", string(mode))
-	exitCode, err := runner.Plan(ctx, directory, planFile, mode)
-	if err != nil {
-		failReport(&scanReport, err)
-		return scanReport, fmt.Errorf("terraform %s plan: %s", mode, scanReport.ErrorMessage)
-	}
-	if exitCode != 0 && exitCode != 2 {
-		err := fmt.Errorf("terraform %s plan failed with exit code %d", mode, exitCode)
-		failReport(&scanReport, err)
-		return scanReport, err
+		logger.Info(ctx, "terraform plan", "directory", logDirectory(redactPaths, directory), "plan_mode", string(mode))
+		exitCode, err := runner.Plan(ctx, directory, planFile, mode)
+		if err != nil {
+			failReport(&scanReport, err)
+			return scanReport, fmt.Errorf("terraform %s plan: %s", mode, scanReport.ErrorMessage)
+		}
+		if exitCode != 0 && exitCode != 2 {
+			err := fmt.Errorf("terraform %s plan failed with exit code %d", mode, exitCode)
+			failReport(&scanReport, err)
+			return scanReport, err
+		}
 	}
 
 	logger.Info(ctx, "terraform show", "directory", logDirectory(redactPaths, directory))
@@ -399,6 +469,22 @@ func failReport(scanReport *report.DriftReport, err error) {
 	scanReport.Status = report.ScanStatusFailed
 	scanReport.CompletedAt = time.Now().UTC()
 	scanReport.ErrorMessage = redact.String(err.Error())
+}
+
+func requireInitializedTerraform(directory string) error {
+	terraformDir := filepath.Join(directory, ".terraform")
+	info, err := os.Stat(terraformDir)
+	if err != nil || !info.IsDir() {
+		return fmt.Errorf("--skip-terraform-init requires an initialized .terraform directory")
+	}
+	providers := filepath.Join(terraformDir, "providers")
+	if st, err := os.Stat(providers); err == nil && st.IsDir() {
+		return nil
+	}
+	if _, err := os.Stat(filepath.Join(terraformDir, "modules", "modules.json")); err == nil {
+		return nil
+	}
+	return fmt.Errorf("--skip-terraform-init requires .terraform/providers or .terraform/modules/modules.json")
 }
 
 func securePlanFile(directory string) (string, func() error, error) {

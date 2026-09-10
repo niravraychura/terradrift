@@ -14,9 +14,14 @@ import (
 
 func TestCLIRunnerShowJSONCapturesOutput(t *testing.T) {
 	runner := NewCLIRunner(writeTerraformStub(t, `#!/bin/sh
-if [ "$1" = "show" ]; then
-  printf '{"resource_changes":[]}'
-fi
+for arg in "$@"; do
+  case "$arg" in
+    show)
+      printf '{"resource_changes":[]}'
+      exit 0
+      ;;
+  esac
+done
 `))
 
 	output, err := runner.ShowJSON(context.Background(), t.TempDir(), "plan.tfplan")
@@ -42,13 +47,20 @@ exit 2
 	}
 }
 
+func TestWithNoColorInsertsAfterSubcommand(t *testing.T) {
+	got := strings.Join(withNoColor([]string{"init", "-input=false"}), " ")
+	if got != "init -no-color -input=false" {
+		t.Fatalf("got %q", got)
+	}
+}
+
 func TestCLIRunnerPlanUsesModeArguments(t *testing.T) {
 	for _, test := range []struct {
 		mode PlanMode
 		want string
 	}{
-		{PlanModeRefreshOnly, "plan -refresh-only -detailed-exitcode -out plan.tfplan"},
-		{PlanModeNormal, "plan -detailed-exitcode -out plan.tfplan"},
+		{PlanModeRefreshOnly, "plan -no-color -input=false -refresh-only -detailed-exitcode -out plan.tfplan -lock=true -lock-timeout=10m0s"},
+		{PlanModeNormal, "plan -no-color -input=false -detailed-exitcode -out plan.tfplan -lock=true -lock-timeout=10m0s"},
 	} {
 		t.Run(string(test.mode), func(t *testing.T) {
 			runner := NewCLIRunner(writeTerraformStub(t, `#!/bin/sh
@@ -87,7 +99,7 @@ printf '%s\n' "$*" >> "$TERRADRIFT_COMMANDS"
 	if len(lines) != 2 {
 		t.Fatalf("expected workspace select then plan, got %q", data)
 	}
-	if lines[0] != "workspace select staging" {
+	if lines[0] != "workspace -no-color select -input=false staging" {
 		t.Fatalf("workspace command = %q", lines[0])
 	}
 	if !strings.Contains(lines[1], "-var-file=prod.tfvars") || !strings.Contains(lines[1], "-var=region=us-east-1") {
@@ -97,10 +109,14 @@ printf '%s\n' "$*" >> "$TERRADRIFT_COMMANDS"
 
 func TestCLIRunnerWorkspaceSelectFailure(t *testing.T) {
 	runner := NewCLIRunner(writeTerraformStub(t, `#!/bin/sh
-if [ "$1" = "workspace" ]; then
-  printf 'no such workspace' >&2
-  exit 1
-fi
+for arg in "$@"; do
+  case "$arg" in
+    workspace)
+      printf 'no such workspace' >&2
+      exit 1
+      ;;
+  esac
+done
 `))
 	runner.Workspace = "missing"
 	_, err := runner.Plan(context.Background(), t.TempDir(), "plan.tfplan", PlanModeNormal)
@@ -143,8 +159,43 @@ printf '%s' "$*" > "$TERRADRIFT_ARGS"
 	if err != nil {
 		t.Fatalf("read arguments: %v", err)
 	}
-	if string(data) != "init -input=false -backend=true -lockfile=readonly" {
+	if string(data) != "init -no-color -input=false -backend=true -lockfile=readonly" {
 		t.Fatalf("unexpected init arguments: %q", data)
+	}
+}
+
+func TestCLIRunnerPlanDisablesLock(t *testing.T) {
+	runner := NewCLIRunner(writeTerraformStub(t, `#!/bin/sh
+printf '%s' "$*" > "$TERRADRIFT_ARGS"
+`))
+	runner.DisableLock = true
+	argsPath := filepath.Join(t.TempDir(), "args")
+	t.Setenv("TERRADRIFT_ARGS", argsPath)
+	if _, err := runner.Plan(context.Background(), t.TempDir(), "plan.tfplan", PlanModeNormal); err != nil {
+		t.Fatalf("plan: %v", err)
+	}
+	data, err := os.ReadFile(argsPath)
+	if err != nil {
+		t.Fatalf("read arguments: %v", err)
+	}
+	if string(data) != "plan -no-color -input=false -detailed-exitcode -out plan.tfplan -lock=false" {
+		t.Fatalf("unexpected plan arguments: %q", data)
+	}
+}
+
+func TestCLIRunnerSetsTFInAutomation(t *testing.T) {
+	runner := NewCLIRunner(writeTerraformStub(t, `#!/bin/sh
+printf '%s' "$TF_IN_AUTOMATION" > "$TERRADRIFT_ENV"
+`))
+	envPath := filepath.Join(t.TempDir(), "env")
+	t.Setenv("TERRADRIFT_ENV", envPath)
+	t.Setenv("TF_IN_AUTOMATION", "0")
+	if err := runner.Init(context.Background(), t.TempDir()); err != nil {
+		t.Fatalf("init: %v", err)
+	}
+	data, err := os.ReadFile(envPath)
+	if err != nil || string(data) != "1" {
+		t.Fatalf("TF_IN_AUTOMATION=%q err=%v", data, err)
 	}
 }
 
@@ -175,9 +226,14 @@ func TestCLIRunnerInventory(t *testing.T) {
 		t.Fatalf("write modules fixture: %v", err)
 	}
 	runner := NewCLIRunner(writeTerraformStub(t, `#!/bin/sh
-if [ "$1" = "version" ]; then
-  printf '{"terraform_version":"1.10.0","provider_selections":{"registry.terraform.io/hashicorp/aws":"5.0.0"}}'
-fi
+for arg in "$@"; do
+  case "$arg" in
+    version)
+      printf '{"terraform_version":"1.10.0","provider_selections":{"registry.terraform.io/hashicorp/aws":"5.0.0"}}'
+      exit 0
+      ;;
+  esac
+done
 `))
 
 	inventory, err := runner.Inventory(context.Background(), directory)

@@ -55,6 +55,16 @@ func TestLoadRejectsInvalidJSON(t *testing.T) {
 	}
 }
 
+func TestLoadRejectsInvalidStateLockTimeout(t *testing.T) {
+	path := filepath.Join(t.TempDir(), DefaultPath)
+	if err := os.WriteFile(path, []byte(`{"state_lock_timeout":"nope"}`), 0o600); err != nil {
+		t.Fatalf("write config fixture: %v", err)
+	}
+	if _, err := Load(path); err == nil {
+		t.Fatal("expected invalid state_lock_timeout to fail")
+	}
+}
+
 func TestLoadRejectsUnknownField(t *testing.T) {
 	path := filepath.Join(t.TempDir(), DefaultPath)
 	if err := os.WriteFile(path, []byte(`{"direcotry":"."}`), 0o600); err != nil {

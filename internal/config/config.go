@@ -67,12 +67,15 @@ type Config struct {
 	Workspace            string                     `json:"workspace"`
 	VarFiles             []string                   `json:"var_files"`
 	Vars                 []string                   `json:"vars"`
+	StateLock            bool                       `json:"state_lock"`
+	StateLockTimeout     string                     `json:"state_lock_timeout"`
+	PlanFile             string                     `json:"plan_file"`
 	Profiles             map[string]json.RawMessage `json:"profiles,omitempty"`
 }
 
 // Default returns a safe bootstrap configuration.
 func Default() Config {
-	return Config{Schema: SchemaURL, Directory: ".", Output: "table", Timeout: "5m", RedactPaths: false, PlanMode: string(terraform.PlanModeRefreshOnly)}
+	return Config{Schema: SchemaURL, Directory: ".", Output: "table", Timeout: "5m", RedactPaths: false, PlanMode: string(terraform.PlanModeRefreshOnly), StateLock: true, StateLockTimeout: "10m"}
 }
 
 // Load reads a TerraDrift JSON configuration file.
@@ -165,6 +168,9 @@ func (cfg Config) Validate() error {
 	}
 	if cfg.GitHubPR < 0 || cfg.GitHubIssueAfter < 0 {
 		return validation.New("config GitHub numbers", fmt.Errorf("must not be negative"))
+	}
+	if timeout, err := time.ParseDuration(cfg.StateLockTimeout); err != nil || timeout < 0 {
+		return validation.New("config state_lock_timeout", fmt.Errorf("must be a duration of zero or more"))
 	}
 	for field, rawURL := range map[string]string{"slack_webhook_url": cfg.SlackWebhookURL, "teams_webhook_url": cfg.TeamsWebhookURL, "webhook_url": cfg.WebhookURL, "artifact_url": cfg.ArtifactURL} {
 		if rawURL == "" {

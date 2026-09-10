@@ -4,12 +4,11 @@
 [![Release](https://img.shields.io/github/v/release/niravraychura/terradrift?include_prereleases&sort=semver)](https://github.com/niravraychura/terradrift/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-**Self-hosted Terraform / OpenTofu drift detection CLI.**  
-Run it on a laptop, in CI, or on a cron runner. No SaaS required.
+**Plan-based Terraform / OpenTofu drift CLI** for CI and cron on *your* runner. Not a SaaS, not unmanaged-resource inventory, and not the 2023 [rootsami/terradrift](https://github.com/rootsami/terradrift) server.
 
-TerraDrift runs `terraform plan` (or OpenTofu), turns the plan into a clear report, and can notify Slack/Teams/webhooks, write history/dashboards, and gate on policy.
+TerraDrift runs `terraform plan` or `tofu plan` (refresh-only by default), turns that plan into a report, and can notify Slack/Teams/webhooks, write history/dashboards, and gate on policy. Comparison: [docs/COMPARE.md](docs/COMPARE.md).
 
-> **Important:** Always pass `--terraform-exec` for a real drift scan. Without it, TerraDrift only checks the directory and emits a bootstrap placeholder report.
+> **Important:** A real scan is `--terraform-exec` (or the official Action, which always passes it). GitHub Actions and `TERRADRIFT_REQUIRE_EXEC` fail without it. Without `--terraform-exec` locally, TerraDrift only checks the directory and emits a bootstrap placeholder — **exit 0 there is not “no drift”.**
 
 ---
 
@@ -38,6 +37,17 @@ Download a binary from [GitHub Releases](https://github.com/niravraychura/terrad
 
 ```bash
 TERRADRIFT_VERSION=v0.3.0 PREFIX=/usr/local ./scripts/install.sh
+```
+
+Optional, after the next tagged release that includes Cosign bundles (not v0.3.0):
+
+```bash
+# Download terradrift_linux_amd64.tar.gz and terradrift_linux_amd64.tar.gz.bundle from the GitHub Release
+cosign verify-blob \
+  --bundle terradrift_linux_amd64.tar.gz.bundle \
+  --certificate-identity-regexp '^https://github.com/niravraychura/terradrift/\.github/workflows/release\.yml@refs/tags/v[0-9]+\.[0-9]+\.[0-9]+$' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  terradrift_linux_amd64.tar.gz
 ```
 
 Homebrew: there is no published tap; see [`contrib/homebrew/README.md`](contrib/homebrew/README.md). Or build from source:
@@ -86,6 +96,21 @@ OpenTofu:
 terradrift scan -d ./terraform/prod --terraform-exec --terraform-bin tofu
 ```
 
+Example **Terraform-backed** table output (exit **2** means drift was found — that is detection working, not a crash). Attribute **values** stay redacted/paths-only unless `--attribute-values`. This is a recorded terminal transcript, not a bootstrap report:
+
+```text
+$ terradrift scan -d ./terraform/prod --terraform-exec
+TerraDrift scan complete
+Status: drift_detected
+Plan mode: refresh-only
+Terraform directory: ./terraform/prod
+Resources checked: 12
+Changed resources: 1
+
+HIGH  update  aws_instance.web
+  ami: [REDACTED] -> [REDACTED]
+```
+
 ### Step 4 — Optional: write a starter config
 
 ```bash
@@ -130,7 +155,7 @@ terradrift scan -d ./terraform/prod --terraform-exec --output sarif
 terradrift scan -d ./terraform/prod --terraform-exec --output prometheus
 ```
 
-Prometheus series use a bounded `root_id` hash per Terraform root (never a directory path). `scan-all --output prometheus` adds `terradrift_roots{result="total|drifted|changed|failed"}` plus one sample set per successful root.
+Prometheus series use a bounded `root_id` hash per Terraform root (never a directory path). `scan-all --output prometheus` adds `terradrift_roots{result="total|drifted|changed|failed"}` plus one sample set per successful root. `scan-all --output junit` / `--output sarif` emit one aggregate artifact across roots.
 
 Scan progress (`scan started`, `terraform init` / `plan` / `show`, parse) goes to **stderr**. Use `--quiet` to keep only errors. `--redact-paths` redacts directories in those logs too.
 
@@ -142,23 +167,40 @@ Report JSON stability notes: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 TerraDrift does **not** need to live in your infra repo. Checkout the Terraform repo, then run TerraDrift in the same job.
 
-Minimal pattern:
+Preferred: the official Action (always `--terraform-exec`; fails if Terraform is missing):
 
 ```yaml
 - uses: hashicorp/setup-terraform@v4
+  with:
+    terraform_wrapper: false
+- uses: niravraychura/terradrift@dev # pin to a v* tag after v0.4.0
+  with:
+    version: v0.3.0
+    directory: ./terraform/prod
+```
+
+Details: [docs/GITHUB_ACTION.md](docs/GITHUB_ACTION.md) · [examples/github-actions](examples/github-actions/README.md).
+
+Minimal pattern without the Action:
+
+```yaml
+- uses: hashicorp/setup-terraform@v4
+  with:
+    terraform_wrapper: false
 - name: Drift scan
   run: terradrift scan --directory ./terraform/prod --terraform-exec --output json
 ```
 
 Full scheduled examples:
 
-- GitHub Actions: [`examples/github-actions/terradrift-scheduled.yml`](examples/github-actions/terradrift-scheduled.yml)
+- Official Action: [`examples/github-actions/terradrift-action.yml`](examples/github-actions/terradrift-action.yml)
+- GitHub Actions (install.sh): [`examples/github-actions/terradrift-scheduled.yml`](examples/github-actions/terradrift-scheduled.yml)
 - OpenTofu (same `init` / `plan` / `show -json` contract, `--terraform-bin tofu`): [`examples/github-actions/terradrift-opentofu.yml`](examples/github-actions/terradrift-opentofu.yml)
 - Pull request comment (upsert): [`examples/github-actions/terradrift-pr.yml`](examples/github-actions/terradrift-pr.yml)
 - Multi-root + Slack: [`examples/github-actions/terradrift-scheduled-multi-root.yml`](examples/github-actions/terradrift-scheduled-multi-root.yml)
 - Cron: [`examples/cron/terradrift.cron`](examples/cron/terradrift.cron)
 
-Pin TerraDrift, Terraform/OpenTofu, and provider versions. Keep cloud credentials and webhook URLs in CI secrets. OpenTofu is a drop-in planner: set `--terraform-bin tofu` (or `terraform_bin` in config) and keep using `--terraform-exec`.
+Pin TerraDrift, Terraform/OpenTofu, and provider versions. Use OIDC for cloud roles ([docs/DRIFT_SCAN_IAM.md](docs/DRIFT_SCAN_IAM.md)), not long-lived keys. Cache providers with `TF_PLUGIN_CACHE_DIR`. Keep webhook URLs in CI secrets. Do not upload `*.tfplan` artifacts. OpenTofu is a drop-in planner: set `--terraform-bin tofu` (or `terraform_bin` in config) and keep using `--terraform-exec`.
 
 ---
 
@@ -208,6 +250,16 @@ terradrift scan -d ./terraform/prod --terraform-exec \
   --var 'region=us-east-1'
 ```
 
+Terraform `plan` waits up to `--state-lock-timeout` (default `10m`) for the remote state lock. Use `--state-lock=false` only when a scheduled drift job must not block apply.
+
+Reuse a plan produced earlier in the same job (`scan-all` does not support this):
+
+```bash
+terradrift scan -d ./terraform/prod --terraform-exec --plan-file ./plan.tfplan --plan-mode refresh-only
+```
+
+`--plan-file` skips init/plan, runs `terraform show -json` only, and still requires `--terraform-exec`. Match `--plan-mode` to how that plan was created. Do not upload the plan file as a CI artifact.
+
 ### Policy publish gate (before history / notify)
 
 ```bash
@@ -242,6 +294,7 @@ environments/production
 
 ```bash
 terradrift scan-all --manifest terraform-roots.txt --concurrency 4 --terraform-exec --output json
+terradrift scan-all --manifest terraform-roots.txt --terraform-exec --output junit
 terradrift scan-all --manifest terraform-roots.txt --terraform-exec --output prometheus
 ```
 
@@ -265,7 +318,7 @@ terradrift scan-all --discover . --terraform-exec --concurrency 4
 
 More detail and examples: [`examples/multi-root`](examples/multi-root).
 
-`scan-all` uses the same per-root delivery path as `scan` (history, notify, policy, ignore/owners, GitHub, artifacts, audit-log). Shared `--dashboard-html` is overwritten by the last successful root when concurrency > 1; `--github-pr` upserts one TerraDrift comment on that PR.
+`scan-all` uses the same per-root delivery path as `scan` (history, notify, policy, ignore/owners, GitHub, artifacts, audit-log). Shared `--dashboard-html`, `--artifact-url`, and `--github-pr` are refused when more than one root would overwrite the same destination — use `terradrift dashboard-index` or scan a single root.
 
 Cross-root HTML index from history (grouped by directory):
 
@@ -330,10 +383,12 @@ Do not bake cloud credentials into the image.
 With `--terraform-exec`, each scan roughly:
 
 1. Validates the directory and takes a **local** scan lock (`.terradrift-scan.lock` on that host).
-2. Runs `terraform init` (unless `--skip-terraform-init`) with `-lockfile=readonly` — a committed `.terraform.lock.hcl` is required.
-3. Runs `plan` (`refresh-only` or `normal`) with `-detailed-exitcode`.
-4. Runs `terraform show -json`, parses the plan, builds the TerraDrift report.
-5. Writes stdout, then optional policy gate → history / dashboard / notifications.
+2. Runs `terraform init` (unless `--skip-terraform-init` or `--plan-file`) with `-lockfile=readonly` — a committed `.terraform.lock.hcl` is required. `--skip-terraform-init` fails closed unless `.terraform/providers` or `.terraform/modules/modules.json` exists.
+3. Runs `plan` (`refresh-only` or `normal`) with `-input=false`, `-detailed-exitcode`, and `-lock-timeout` (default `10m`), unless `--plan-file` points at a trusted local plan. Use `--state-lock=false` only when a scheduled drift job must not contend with apply.
+4. Runs `terraform show -json`, parses the plan, builds the TerraDrift report. Incomplete or errored plan JSON fails the scan.
+5. Writes stdout, then optional policy gate → history / dashboard / notifications. **Stdout is not policy-gated:** a policy failure still prints the report, then exits non-zero and skips publish (history, dashboards, artifacts, notifications). Treat the process exit code as the policy result, not the JSON body alone.
+
+In GitHub Actions (`GITHUB_ACTIONS=true`) or when `TERRADRIFT_REQUIRE_EXEC` is set, `--terraform-exec` is required. Local bootstrap without it still prints a warning.
 
 `refresh-only` statuses: `no_drift` / `drift_detected`.  
 `normal` statuses: `no_changes` / `changes_detected` (config drift is not labelled as infrastructure drift).
@@ -356,6 +411,8 @@ Compare both modes when unsure whether a finding is out-of-band change vs unappl
 
 | Topic | Doc |
 | --- | --- |
+| GitHub Action | [docs/GITHUB_ACTION.md](docs/GITHUB_ACTION.md) |
+| vs plan / driftctl / HCP / rootsami | [docs/COMPARE.md](docs/COMPARE.md) |
 | Architecture & report JSON | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
 | Roadmap / out of scope | [docs/ROADMAP.md](docs/ROADMAP.md) |
 | Release cycle (`dev` → `main` → tag) | [docs/RELEASE.md](docs/RELEASE.md) |

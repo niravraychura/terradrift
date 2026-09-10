@@ -2,6 +2,10 @@ name: TerraDrift Scheduled Scan (OpenTofu)
 
 # Same planner contract as Terraform: TerraDrift runs `tofu init/plan/show`
 # via --terraform-bin. Pin OpenTofu, TerraDrift, and provider versions.
+#
+# If state or plans are encrypted, the job needs decrypt rights. Do not upload
+# *.tfplan artifacts (plans can contain secrets).
+# Cloud auth: OIDC — docs/DRIFT_SCAN_IAM.md
 
 on:
   workflow_dispatch:
@@ -10,6 +14,7 @@ on:
 
 permissions:
   contents: read
+  id-token: write
 
 jobs:
   drift-scan:
@@ -25,17 +30,25 @@ jobs:
         with:
           tofu_version: 1.12.6
           tofu_wrapper: false
-      - name: Download TerraDrift
+      - name: Cache OpenTofu providers
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ github.workspace }}/.terraform-plugin-cache
+          key: tofu-plugins-${{ runner.os }}-${{ hashFiles('**/.terraform.lock.hcl') }}
+          restore-keys: tofu-plugins-${{ runner.os }}-
+      - name: Install TerraDrift
         env:
-          TERRADRIFT_VERSION: v0.0.0
+          TERRADRIFT_VERSION: v0.3.0
         run: |
-          curl -fsSLo terradrift.tar.gz "https://github.com/niravraychura/terradrift/releases/download/${TERRADRIFT_VERSION}/terradrift_linux_amd64.tar.gz"
-          tar -xzf terradrift.tar.gz terradrift
-          install -m 0755 terradrift /usr/local/bin/terradrift
+          curl -fsSLo install-terradrift.sh "https://raw.githubusercontent.com/niravraychura/terradrift/${TERRADRIFT_VERSION}/scripts/install.sh"
+          PREFIX="${HOME}/.local" bash install-terradrift.sh
+          echo "${HOME}/.local/bin" >> "${GITHUB_PATH}"
       - name: Scan for OpenTofu drift
         env:
+          TF_PLUGIN_CACHE_DIR: ${{ github.workspace }}/.terraform-plugin-cache
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
         run: |
+          mkdir -p "${TF_PLUGIN_CACHE_DIR}"
           terradrift scan \
             --directory ./terraform/prod \
             --workspace-root "$PWD" \

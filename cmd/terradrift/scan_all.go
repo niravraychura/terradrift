@@ -88,6 +88,8 @@ func newScanAllCommand(stdout io.Writer) *cobra.Command {
 	var terraformWorkspace string
 	var varFiles []string
 	var vars []string
+	var stateLock bool
+	var stateLockTimeout time.Duration
 	var scanConfigPath string
 	var failureSeverity string
 	var remediationRunbooks map[string]string
@@ -116,9 +118,8 @@ owner webhooks, policy publish gate, cost/audit enrichment, ignore/baseline rule
 runbooks, approvals, GitHub PR/issue summaries, --artifact-url, --audit-log, notification
 throttle (via config), attribute-values, workspace/var-file defaults, and --failure-severity.
 
-Prefer terradrift dashboard-index for multi-root HTML. A shared --dashboard-html path is
-overwritten by the last successful root when concurrency > 1. Shared --github-pr upserts one
-TerraDrift comment on that pull request (last successful root wins).`,
+Prefer terradrift dashboard-index for multi-root HTML. Shared --dashboard-html, --artifact-url,
+and --github-pr are refused when more than one root would write the same destination.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if (manifest == "") == (discover == "") {
 				return fmt.Errorf("provide exactly one of --manifest or --discover")
@@ -179,6 +180,15 @@ TerraDrift comment on that pull request (last successful root wins).`,
 					{flag: "workspace", assign: func() error { terraformWorkspace = cfg.Workspace; return nil }},
 					{flag: "var-file", assign: func() error { varFiles = append([]string(nil), cfg.VarFiles...); return nil }},
 					{flag: "var", assign: func() error { vars = append([]string(nil), cfg.Vars...); return nil }},
+					{flag: "state-lock", assign: func() error { stateLock = cfg.StateLock; return nil }},
+					{flag: "state-lock-timeout", assign: func() error {
+						parsed, err := time.ParseDuration(cfg.StateLockTimeout)
+						if err != nil {
+							return fmt.Errorf("parse config state_lock_timeout: %w", err)
+						}
+						stateLockTimeout = parsed
+						return nil
+					}},
 				}); err != nil {
 					return err
 				}
@@ -228,11 +238,11 @@ TerraDrift comment on that pull request (last successful root wins).`,
 			if err != nil {
 				return err
 			}
-			if parsedFormat != outputFormatTable && parsedFormat != outputFormatJSON && parsedFormat != outputFormatPrometheus {
-				return fmt.Errorf("scan-all supports table, json, and prometheus output")
-			}
 			if concurrency <= 0 {
 				return fmt.Errorf("concurrency must be greater than zero")
+			}
+			if err := requireCIAdapterAllowlist(policyCommand, costCommand, auditCommand, allowedCommands, trustedCommandDirs); err != nil {
+				return err
 			}
 			for _, external := range []string{costCommand, policyCommand, auditCommand} {
 				if external != "" {
@@ -241,13 +251,19 @@ TerraDrift comment on that pull request (last successful root wins).`,
 					}
 				}
 			}
+			if err := rejectDeadGitHubNotify(notifyTarget); err != nil {
+				return err
+			}
+			if err := rejectSharedMultiRootDelivery(len(roots), dashboardHTMLPath, artifactURL, githubPR); err != nil {
+				return err
+			}
 			if githubPR > 0 && githubRepository == "" {
 				return fmt.Errorf("github-repository is required with github-pr")
 			}
 			if githubIssueAfter > 0 && (githubIssueAfter < 2 || githubRepository == "" || historyDir == "") {
 				return fmt.Errorf("github-issue-after requires github-repository, history-dir, and a value of at least 2")
 			}
-			if strings.EqualFold(strings.TrimSpace(notifyTarget), "github") || githubPR > 0 || githubIssueAfter >= 2 {
+			if githubPR > 0 || githubIssueAfter >= 2 {
 				if strings.TrimSpace(os.Getenv("GITHUB_TOKEN")) == "" {
 					return fmt.Errorf("GITHUB_TOKEN is required when GitHub notification delivery is configured")
 				}
@@ -275,16 +291,12 @@ TerraDrift comment on that pull request (last successful root wins).`,
 			}
 			if terraformExec {
 				options.RequireTerraformFiles = true
-				runner := terraform.NewCLIRunner(terraformBin)
-				runner.Workspace = terraformWorkspace
-				runner.VarFiles = append([]string(nil), varFiles...)
-				runner.Vars = append([]string(nil), vars...)
-				options.Runner = runner
+				options.Runner = configureCLIRunner(terraform.NewCLIRunner(terraformBin), terraformWorkspace, varFiles, vars, stateLock, stateLockTimeout)
+				warnStateLockDisabled(cmd, stateLock)
+			} else if terraformExecRequired() {
+				return errTerraformExecRequired()
 			} else {
 				_, _ = fmt.Fprintln(cmd.ErrOrStderr(), "warning: bootstrap report only; pass --terraform-exec for a real drift scan")
-			}
-			if dashboardHTMLPath != "" && concurrency > 1 {
-				_, _ = fmt.Fprintln(cmd.ErrOrStderr(), "warning: shared --dashboard-html is overwritten by the last successful root; prefer terradrift dashboard-index for multi-root views")
 			}
 			sideEffectMu := &sync.Mutex{}
 			delivery := deliveryOptions{
@@ -372,7 +384,7 @@ TerraDrift comment on that pull request (last successful root wins).`,
 	cmd.Flags().StringVar(&discover, "discover", "", "workspace root to discover Terraform roots")
 	cmd.Flags().StringArrayVar(&includes, "include", nil, "root-relative include pattern; repeatable")
 	cmd.Flags().StringArrayVar(&excludes, "exclude", nil, "root-relative exclude pattern; repeatable")
-	cmd.Flags().StringVarP(&format, "output", "o", string(outputFormatTable), "output format: table, json, prometheus")
+	cmd.Flags().StringVarP(&format, "output", "o", string(outputFormatTable), "output format: table, json, junit, sarif, prometheus")
 	cmd.Flags().DurationVar(&timeout, "timeout", scanner.DefaultTimeout, "maximum scan duration per root")
 	cmd.Flags().IntVar(&concurrency, "concurrency", 4, "maximum concurrent scans")
 	cmd.Flags().BoolVar(&terraformExec, "terraform-exec", false, "run Terraform-compatible scans")
@@ -382,20 +394,22 @@ TerraDrift comment on that pull request (last successful root wins).`,
 	cmd.Flags().BoolVar(&redactPaths, "redact-paths", false, "redact local filesystem paths from scan output")
 	cmd.Flags().StringVar(&incrementalState, "incremental-state", "", "JSON state file; retry only roots previously drifted or failed")
 	cmd.Flags().StringVar(&lockBackendName, "lock-backend", "local", "scan lock backend: local (single-host file lock)")
-	cmd.Flags().BoolVar(&skipTerraformInit, "skip-terraform-init", false, "skip terraform init when .terraform is already valid")
+	cmd.Flags().BoolVar(&skipTerraformInit, "skip-terraform-init", false, "skip terraform init; fails if .terraform is missing or uninitialized")
+	cmd.Flags().BoolVar(&stateLock, "state-lock", true, "acquire Terraform remote state lock during plan (use --state-lock=false only for scheduled drift vs apply contention)")
+	cmd.Flags().DurationVar(&stateLockTimeout, "state-lock-timeout", terraform.DefaultLockTimeout, "how long terraform plan waits for the remote state lock")
 	cmd.Flags().StringVar(&historyDir, "history-dir", "", "write per-root JSON scan history to this directory")
 	cmd.Flags().IntVar(&historyRetention, "history-retention", 0, "maximum history reports to retain (0 keeps all)")
 	cmd.Flags().BoolVar(&historyCompressed, "history-compressed", false, "store history reports as gzip-compressed JSON")
-	cmd.Flags().StringVar(&dashboardHTMLPath, "dashboard-html", "", "write last successful root dashboard HTML (prefer dashboard-index for multi-root)")
+	cmd.Flags().StringVar(&dashboardHTMLPath, "dashboard-html", "", "write dashboard HTML (single-root scan-all only; prefer dashboard-index)")
 	cmd.Flags().StringVar(&notifyTarget, "notify", "", "notification target: slack, teams, webhook")
 	cmd.Flags().StringVar(&slackWebhookURL, "slack-webhook-url", "", "Slack incoming webhook URL")
 	cmd.Flags().StringVar(&teamsWebhookURL, "teams-webhook-url", "", "Microsoft Teams incoming webhook URL")
 	cmd.Flags().StringVar(&webhookURL, "webhook-url", "", "generic HTTPS webhook URL")
 	cmd.Flags().StringVar(&webhookCACert, "webhook-ca-cert", "", "PEM CA certificate file for webhook TLS verification")
 	cmd.Flags().StringVar(&githubRepository, "github-repository", "", "GitHub repository for pull request summary (owner/repo)")
-	cmd.Flags().IntVar(&githubPR, "github-pr", 0, "GitHub pull request number; upserts one shared TerraDrift summary comment")
+	cmd.Flags().IntVar(&githubPR, "github-pr", 0, "GitHub pull request number; single-root scan-all only")
 	cmd.Flags().IntVar(&githubIssueAfter, "github-issue-after", 0, "create a GitHub issue after this many consecutive matching drift scans per root")
-	cmd.Flags().StringVar(&artifactURL, "artifact-url", "", "presigned HTTPS URL to upload each root JSON report")
+	cmd.Flags().StringVar(&artifactURL, "artifact-url", "", "presigned HTTPS URL to upload the JSON report (single-root scan-all only)")
 	cmd.Flags().StringVar(&approvalFile, "approval-file", "", "review-only approval artifact to attach to each root report")
 	cmd.Flags().StringVar(&auditLogPath, "audit-log", "", "append secret-safe JSON audit events per root to this path")
 	cmd.Flags().StringVar(&policyCommand, "policy-command", "", "policy command run per root before history/notify")
@@ -411,6 +425,26 @@ TerraDrift comment on that pull request (last successful root wins).`,
 	cmd.Flags().StringVar(&scanConfigPath, "config", "", "config file for delivery defaults and per-root profile names")
 	cmd.Flags().StringVar(&failureSeverity, "failure-severity", "", "minimum drift severity that fails the multi-root scan: low, medium, high, critical")
 	return cmd
+}
+
+func rejectSharedMultiRootDelivery(rootCount int, dashboardHTML, artifactURL string, githubPR int) error {
+	if rootCount <= 1 {
+		return nil
+	}
+	var shared []string
+	if dashboardHTML != "" {
+		shared = append(shared, "--dashboard-html")
+	}
+	if artifactURL != "" {
+		shared = append(shared, "--artifact-url")
+	}
+	if githubPR > 0 {
+		shared = append(shared, "--github-pr")
+	}
+	if len(shared) == 0 {
+		return nil
+	}
+	return fmt.Errorf("scan-all with %d roots refuses shared %s; use terradrift dashboard-index or scan each root", rootCount, strings.Join(shared, ", "))
 }
 
 func multiScanMeetsSeverity(aggregate multiScanReport, threshold string) (bool, error) {

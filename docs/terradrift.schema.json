@@ -44,6 +44,9 @@
     "workspace": { "type": "string" },
     "var_files": { "type": "array", "items": { "type": "string" } },
     "vars": { "type": "array", "items": { "type": "string" } },
+    "state_lock": { "type": "boolean", "description": "Acquire Terraform remote state lock during plan (default true)" },
+    "state_lock_timeout": { "type": "string", "description": "Duration terraform plan waits for the remote state lock (default 10m)" },
+    "plan_file": { "type": "string", "description": "Existing Terraform plan file; skip init/plan and run show -json only" },
     "ignore_rules": {
       "type": "array",
       "items": {

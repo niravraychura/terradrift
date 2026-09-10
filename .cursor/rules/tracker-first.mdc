@@ -1,0 +1,30 @@
+---
+description: File GitHub and Linear tickets before implementing, even when asked to just do it
+alwaysApply: true
+---
+
+# Tracker first
+
+Public work lives on GitHub. Linear is the maintainer copy. The Project board is triage. Do not skip this because the user said "just do it", "add that somewhere", or "do the necessary things".
+
+## Before writing a PR (or a commit meant to ship)
+
+1. Search existing GitHub issues/PRs and Linear (project **TerraDrift post-v0.3.0**). Reuse if one matches.
+2. If none: open a GitHub issue, dual-write Linear with the GitHub URL, add the issue to [the Project](https://github.com/users/niravraychura/projects/1) (**Ready** unless the user says Backlog).
+3. Comment the Linear URL on the GitHub issue.
+4. Branch from `dev`, PR into `dev` with `Closes #N` and the Linear ID in the body.
+
+## After merge
+
+Close the GitHub issue if needed, mark Linear **Done**, set Project **Status** to Done.
+
+## Exceptions (only)
+
+- The user explicitly says to skip tickets
+- Security reports → `SECURITY.md` private advisory (never a public exploit issue)
+- Questions or explanations with **no** repository change
+
+```text
+❌ User: "add that to the release skill" → commit + PR, no issue
+✅ User: "add that to the release skill" → GitHub issue + Linear + Project, then PR Closes #N
+```

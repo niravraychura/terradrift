@@ -11,7 +11,8 @@ TerraDrift is an **open-source, self-hosted** Terraform/OpenTofu **drift detecti
 1. **Ponytail** (`.cursor/rules/ponytail.mdc`) — YAGNI, reuse, stdlib-first, smallest correct diff.
 2. **Engineering quality** — readability, maintainability, tests, performance bounds, security fail-closed.
 3. **Ask before assuming** — clarify ambiguous requirements; if the user has no further instructions, recommend a default and proceed.
-4. **Verify** — run tests before push; after push, confirm GitHub PR/CI is green.
+4. **Tracker first** (`.cursor/rules/tracker-first.mdc`) — even when asked to “just do it”, search GitHub/Linear, file if missing, then PR with `Closes #N`.
+5. **Verify** — run tests before push; after push, confirm GitHub PR/CI is green.
 
 ## Branch and PR defaults
 
