@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -340,6 +341,19 @@ func TestParsePlanReaderMatchesParsePlan(t *testing.T) {
 	}
 	if aTotal != bTotal || aExact != bExact || len(aChanges) != len(bChanges) || len(aOutputs) != len(bOutputs) {
 		t.Fatalf("mismatch ParsePlan vs Reader: %#v vs totals %d/%d exact %t/%t", aChanges, aTotal, bTotal, aExact, bExact)
+	}
+}
+
+func TestParsePlanReaderFromPipe(t *testing.T) {
+	plan := []byte(`{"resource_changes":[{"address":"aws_instance.web","type":"aws_instance","name":"web","mode":"managed","change":{"actions":["update"]}}]}`)
+	pr, pw := io.Pipe()
+	go func() {
+		_, _ = pw.Write(plan)
+		_ = pw.Close()
+	}()
+	changes, _, _, _, err := ParsePlanReader(pr, terraform.PlanModeNormal)
+	if err != nil || len(changes) != 1 || changes[0].Address != "aws_instance.web" {
+		t.Fatalf("stream parse: %#v err=%v", changes, err)
 	}
 }
 

@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -438,14 +439,24 @@ func runTerraformScan(ctx context.Context, runner terraform.Runner, directory st
 	}
 
 	logger.Info(ctx, "terraform show", "directory", logDirectory(redactPaths, directory))
-	planJSON, err := runner.ShowJSON(ctx, directory, planFile)
+	planReader, err := runner.ShowJSON(ctx, directory, planFile)
 	if err != nil {
 		failReport(&scanReport, err)
 		return scanReport, fmt.Errorf("terraform show JSON: %s", scanReport.ErrorMessage)
 	}
+	defer func() {
+		if err := planReader.Close(); err != nil && returnErr == nil {
+			failReport(&scanReport, err)
+			returnErr = fmt.Errorf("terraform show JSON: %s", scanReport.ErrorMessage)
+		}
+	}()
 
 	logger.Info(ctx, "parse plan", "directory", logDirectory(redactPaths, directory))
-	resourceChanges, outputChanges, totalResources, resourcesExact, err := parser.ParsePlan(planJSON, mode)
+	limited := &io.LimitedReader{R: planReader, N: maxPlanFileBytes + 1}
+	resourceChanges, outputChanges, totalResources, resourcesExact, err := parser.ParsePlanReader(limited, mode)
+	if limited.N == 0 {
+		err = fmt.Errorf("terraform show JSON exceeded %d bytes", maxPlanFileBytes)
+	}
 	if err != nil {
 		failReport(&scanReport, err)
 		return scanReport, errors.New(scanReport.ErrorMessage)
