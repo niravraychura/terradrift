@@ -6,9 +6,9 @@ Copy these into your infrastructure repository. Pin third-party actions to SHAs.
 
 [`terradrift-action.yml`](terradrift-action.yml) uses the composite Action in this repo. It always passes `--terraform-exec` and fails if Terraform/OpenTofu is missing.
 
-Until the first release that contains `action.yml` (v0.4.0+), set `version:` to a published CLI tag (`v0.3.0`) and pin `uses:` to `dev` or a commit SHA. After that tag: `uses: niravraychura/terradrift@v0.4.0`.
+Pin `uses: niravraychura/terradrift@v0.4.0` (first tag with `action.yml`). Empty `version:` installs that tag.
 
-Marketplace listing is a GitHub UI step after that tagged release — see [docs/GITHUB_ACTION.md](../../docs/GITHUB_ACTION.md).
+Marketplace listing is a GitHub UI step on that release — see [docs/GITHUB_ACTION.md](../../docs/GITHUB_ACTION.md).
 
 ## Copy-paste workflows
 
