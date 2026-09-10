@@ -305,6 +305,17 @@ func TestScanRequiresTerraformFilesWhenRequested(t *testing.T) {
 	}
 }
 
+func TestScanAcceptsTerragruntRootWhenTerraformFilesRequired(t *testing.T) {
+	directory := t.TempDir()
+	if err := os.WriteFile(filepath.Join(directory, "terragrunt.hcl"), []byte("# synthetic\n"), 0o600); err != nil {
+		t.Fatalf("write fixture: %v", err)
+	}
+	result, err := Scan(context.Background(), Options{Directory: directory, RequireTerraformFiles: true})
+	if err != nil || result.Outcome != OutcomeNoDrift {
+		t.Fatalf("expected Terragrunt root bootstrap scan, got %#v, %v", result, err)
+	}
+}
+
 func TestParseLockBackend(t *testing.T) {
 	for _, name := range []string{"", "local", "LOCAL"} {
 		backend, err := ParseLockBackend(name)

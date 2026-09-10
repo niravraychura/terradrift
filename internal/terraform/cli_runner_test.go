@@ -199,6 +199,22 @@ printf '%s' "$TF_IN_AUTOMATION" > "$TERRADRIFT_ENV"
 	}
 }
 
+func TestCLIRunnerSetsTerragruntNonInteractive(t *testing.T) {
+	runner := NewCLIRunner(writeNamedStub(t, "terragrunt", `#!/bin/sh
+printf '%s %s' "$TG_NON_INTERACTIVE" "$TERRAGRUNT_NON_INTERACTIVE" > "$TERRADRIFT_ENV"
+`))
+	envPath := filepath.Join(t.TempDir(), "env")
+	t.Setenv("TERRADRIFT_ENV", envPath)
+	t.Setenv("TG_NON_INTERACTIVE", "0")
+	if err := runner.Init(context.Background(), t.TempDir()); err != nil {
+		t.Fatalf("init: %v", err)
+	}
+	data, err := os.ReadFile(envPath)
+	if err != nil || string(data) != "true true" {
+		t.Fatalf("terragrunt non-interactive env=%q err=%v", data, err)
+	}
+}
+
 func TestLimitedWriterMarksTruncation(t *testing.T) {
 	writer := &ioutil.LimitedWriter{W: io.Discard, Remaining: 1}
 	if _, err := writer.Write([]byte("ab")); err != nil || !writer.Truncated {
@@ -264,13 +280,17 @@ printf '{"terraform_version":"1.10.0"}'
 }
 
 func writeTerraformStub(t *testing.T, script string) string {
+	return writeNamedStub(t, "terraform", script)
+}
+
+func writeNamedStub(t *testing.T, name, script string) string {
 	t.Helper()
 	if runtime.GOOS == "windows" {
 		t.Skip("shell stub requires POSIX shell")
 	}
-	path := filepath.Join(t.TempDir(), "terraform")
+	path := filepath.Join(t.TempDir(), name)
 	if err := os.WriteFile(path, []byte(script), 0o700); err != nil {
-		t.Fatalf("write terraform stub: %v", err)
+		t.Fatalf("write %s stub: %v", name, err)
 	}
 	return path
 }

@@ -30,11 +30,12 @@ type jsonManifest struct {
 
 // rootDefaults are CLI-wide defaults applied before per-root / profile overlays.
 type rootDefaults struct {
-	PlanMode  string
-	Workspace string
-	VarFiles  []string
-	Vars      []string
-	Config    string
+	PlanMode      string
+	Workspace     string
+	VarFiles      []string
+	Vars          []string
+	Config        string
+	TerragruntBin string
 }
 
 func loadScanManifest(path string) ([]manifestRoot, error) {
@@ -182,8 +183,25 @@ func resolveRootOptions(root manifestRoot, defaults rootDefaults, base scanner.O
 	options := base
 	options.Directory = root.Directory
 	options.PlanMode = mode
-	options.Runner = cloneRunnerWithOverrides(base.Runner, workspace, varFiles, vars)
+	options.Runner = applyPlannerBinary(cloneRunnerWithOverrides(base.Runner, workspace, varFiles, vars), root.Directory, defaults.TerragruntBin)
 	return options, nil
+}
+
+func applyPlannerBinary(base terraform.Runner, directory, terragruntBin string) terraform.Runner {
+	if base == nil || !terraform.IsTerragruntRoot(directory) {
+		return base
+	}
+	switch runner := base.(type) {
+	case terraform.CLIRunner:
+		runner.Path = terraform.PlannerPath(directory, runner.Path, terragruntBin)
+		return runner
+	case *terraform.CLIRunner:
+		copy := *runner
+		copy.Path = terraform.PlannerPath(directory, copy.Path, terragruntBin)
+		return &copy
+	default:
+		return base
+	}
 }
 
 func cloneRunnerWithOverrides(base terraform.Runner, workspace string, varFiles, vars []string) terraform.Runner {

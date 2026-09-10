@@ -23,7 +23,7 @@ On GitHub Enterprise Server or GHEC with data residency, GitHub Actions already 
 |-------|---------|--------|
 | `version` | action `v*` ref | Required when `uses:` is not a release tag |
 | `directory` | `.` | Terraform root |
-| `terraform-bin` | `terraform` | Use `tofu` for OpenTofu |
+| `terraform-bin` | `terraform` | Use `tofu` for OpenTofu, or `terragrunt` for a Terragrunt root |
 | `workspace-root` | `github.workspace` | Symlink/path jail |
 | `plan-file` | empty | Reuse a trusted local plan (`--plan-file`) |
 | `args` | empty | Extra `scan` flags (workflow YAML, not untrusted input) |

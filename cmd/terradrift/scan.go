@@ -49,6 +49,7 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 	var redactPaths bool
 	var terraformExec bool
 	var terraformBin string
+	var terragruntBin string
 	var scanConfigPath string
 	var configProfile string
 	var workspaceRoot string
@@ -102,7 +103,7 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 
 Flag groups:
   Core:       --directory, --output, --timeout, --terraform-exec, --terraform-bin,
-              --plan-mode, --workspace, --var-file, --var, --config, --profile,
+              --terragrunt-bin, --plan-mode, --workspace, --var-file, --var, --config, --profile,
               --failure-severity, --workspace-root, --redact-paths, --lock-backend,
               --skip-terraform-init, --state-lock, --state-lock-timeout, --plan-file, --attribute-values
   Delivery:   --history-dir, --history-retention, --history-compressed, --dashboard-html,
@@ -152,6 +153,7 @@ input, and notifications store attribute paths only unless --attribute-values is
 					{flag: "redact-paths", assign: func() error { redactPaths = cfg.RedactPaths; return nil }},
 					{flag: "terraform-exec", assign: func() error { terraformExec = cfg.TerraformExec; return nil }},
 					{flag: "terraform-bin", assign: func() error { terraformBin = cfg.TerraformBin; return nil }},
+					{flag: "terragrunt-bin", assign: func() error { terragruntBin = cfg.TerragruntBin; return nil }},
 					{flag: "plan-mode", assign: func() error { planMode = cfg.PlanMode; return nil }},
 					{flag: "workspace-root", assign: func() error { workspaceRoot = cfg.WorkspaceRoot; return nil }},
 					{flag: "notify", assign: func() error { notifyTarget = cfg.Notify; return nil }},
@@ -299,7 +301,7 @@ input, and notifications store attribute paths only unless --attribute-values is
 				return fmt.Errorf("--plan-file requires --terraform-exec")
 			}
 			if terraformExec {
-				runner := configureCLIRunner(terraform.NewCLIRunner(terraformBin), terraformWorkspace, varFiles, vars, stateLock, stateLockTimeout)
+				runner := configureCLIRunner(terraform.NewCLIRunner(terraform.PlannerPath(scanOptions.Directory, terraformBin, terragruntBin)), terraformWorkspace, varFiles, vars, stateLock, stateLockTimeout)
 				scanOptions.Runner = runner
 				scanOptions.RequireTerraformFiles = true
 				if planFile == "" {
@@ -400,6 +402,7 @@ input, and notifications store attribute paths only unless --attribute-values is
 	cmd.Flags().BoolVar(&redactPaths, "redact-paths", false, "redact local filesystem paths from scan output")
 	cmd.Flags().BoolVar(&terraformExec, "terraform-exec", false, "run Terraform init, plan, and show -json (required with --plan-file)")
 	cmd.Flags().StringVar(&terraformBin, "terraform-bin", "", "Terraform-compatible executable to run (default: terraform)")
+	cmd.Flags().StringVar(&terragruntBin, "terragrunt-bin", "", "Terragrunt executable for roots with terragrunt.hcl (default: terragrunt)")
 	cmd.Flags().StringVar(&planMode, "plan-mode", string(terraform.PlanModeRefreshOnly), "plan mode: refresh-only (remote drift) or normal (configuration reconciliation)")
 	cmd.Flags().StringVar(&scanConfigPath, "config", "", "optional TerraDrift config file to load")
 	cmd.Flags().StringVar(&configProfile, "profile", "", "named config profile to load")

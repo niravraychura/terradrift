@@ -24,7 +24,7 @@ func TestWriteDefaultAndLoad(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load config: %v", err)
 	}
-	if cfg.Schema != SchemaURL || cfg.Directory != "." || cfg.Output != "table" || cfg.Timeout != "5m" || cfg.PlanMode != "refresh-only" || cfg.RedactPaths || cfg.TerraformExec || cfg.TerraformBin != "" || cfg.WorkspaceRoot != "" || cfg.Notify != "" || cfg.SlackWebhookURL != "" || cfg.TeamsWebhookURL != "" || cfg.WebhookURL != "" || cfg.DashboardHTML != "" || cfg.HistoryDir != "" || cfg.PolicyCommand != "" || cfg.PolicyArgs != nil || cfg.CostCommand != "" || cfg.CostArgs != nil || cfg.RemediationRunbooks != nil || cfg.Profiles != nil {
+	if cfg.Schema != SchemaURL || cfg.Directory != "." || cfg.Output != "table" || cfg.Timeout != "5m" || cfg.PlanMode != "refresh-only" || cfg.RedactPaths || cfg.TerraformExec || cfg.TerraformBin != "" || cfg.TerragruntBin != "" || cfg.WorkspaceRoot != "" || cfg.Notify != "" || cfg.SlackWebhookURL != "" || cfg.TeamsWebhookURL != "" || cfg.WebhookURL != "" || cfg.DashboardHTML != "" || cfg.HistoryDir != "" || cfg.PolicyCommand != "" || cfg.PolicyArgs != nil || cfg.CostCommand != "" || cfg.CostArgs != nil || cfg.RemediationRunbooks != nil || cfg.Profiles != nil {
 		t.Fatalf("unexpected config: %#v", cfg)
 	}
 }

@@ -65,6 +65,7 @@ func newScanAllCommand(stdout io.Writer) *cobra.Command {
 	var concurrency int
 	var terraformExec bool
 	var terraformBin string
+	var terragruntBin string
 	var workspaceRoot string
 	var redactPaths bool
 	var incrementalState string
@@ -118,6 +119,7 @@ func newScanAllCommand(stdout io.Writer) *cobra.Command {
 
 Text manifests list one root directory per line. JSON manifests (version 1) can set
 per-root profile, plan_mode, workspace, var_files, and vars. Named profiles require --config.
+--discover also treats terragrunt.hcl directories as roots (exclude include-only trees).
 
 Delivery matches scan per root: history, dashboard HTML, slack/teams/webhook notifications,
 owner webhooks, policy publish gate, cost/audit enrichment, ignore/baseline rules, owners,
@@ -151,6 +153,7 @@ and --github-pr are refused when more than one root would write the same destina
 					{flag: "redact-paths", assign: func() error { redactPaths = cfg.RedactPaths; return nil }},
 					{flag: "terraform-exec", assign: func() error { terraformExec = cfg.TerraformExec; return nil }},
 					{flag: "terraform-bin", assign: func() error { terraformBin = cfg.TerraformBin; return nil }},
+					{flag: "terragrunt-bin", assign: func() error { terragruntBin = cfg.TerragruntBin; return nil }},
 					{flag: "plan-mode", assign: func() error { planMode = cfg.PlanMode; return nil }},
 					{flag: "workspace-root", assign: func() error { workspaceRoot = cfg.WorkspaceRoot; return nil }},
 					{flag: "notify", assign: func() error { notifyTarget = cfg.Notify; return nil }},
@@ -345,11 +348,12 @@ and --github-pr are refused when more than one root would write the same destina
 				historyMu:            sideEffectMu,
 			}
 			defaults := rootDefaults{
-				PlanMode:  planMode,
-				Workspace: terraformWorkspace,
-				VarFiles:  append([]string(nil), varFiles...),
-				Vars:      append([]string(nil), vars...),
-				Config:    scanConfigPath,
+				PlanMode:      planMode,
+				Workspace:     terraformWorkspace,
+				VarFiles:      append([]string(nil), varFiles...),
+				Vars:          append([]string(nil), vars...),
+				Config:        scanConfigPath,
+				TerragruntBin: terragruntBin,
 			}
 			aggregate := scanAll(cmd.Context(), scanAllParams{
 				Specs:        roots,
@@ -407,7 +411,7 @@ and --github-pr are refused when more than one root would write the same destina
 		},
 	}
 	cmd.Flags().StringVar(&manifest, "manifest", "", "text or JSON Terraform root manifest")
-	cmd.Flags().StringVar(&discover, "discover", "", "workspace root to discover Terraform roots")
+	cmd.Flags().StringVar(&discover, "discover", "", "workspace root to discover Terraform or Terragrunt roots")
 	cmd.Flags().StringArrayVar(&includes, "include", nil, "root-relative include pattern; repeatable")
 	cmd.Flags().StringArrayVar(&excludes, "exclude", nil, "root-relative exclude pattern; repeatable")
 	cmd.Flags().StringVarP(&format, "output", "o", string(outputFormatTable), "output format: table, json, junit, sarif, prometheus")
@@ -416,6 +420,7 @@ and --github-pr are refused when more than one root would write the same destina
 	cmd.Flags().BoolVar(&terraformExec, "terraform-exec", false, "run Terraform-compatible scans")
 	cmd.Flags().StringVar(&planMode, "plan-mode", string(terraform.PlanModeRefreshOnly), "default plan mode: refresh-only or normal (overridable per root)")
 	cmd.Flags().StringVar(&terraformBin, "terraform-bin", "", "Terraform-compatible executable to run (default: terraform)")
+	cmd.Flags().StringVar(&terragruntBin, "terragrunt-bin", "", "Terragrunt executable for roots with terragrunt.hcl (default: terragrunt)")
 	cmd.Flags().StringVar(&workspaceRoot, "workspace-root", "", "require roots to resolve inside this workspace root")
 	cmd.Flags().BoolVar(&redactPaths, "redact-paths", false, "redact local filesystem paths from scan output")
 	cmd.Flags().StringVar(&incrementalState, "incremental-state", "", "JSON state file; retry only roots previously drifted or failed")
@@ -634,12 +639,14 @@ func discoverTerraformRoots(root string, includes []string, excludes []string) (
 			return err
 		}
 		if entry.IsDir() {
-			if entry.Name() == ".terraform" || (relative != "." && matchesPath(relative, excludes)) {
+			// ponytail: skip generated caches only; include-only terragrunt.hcl dirs
+			// are still roots — operators --exclude those. Parsing include graphs is Terragrunt reimplementation.
+			if entry.Name() == ".terraform" || entry.Name() == ".terragrunt-cache" || (relative != "." && matchesPath(relative, excludes)) {
 				return filepath.SkipDir
 			}
 			return nil
 		}
-		if filepath.Ext(path) != ".tf" {
+		if entry.Name() != terraform.TerragruntConfigName && filepath.Ext(path) != ".tf" {
 			return nil
 		}
 		directory := filepath.Dir(path)
@@ -662,7 +669,7 @@ func discoverTerraformRoots(root string, includes []string, excludes []string) (
 	}
 	sort.Strings(directories)
 	if len(directories) == 0 {
-		return nil, fmt.Errorf("no Terraform roots found under %s", root)
+		return nil, fmt.Errorf("no Terraform or Terragrunt roots found under %s", root)
 	}
 	return directories, nil
 }

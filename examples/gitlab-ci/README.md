@@ -16,3 +16,4 @@ The official GitHub Action (`uses: niravraychura/terradrift@v0.4.1`) is GitHub-o
 - **Plugin cache:** `TF_PLUGIN_CACHE_DIR` plus GitLab `cache:` on `.terraform-plugin-cache/`.
 - **Plans:** do not upload `*.tfplan` artifacts. Encrypted OpenTofu/Terraform state needs decrypt rights in CI; still do not publish the plan file.
 - **OpenTofu:** install `tofu` instead of Terraform and add `--terraform-bin tofu`.
+- **Terragrunt:** install `terragrunt` and scan stacked roots (`terragrunt.hcl`); `--terragrunt-bin` defaults to `terragrunt`.
