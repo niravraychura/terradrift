@@ -54,10 +54,10 @@ cosign verify-blob \
 Homebrew (macOS/Linux):
 
 ```bash
-brew install niravraychura/terradrift/terradrift
+brew install niravraychura/tap/terradrift
 ```
 
-Tap: [`niravraychura/homebrew-terradrift`](https://github.com/niravraychura/homebrew-terradrift). Or build from source:
+Tap: [`niravraychura/homebrew-tap`](https://github.com/niravraychura/homebrew-tap). Or build from source:
 
 ```bash
 git clone https://github.com/niravraychura/terradrift.git

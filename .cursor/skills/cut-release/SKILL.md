@@ -30,7 +30,7 @@ git push origin vX.Y.Z
    - README install example and GHCR image tag
    - `examples/github-actions/*.yml` `TERRADRIFT_VERSION` (install.sh workflows)
    - Official Action examples / README / `docs/GITHUB_ACTION.md`: `uses: niravraychura/terradrift@vX.Y.Z` and drop `version:` (`action.yml` uses the `v*` ref). Until that tag includes `action.yml`, keep `uses: @dev` plus `version:` of the latest CLI release.
-   - Homebrew tap: `./scripts/gen-homebrew-formula.sh vX.Y.Z` → commit `Formula/terradrift.rb` in `niravraychura/homebrew-terradrift` (see `contrib/homebrew/README.md`)
+   - Homebrew tap: `./scripts/gen-homebrew-formula.sh vX.Y.Z` → commit `Formula/terradrift.rb` in `niravraychura/homebrew-tap` (see `contrib/homebrew/README.md`)
 8. **Milestone** — if an open GitHub milestone exists for this version, **close** it after the release succeeds. Do not create empty milestones for future versions.
 9. **v1.0.0 only** — after the GitHub Release exists, remind the maintainer to post the organic LinkedIn copy on [#95](https://github.com/niravraychura/terradrift/issues/95) (parked from #111). Do not post before 1.0.
 

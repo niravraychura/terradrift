@@ -48,7 +48,7 @@ Do not force-push tags that have already been published with artifacts.
 
 - GitHub Releases: https://github.com/niravraychura/terradrift/releases
 - Installer default: `scripts/install.sh` (`TERRADRIFT_VERSION`) must match the latest published tag. Bump it in a follow-up on `dev` after `release.yml` uploads archives — not in the tag commit itself if that would 404 during the gap before assets exist.
-- Homebrew tap: after archives exist, regenerate `Formula/terradrift.rb` in [`niravraychura/homebrew-terradrift`](https://github.com/niravraychura/homebrew-terradrift) with `scripts/gen-homebrew-formula.sh vX.Y.Z` (see [`contrib/homebrew/README.md`](../contrib/homebrew/README.md)).
+- Homebrew tap: after archives exist, regenerate `Formula/terradrift.rb` in [`niravraychura/homebrew-tap`](https://github.com/niravraychura/homebrew-tap) with `scripts/gen-homebrew-formula.sh vX.Y.Z` (see [`contrib/homebrew/README.md`](../contrib/homebrew/README.md)).
 - Official Action: `uses: niravraychura/terradrift@vX.Y.Z` after a tag that includes `action.yml`. Empty `version:` then installs that tag. Until then, pin `uses:` to `dev` (or a SHA) and set `version:` to the latest CLI release.
 - Container: GHCR image published by the release workflow (see Release notes for digest/tag). Keep the README `FROM` pin on the latest tag too.
 
