@@ -984,7 +984,7 @@ func TestScanHelpIncludesAttributeValuesAndWorkspace(t *testing.T) {
 	if err != nil {
 		t.Fatalf("scan help: %v", err)
 	}
-	for _, flag := range []string{"--attribute-values", "--workspace", "--var-file", "--var", "--state-lock", "--state-lock-timeout"} {
+	for _, flag := range []string{"--attribute-values", "--workspace", "--var-file", "--var", "--state-lock", "--state-lock-timeout", "--plan-file"} {
 		if !strings.Contains(stdout, flag) {
 			t.Fatalf("expected scan help to contain %q", flag)
 		}
@@ -1033,6 +1033,27 @@ func TestScanAllRequiresTerraformExecWhenEnvSet(t *testing.T) {
 	_, _, err := executeCommand("scan-all", "--manifest", manifest)
 	if err == nil || !strings.Contains(err.Error(), "--terraform-exec") {
 		t.Fatalf("expected require-exec without terraform-exec to fail, got %v", err)
+	}
+}
+
+func TestScanPlanFileRequiresTerraformExec(t *testing.T) {
+	planPath := filepath.Join(t.TempDir(), "plan.tfplan")
+	if err := os.WriteFile(planPath, []byte("synthetic-plan"), 0o600); err != nil {
+		t.Fatalf("write plan fixture: %v", err)
+	}
+	_, _, err := executeCommand("scan", "-d", t.TempDir(), "--plan-file", planPath)
+	if err == nil || !strings.Contains(err.Error(), "--terraform-exec") {
+		t.Fatalf("expected --plan-file without --terraform-exec to fail, got %v", err)
+	}
+}
+
+func TestScanAllHelpOmitsPlanFile(t *testing.T) {
+	stdout, _, err := executeCommand("scan-all", "--help")
+	if err != nil {
+		t.Fatalf("scan-all help: %v", err)
+	}
+	if strings.Contains(stdout, "--plan-file") {
+		t.Fatal("scan-all should not advertise --plan-file")
 	}
 }
 

@@ -89,6 +89,7 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 	var vars []string
 	var stateLock bool
 	var stateLockTimeout time.Duration
+	var planFile string
 
 	cmd := &cobra.Command{
 		Use:   "scan",
@@ -99,7 +100,7 @@ Flag groups:
   Core:       --directory, --output, --timeout, --terraform-exec, --terraform-bin,
               --plan-mode, --workspace, --var-file, --var, --config, --profile,
               --failure-severity, --workspace-root, --redact-paths, --lock-backend,
-              --skip-terraform-init, --state-lock, --state-lock-timeout, --attribute-values
+              --skip-terraform-init, --state-lock, --state-lock-timeout, --plan-file, --attribute-values
   Delivery:   --history-dir, --history-retention, --history-compressed, --dashboard-html,
               --notify, --slack-webhook-url, --teams-webhook-url, --webhook-url,
               --webhook-ca-cert, --artifact-url, --audit-log, --github-repository,
@@ -191,6 +192,7 @@ input, and notifications store attribute paths only unless --attribute-values is
 						stateLockTimeout = parsed
 						return nil
 					}},
+					{flag: "plan-file", assign: func() error { planFile = cfg.PlanFile; return nil }},
 				}); err != nil {
 					return err
 				}
@@ -254,16 +256,22 @@ input, and notifications store attribute paths only unless --attribute-values is
 				LockBackend:   lockBackend,
 				SkipInit:      skipTerraformInit,
 				RedactPaths:   redactPaths,
+				PlanFile:      planFile,
 			}
 			scanOptions, err = scanner.PrepareOptions(scanOptions)
 			if err != nil {
 				return err
 			}
+			if planFile != "" && !terraformExec {
+				return fmt.Errorf("--plan-file requires --terraform-exec")
+			}
 			if terraformExec {
 				runner := configureCLIRunner(terraform.NewCLIRunner(terraformBin), terraformWorkspace, varFiles, vars, stateLock, stateLockTimeout)
 				scanOptions.Runner = runner
 				scanOptions.RequireTerraformFiles = true
-				warnStateLockDisabled(cmd, stateLock)
+				if planFile == "" {
+					warnStateLockDisabled(cmd, stateLock)
+				}
 			} else if terraformExecRequired() {
 				return errTerraformExecRequired()
 			} else {
@@ -356,7 +364,7 @@ input, and notifications store attribute paths only unless --attribute-values is
 	cmd.Flags().StringVarP(&format, "output", "o", string(outputFormatTable), "output format: table, json, junit, sarif, prometheus")
 	cmd.Flags().DurationVar(&timeout, "timeout", scanner.DefaultTimeout, "maximum scan duration")
 	cmd.Flags().BoolVar(&redactPaths, "redact-paths", false, "redact local filesystem paths from scan output")
-	cmd.Flags().BoolVar(&terraformExec, "terraform-exec", false, "run Terraform init, plan, and show -json")
+	cmd.Flags().BoolVar(&terraformExec, "terraform-exec", false, "run Terraform init, plan, and show -json (required with --plan-file)")
 	cmd.Flags().StringVar(&terraformBin, "terraform-bin", "", "Terraform-compatible executable to run (default: terraform)")
 	cmd.Flags().StringVar(&planMode, "plan-mode", string(terraform.PlanModeRefreshOnly), "plan mode: refresh-only (remote drift) or normal (configuration reconciliation)")
 	cmd.Flags().StringVar(&scanConfigPath, "config", "", "optional TerraDrift config file to load")
@@ -388,6 +396,7 @@ input, and notifications store attribute paths only unless --attribute-values is
 	cmd.Flags().BoolVar(&skipTerraformInit, "skip-terraform-init", false, "skip terraform init; fails if .terraform is missing or uninitialized")
 	cmd.Flags().BoolVar(&stateLock, "state-lock", true, "acquire Terraform remote state lock during plan (use --state-lock=false only for scheduled drift vs apply contention)")
 	cmd.Flags().DurationVar(&stateLockTimeout, "state-lock-timeout", terraform.DefaultLockTimeout, "how long terraform plan waits for the remote state lock")
+	cmd.Flags().StringVar(&planFile, "plan-file", "", "reuse a trusted local Terraform plan; skip init/plan and run show -json only")
 	cmd.Flags().BoolVar(&attributeValues, "attribute-values", false, "include safe attribute values in history, artifacts, policy input, dashboards, and notifications (default: paths only)")
 	cmd.Flags().StringVar(&terraformWorkspace, "workspace", "", "Terraform workspace to select before plan")
 	cmd.Flags().StringArrayVar(&varFiles, "var-file", nil, "Terraform -var-file path; repeatable")
