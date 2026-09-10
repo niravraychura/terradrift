@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Print a Homebrew formula for a TerraDrift GitHub Release.
-# Usage: scripts/gen-homebrew-formula.sh v0.4.0 [checksums.txt]
+# Usage: scripts/gen-homebrew-formula.sh v0.4.1 [checksums.txt]
 # If checksums.txt is omitted, it is downloaded from the matching GitHub Release.
 set -euo pipefail
 

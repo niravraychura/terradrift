@@ -6,7 +6,7 @@ TerraDrift ships a composite Action at the repository root (`action.yml`).
 - uses: hashicorp/setup-terraform@v4
   with:
     terraform_wrapper: false
-- uses: niravraychura/terradrift@v0.4.0
+- uses: niravraychura/terradrift@v0.4.1
   with:
     directory: ./terraform/prod
 ```
@@ -32,6 +32,6 @@ Happy-path GitHub delivery uses `GITHUB_TOKEN` from the job (`--github-pr` / `--
 
 ## Marketplace
 
-Listed: [TerraDrift Scan](https://github.com/marketplace/actions/terradrift-scan) (free Action listing). Pin `uses: niravraychura/terradrift@v0.4.0`.
+Listed: [TerraDrift Scan](https://github.com/marketplace/actions/terradrift-scan) (free Action listing). Pin `uses: niravraychura/terradrift@v0.4.1`.
 
 To refresh the listing after a new tag, edit that release and keep **Publish this release to the GitHub Marketplace** checked.
