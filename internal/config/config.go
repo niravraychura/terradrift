@@ -32,6 +32,7 @@ type Config struct {
 	RedactPaths          bool                       `json:"redact_paths"`
 	TerraformExec        bool                       `json:"terraform_exec"`
 	TerraformBin         string                     `json:"terraform_bin"`
+	TerragruntBin        string                     `json:"terragrunt_bin,omitempty"`
 	PlanMode             string                     `json:"plan_mode"`
 	WorkspaceRoot        string                     `json:"workspace_root"`
 	Notify               string                     `json:"notify"`

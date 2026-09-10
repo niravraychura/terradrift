@@ -164,7 +164,7 @@ func redactModuleSource(source string) string {
 func (runner CLIRunner) run(ctx context.Context, directory string, args ...string) ([]byte, error) {
 	cmd := exec.CommandContext(ctx, runner.Path, withNoColor(args)...)
 	cmd.Dir = directory
-	cmd.Env = withTerraformAutomation(os.Environ())
+	cmd.Env = withPlannerAutomation(os.Environ(), runner.Path)
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
@@ -197,6 +197,21 @@ func withNoColor(args []string) []string {
 	out := make([]string, 0, len(args)+1)
 	out = append(out, args[0], "-no-color")
 	return append(out, args[1:]...)
+}
+
+func withPlannerAutomation(environ []string, binPath string) []string {
+	out := withTerraformAutomation(environ)
+	if !isTerragruntBinary(binPath) {
+		return out
+	}
+	filtered := make([]string, 0, len(out)+2)
+	for _, entry := range out {
+		if strings.HasPrefix(entry, "TG_NON_INTERACTIVE=") || strings.HasPrefix(entry, "TERRAGRUNT_NON_INTERACTIVE=") {
+			continue
+		}
+		filtered = append(filtered, entry)
+	}
+	return append(filtered, "TG_NON_INTERACTIVE=true", "TERRAGRUNT_NON_INTERACTIVE=true")
 }
 
 func withTerraformAutomation(environ []string) []string {

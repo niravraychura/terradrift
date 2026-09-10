@@ -26,4 +26,5 @@ These install TerraDrift with checksum-verifying `scripts/install.sh` (not `v0.0
 - **OIDC:** jobs set `id-token: write`. Wire AWS/GCP/Azure as in [docs/DRIFT_SCAN_IAM.md](../../docs/DRIFT_SCAN_IAM.md). Do not use a long-lived PAT for cloud auth.
 - **Plugin cache:** `TF_PLUGIN_CACHE_DIR` plus `actions/cache` keyed on `.terraform.lock.hcl`.
 - **GitHub comments/issues:** add `pull-requests: write` for `--github-pr`, `issues: write` for `--github-issue-after` (one issue per root+fingerprint; closed when that root scans clean). Optional `--github-issue-label` (at most 8). GHES/GHEC: Actions sets `GITHUB_API_URL`; TerraDrift uses it (HTTPS, no userinfo). `--skip-if-open-pr` needs `pull-requests: read` and `--github-repository`; it skips when an open PR changes files under that root.
+- **Terragrunt:** scan a stacked root with `terraform-bin: terragrunt` (or `args: --terragrunt-bin /path/to/terragrunt`). Install Terragrunt in the job; Terraform/OpenTofu remains the planner.
 - **Plans:** do not upload `*.tfplan` artifacts. Encrypted OpenTofu/Terraform state needs decrypt rights in CI; still do not publish the plan file.

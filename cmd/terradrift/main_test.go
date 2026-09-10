@@ -237,6 +237,22 @@ func TestResolveRootOptionsAppliesOverrides(t *testing.T) {
 	}
 }
 
+func TestResolveRootOptionsUsesTerragruntBinary(t *testing.T) {
+	directory := t.TempDir()
+	if err := os.WriteFile(filepath.Join(directory, "terragrunt.hcl"), []byte("# synthetic\n"), 0o600); err != nil {
+		t.Fatalf("write fixture: %v", err)
+	}
+	runner := terraform.NewCLIRunner("tofu")
+	resolved, err := resolveRootOptions(manifestRoot{Directory: directory}, rootDefaults{PlanMode: "refresh-only", TerragruntBin: "/opt/terragrunt"}, scanner.Options{Runner: runner, PlanMode: terraform.PlanModeRefreshOnly})
+	if err != nil {
+		t.Fatalf("resolve: %v", err)
+	}
+	cli, ok := resolved.Runner.(terraform.CLIRunner)
+	if !ok || cli.Path != "/opt/terragrunt" {
+		t.Fatalf("expected terragrunt binary, got %#v", resolved.Runner)
+	}
+}
+
 func TestScanAllAcceptsNormalPlanMode(t *testing.T) {
 	root := t.TempDir()
 	directory := filepath.Join(root, "production")
@@ -357,6 +373,40 @@ func TestDiscoverTerraformRootsHonorsPatterns(t *testing.T) {
 	}
 	if len(directories) != 1 || directories[0] != filepath.Join(root, "included") {
 		t.Fatalf("unexpected discovered roots: %#v", directories)
+	}
+}
+
+func TestDiscoverTerraformRootsIncludesTerragrunt(t *testing.T) {
+	root := t.TempDir()
+	tfDir := filepath.Join(root, "terraform-stack")
+	tgDir := filepath.Join(root, "live", "prod")
+	cacheDir := filepath.Join(root, "live", "prod", ".terragrunt-cache", "generated")
+	includeDir := filepath.Join(root, "_envcommon")
+	for _, directory := range []string{tfDir, tgDir, cacheDir, includeDir} {
+		if err := os.MkdirAll(directory, 0o700); err != nil {
+			t.Fatalf("create root fixture: %v", err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(tfDir, "main.tf"), []byte("terraform {}"), 0o600); err != nil {
+		t.Fatalf("write Terraform fixture: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(tgDir, "terragrunt.hcl"), []byte("# synthetic\n"), 0o600); err != nil {
+		t.Fatalf("write Terragrunt fixture: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(cacheDir, "main.tf"), []byte("terraform {}"), 0o600); err != nil {
+		t.Fatalf("write cache fixture: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(includeDir, "terragrunt.hcl"), []byte("# include-only\n"), 0o600); err != nil {
+		t.Fatalf("write include fixture: %v", err)
+	}
+
+	directories, err := discoverTerraformRoots(root, nil, []string{"_envcommon"})
+	if err != nil {
+		t.Fatalf("discover roots: %v", err)
+	}
+	want := []string{tgDir, tfDir}
+	if len(directories) != 2 || directories[0] != want[0] || directories[1] != want[1] {
+		t.Fatalf("unexpected discovered roots: %#v want %#v", directories, want)
 	}
 }
 
@@ -781,6 +831,28 @@ func TestScanUsesTerraformBinaryFromConfig(t *testing.T) {
 	_, _, err := executeCommand("scan", "--config", path)
 	if err == nil || !strings.Contains(err.Error(), "tofu-from-config") {
 		t.Fatalf("expected configured Terraform binary error, got %v", err)
+	}
+}
+
+func TestScanUsesTerragruntBinaryForTerragruntRoot(t *testing.T) {
+	directory := t.TempDir()
+	if err := os.WriteFile(filepath.Join(directory, "terragrunt.hcl"), []byte("# synthetic\n"), 0o600); err != nil {
+		t.Fatalf("write fixture: %v", err)
+	}
+	_, _, err := executeCommand("scan", "-d", directory, "--terraform-exec", "--terragrunt-bin", "terragrunt-not-installed")
+	if err == nil || !strings.Contains(err.Error(), "terragrunt-not-installed") {
+		t.Fatalf("expected configured Terragrunt binary error, got %v", err)
+	}
+}
+
+func TestScanKeepsTerraformBinaryForTerraformRoot(t *testing.T) {
+	directory := t.TempDir()
+	if err := os.WriteFile(filepath.Join(directory, "main.tf"), []byte("terraform {}"), 0o600); err != nil {
+		t.Fatalf("write fixture: %v", err)
+	}
+	_, _, err := executeCommand("scan", "-d", directory, "--terraform-exec", "--terraform-bin", "tofu-not-installed", "--terragrunt-bin", "terragrunt-not-installed")
+	if err == nil || !strings.Contains(err.Error(), "tofu-not-installed") || strings.Contains(err.Error(), "terragrunt-not-installed") {
+		t.Fatalf("expected Terraform binary error, got %v", err)
 	}
 }
 

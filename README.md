@@ -76,8 +76,8 @@ terradrift completion zsh
 
 ### Step 2 — Have Terraform (or OpenTofu) ready
 
-- `terraform` or `tofu` on your `PATH`
-- A local Terraform root (any folder with `.tf` files — **not** required to live inside this repo)
+- `terraform` or `tofu` on your `PATH` (Terragrunt shops: `terragrunt` as well)
+- A local Terraform root (any folder with `.tf` files — **not** required to live inside this repo), or a Terragrunt stacked root (`terragrunt.hcl`)
 - Credentials / backend access so `terraform plan` can run (same as you would for a normal plan)
 
 ### Step 3 — Run a real drift scan
@@ -101,6 +101,14 @@ OpenTofu:
 
 ```bash
 terradrift scan -d ./terraform/prod --terraform-exec --terraform-bin tofu
+```
+
+Terragrunt (Terraform/OpenTofu stays the planner; TerraDrift invokes `terragrunt` for that working directory):
+
+```bash
+terradrift scan -d ./live/prod --terraform-exec
+# optional override:
+terradrift scan -d ./live/prod --terraform-exec --terragrunt-bin /usr/local/bin/terragrunt
 ```
 
 Example **Terraform-backed** table output (exit **2** means drift was found — that is detection working, not a crash). Attribute **values** stay redacted/paths-only unless `--attribute-values`. This is a recorded terminal transcript, not a bootstrap report:
@@ -207,7 +215,7 @@ Full scheduled examples:
 - Cron: [`examples/cron/terradrift.cron`](examples/cron/terradrift.cron)
 - GitLab CI (install.sh): [`examples/gitlab-ci/.gitlab-ci.yml`](examples/gitlab-ci/.gitlab-ci.yml)
 
-Pin TerraDrift, Terraform/OpenTofu, and provider versions. Use OIDC for cloud roles ([docs/DRIFT_SCAN_IAM.md](docs/DRIFT_SCAN_IAM.md)), not long-lived keys. Cache providers with `TF_PLUGIN_CACHE_DIR`. Keep webhook URLs in CI secrets. Do not upload `*.tfplan` artifacts. OpenTofu is a drop-in planner: set `--terraform-bin tofu` (or `terraform_bin` in config) and keep using `--terraform-exec`.
+Pin TerraDrift, Terraform/OpenTofu, and provider versions. Use OIDC for cloud roles ([docs/DRIFT_SCAN_IAM.md](docs/DRIFT_SCAN_IAM.md)), not long-lived keys. Cache providers with `TF_PLUGIN_CACHE_DIR`. Keep webhook URLs in CI secrets. Do not upload `*.tfplan` artifacts. OpenTofu is a drop-in planner: set `--terraform-bin tofu` (or `terraform_bin` in config) and keep using `--terraform-exec`. Terragrunt stacked roots use `--terragrunt-bin` (default `terragrunt`); `--terraform-bin terragrunt` is also accepted as a passthrough.
 
 ---
 
@@ -322,6 +330,8 @@ terradrift scan-all --manifest terraform-roots.txt --terraform-exec --output pro
 ```bash
 terradrift scan-all --discover . --terraform-exec --concurrency 4
 ```
+
+`--discover` also picks up directories that contain `terragrunt.hcl` (even without `.tf` files) and runs `--terragrunt-bin` (default `terragrunt`) for those roots only. Exclude include-only folders such as `_envcommon` with `--exclude`. TerraDrift does not parse Terragrunt includes or generate wrappers.
 
 More detail and examples: [`examples/multi-root`](examples/multi-root).
 
