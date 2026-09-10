@@ -40,12 +40,12 @@ func TestGitHubOpenPRSkipperMatchesRoot(t *testing.T) {
 		APIURL:     "https://github.test",
 		Client: roundTripFunc(func(request *http.Request) (*http.Response, error) {
 			calls++
-			switch {
-			case request.URL.Path == "/repos/owner/repo/pulls":
+			switch request.URL.Path {
+			case "/repos/owner/repo/pulls":
 				return &http.Response{StatusCode: http.StatusOK, Status: "200 OK", Body: io.NopCloser(strings.NewReader(`[{"number":12},{"number":13}]`))}, nil
-			case request.URL.Path == "/repos/owner/repo/pulls/12/files":
+			case "/repos/owner/repo/pulls/12/files":
 				return &http.Response{StatusCode: http.StatusOK, Status: "200 OK", Body: io.NopCloser(strings.NewReader(`[{"filename":"README.md"}]`))}, nil
-			case request.URL.Path == "/repos/owner/repo/pulls/13/files":
+			case "/repos/owner/repo/pulls/13/files":
 				return &http.Response{StatusCode: http.StatusOK, Status: "200 OK", Body: io.NopCloser(strings.NewReader(`[{"filename":"terraform/prod/main.tf","previous_filename":"terraform/old/main.tf"}]`))}, nil
 			default:
 				t.Fatalf("unexpected request %s %s", request.Method, request.URL)
