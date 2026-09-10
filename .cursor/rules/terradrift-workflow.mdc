@@ -30,4 +30,5 @@ alwaysApply: true
 - Follow root `AGENTS.md` and `CONTRIBUTING.md`
 - Always apply **Ponytail** (`.cursor/rules/ponytail.mdc`) — simplest solution that works
 - Apply engineering quality + verify-before-done rules on every change
+- **Tracker first** (`.cursor/rules/tracker-first.mdc`) — GitHub issue + Linear dual-write + Project before implementing, even when the user says to just do it
 - Match existing Go and docs style; keep changes focused
