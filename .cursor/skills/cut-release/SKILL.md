@@ -25,7 +25,12 @@ git push origin vX.Y.Z
 
 5. **Verify** — watch `.github/workflows/release.yml` for that tag; confirm GitHub Release assets (archives, checksums, SBOM) and GHCR image.
 6. **Back-merge** — if `main` is ahead of `dev` (promotion merge commit), PR `main` → `dev` and merge after CI.
-7. **Milestone** — if an open GitHub milestone exists for this version, **close** it after the release succeeds. Do not create empty milestones for future versions.
+7. **Consume pins** — only after the GitHub Release archives exist. PR into `dev` (do not bump a default to a tag with no assets — `install.sh` will 404). Update:
+   - `scripts/install.sh` default `TERRADRIFT_VERSION` and its usage comment
+   - README install example and GHCR image tag
+   - `examples/github-actions/*.yml` `TERRADRIFT_VERSION` (install.sh workflows)
+   - Official Action examples / README / `docs/GITHUB_ACTION.md`: `uses: niravraychura/terradrift@vX.Y.Z` and drop `version:` (`action.yml` uses the `v*` ref). Until that tag includes `action.yml`, keep `uses: @dev` plus `version:` of the latest CLI release.
+8. **Milestone** — if an open GitHub milestone exists for this version, **close** it after the release succeeds. Do not create empty milestones for future versions.
 
 ## Rules
 
