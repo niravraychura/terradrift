@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `release.yml` Cosign-signs CLI tarballs (keyless OIDC bundles next to each archive) (#91)
+- `docs/COMPARE.md` — vs `terraform plan`, inventory scanners, orchestrators, and rootsami/terradrift (#108)
 - `scan-all --output junit` and `--output sarif` emit one aggregate artifact across roots (#86)
 - Official GitHub Action (`action.yml`) that always passes `--terraform-exec`, fails if Terraform/OpenTofu is missing, and caches providers (#89)
 - `--plan-file` / `plan_file` to reuse a trusted local Terraform plan (`show -json` only; still requires `--terraform-exec`) (#90)
@@ -17,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- README states this is a plan-based CLI (not the 2023 Terradrift server), that bootstrap exit 0 is not “no drift”, and shows a Terraform-backed scan transcript (#107)
 - `scan-all` refuses shared `--dashboard-html`, `--artifact-url`, and `--github-pr` when more than one root would overwrite the same destination (#85)
 - GitHub Actions / `TERRADRIFT_REQUIRE_EXEC` require `allowed_commands` and `trusted_command_dirs` when policy, cost, or audit adapters are set (#88)
 - Docs state that stdout is emitted before the policy publish gate; treat the exit code as the gate, not the printed report (#87)
