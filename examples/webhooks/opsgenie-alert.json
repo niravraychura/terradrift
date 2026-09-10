@@ -1,0 +1,14 @@
+{
+  "message": "TerraDrift drift_detected (1 changed resource)",
+  "alias": "terradrift:a1b2-c3d4-e5f6-7890-abcdef123456",
+  "description": "Terraform scan completed\nScan ID: a1b2-c3d4-e5f6-7890-abcdef123456\nStatus: drift_detected\nPlan mode: refresh-only\nResources checked: 12\nChanged resources: 1\nTop changes:\n- aws_instance.web (high)",
+  "priority": "P2",
+  "source": "terradrift",
+  "details": {
+    "scan_id": "a1b2-c3d4-e5f6-7890-abcdef123456",
+    "status": "drift_detected",
+    "plan_mode": "refresh-only",
+    "total_resources_checked": "12",
+    "total_changed_resources": "1"
+  }
+}

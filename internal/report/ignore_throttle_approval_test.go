@@ -115,6 +115,10 @@ func TestApprovalRoundTrip(t *testing.T) {
 	if err := VerifyApproval(scanReport, approval); err != nil {
 		t.Fatalf("VerifyApproval: %v", err)
 	}
+	scanReport.Approval = &approval
+	if scanReport.Status != ScanStatusDriftDetected {
+		t.Fatalf("approval must not clear drift status, got %q", scanReport.Status)
+	}
 	scanReport.ResourceChanges[0].RiskLevel = "high"
 	if err := VerifyApproval(scanReport, approval); err == nil {
 		t.Fatal("expected fingerprint mismatch")

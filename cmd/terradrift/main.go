@@ -107,6 +107,11 @@ func newApproveCommand(stdout io.Writer) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "approve",
 		Short: "Create a review-only approval for a drift report",
+		Long: `Create a review-only approval artifact for a drift report.
+
+Approvals attach to later scans with --approval-file for audit. They do not
+suppress exit 2. To pass CI while known drift remains, use ignore_rules or
+baseline_rules (owner, reason, and expiry). Auto-apply is out of scope.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			data, err := ioutil.ReadLimitedFile(reportPath, int64(maxArtifactBytes))
 			if err != nil {
