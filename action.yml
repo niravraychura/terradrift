@@ -55,7 +55,7 @@ runs:
           case "${TERRADRIFT_ACTION_REF}" in
             v*.*.*) version="${TERRADRIFT_ACTION_REF}" ;;
             *)
-              echo "set input version to a release tag (for example v0.4.0); action ref is ${TERRADRIFT_ACTION_REF}" >&2
+              echo "set input version to a release tag (for example v0.4.1); action ref is ${TERRADRIFT_ACTION_REF}" >&2
               exit 1
               ;;
           esac
