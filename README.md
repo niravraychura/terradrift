@@ -142,23 +142,40 @@ Report JSON stability notes: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 TerraDrift does **not** need to live in your infra repo. Checkout the Terraform repo, then run TerraDrift in the same job.
 
-Minimal pattern:
+Preferred: the official Action (always `--terraform-exec`; fails if Terraform is missing):
 
 ```yaml
 - uses: hashicorp/setup-terraform@v4
+  with:
+    terraform_wrapper: false
+- uses: niravraychura/terradrift@dev # pin to a v* tag after v0.4.0
+  with:
+    version: v0.3.0
+    directory: ./terraform/prod
+```
+
+Details: [docs/GITHUB_ACTION.md](docs/GITHUB_ACTION.md) · [examples/github-actions](examples/github-actions/README.md).
+
+Minimal pattern without the Action:
+
+```yaml
+- uses: hashicorp/setup-terraform@v4
+  with:
+    terraform_wrapper: false
 - name: Drift scan
   run: terradrift scan --directory ./terraform/prod --terraform-exec --output json
 ```
 
 Full scheduled examples:
 
-- GitHub Actions: [`examples/github-actions/terradrift-scheduled.yml`](examples/github-actions/terradrift-scheduled.yml)
+- Official Action: [`examples/github-actions/terradrift-action.yml`](examples/github-actions/terradrift-action.yml)
+- GitHub Actions (install.sh): [`examples/github-actions/terradrift-scheduled.yml`](examples/github-actions/terradrift-scheduled.yml)
 - OpenTofu (same `init` / `plan` / `show -json` contract, `--terraform-bin tofu`): [`examples/github-actions/terradrift-opentofu.yml`](examples/github-actions/terradrift-opentofu.yml)
 - Pull request comment (upsert): [`examples/github-actions/terradrift-pr.yml`](examples/github-actions/terradrift-pr.yml)
 - Multi-root + Slack: [`examples/github-actions/terradrift-scheduled-multi-root.yml`](examples/github-actions/terradrift-scheduled-multi-root.yml)
 - Cron: [`examples/cron/terradrift.cron`](examples/cron/terradrift.cron)
 
-Pin TerraDrift, Terraform/OpenTofu, and provider versions. Keep cloud credentials and webhook URLs in CI secrets. OpenTofu is a drop-in planner: set `--terraform-bin tofu` (or `terraform_bin` in config) and keep using `--terraform-exec`.
+Pin TerraDrift, Terraform/OpenTofu, and provider versions. Use OIDC for cloud roles ([docs/DRIFT_SCAN_IAM.md](docs/DRIFT_SCAN_IAM.md)), not long-lived keys. Cache providers with `TF_PLUGIN_CACHE_DIR`. Keep webhook URLs in CI secrets. Do not upload `*.tfplan` artifacts. OpenTofu is a drop-in planner: set `--terraform-bin tofu` (or `terraform_bin` in config) and keep using `--terraform-exec`.
 
 ---
 
@@ -209,6 +226,14 @@ terradrift scan -d ./terraform/prod --terraform-exec \
 ```
 
 Terraform `plan` waits up to `--state-lock-timeout` (default `10m`) for the remote state lock. Use `--state-lock=false` only when a scheduled drift job must not block apply.
+
+Reuse a plan produced earlier in the same job (`scan-all` does not support this):
+
+```bash
+terradrift scan -d ./terraform/prod --terraform-exec --plan-file ./plan.tfplan --plan-mode refresh-only
+```
+
+`--plan-file` skips init/plan, runs `terraform show -json` only, and still requires `--terraform-exec`. Match `--plan-mode` to how that plan was created. Do not upload the plan file as a CI artifact.
 
 ### Policy publish gate (before history / notify)
 
@@ -332,8 +357,8 @@ Do not bake cloud credentials into the image.
 With `--terraform-exec`, each scan roughly:
 
 1. Validates the directory and takes a **local** scan lock (`.terradrift-scan.lock` on that host).
-2. Runs `terraform init` (unless `--skip-terraform-init`) with `-lockfile=readonly` — a committed `.terraform.lock.hcl` is required. `--skip-terraform-init` fails closed unless `.terraform/providers` or `.terraform/modules/modules.json` exists.
-3. Runs `plan` (`refresh-only` or `normal`) with `-input=false`, `-detailed-exitcode`, and `-lock-timeout` (default `10m`). Use `--state-lock=false` only when a scheduled drift job must not contend with apply.
+2. Runs `terraform init` (unless `--skip-terraform-init` or `--plan-file`) with `-lockfile=readonly` — a committed `.terraform.lock.hcl` is required. `--skip-terraform-init` fails closed unless `.terraform/providers` or `.terraform/modules/modules.json` exists.
+3. Runs `plan` (`refresh-only` or `normal`) with `-input=false`, `-detailed-exitcode`, and `-lock-timeout` (default `10m`), unless `--plan-file` points at a trusted local plan. Use `--state-lock=false` only when a scheduled drift job must not contend with apply.
 4. Runs `terraform show -json`, parses the plan, builds the TerraDrift report. Incomplete or errored plan JSON fails the scan.
 5. Writes stdout, then optional policy gate → history / dashboard / notifications.
 
@@ -360,6 +385,7 @@ Compare both modes when unsure whether a finding is out-of-band change vs unappl
 
 | Topic | Doc |
 | --- | --- |
+| GitHub Action | [docs/GITHUB_ACTION.md](docs/GITHUB_ACTION.md) |
 | Architecture & report JSON | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
 | Roadmap / out of scope | [docs/ROADMAP.md](docs/ROADMAP.md) |
 | Release cycle (`dev` → `main` → tag) | [docs/RELEASE.md](docs/RELEASE.md) |

@@ -2,6 +2,8 @@ name: TerraDrift Pull Request Scan
 
 # Upserts one TerraDrift comment on the PR (<!-- terradrift-pr-comment -->).
 # Requires pull-requests: write so GITHUB_TOKEN can create/update the comment.
+# Cloud auth: use OIDC (id-token: write), not a PAT — docs/DRIFT_SCAN_IAM.md
+# Do not upload *.tfplan artifacts.
 
 on:
   pull_request:
@@ -9,6 +11,7 @@ on:
 permissions:
   contents: read
   pull-requests: write
+  id-token: write
 
 jobs:
   drift-scan:
@@ -23,17 +26,25 @@ jobs:
         uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
         with:
           terraform_wrapper: false
-      - name: Download TerraDrift
+      - name: Cache Terraform providers
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ github.workspace }}/.terraform-plugin-cache
+          key: terraform-plugins-${{ runner.os }}-${{ hashFiles('**/.terraform.lock.hcl') }}
+          restore-keys: terraform-plugins-${{ runner.os }}-
+      - name: Install TerraDrift
         env:
-          TERRADRIFT_VERSION: v0.0.0
+          TERRADRIFT_VERSION: v0.3.0
         run: |
-          curl -fsSLo terradrift.tar.gz "https://github.com/niravraychura/terradrift/releases/download/${TERRADRIFT_VERSION}/terradrift_linux_amd64.tar.gz"
-          tar -xzf terradrift.tar.gz terradrift
-          install -m 0755 terradrift /usr/local/bin/terradrift
+          curl -fsSLo install-terradrift.sh "https://raw.githubusercontent.com/niravraychura/terradrift/${TERRADRIFT_VERSION}/scripts/install.sh"
+          PREFIX="${HOME}/.local" bash install-terradrift.sh
+          echo "${HOME}/.local/bin" >> "${GITHUB_PATH}"
       - name: Scan and upsert PR comment
         env:
+          TF_PLUGIN_CACHE_DIR: ${{ github.workspace }}/.terraform-plugin-cache
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          mkdir -p "${TF_PLUGIN_CACHE_DIR}"
           terradrift scan \
             --directory ./terraform/prod \
             --workspace-root "$PWD" \

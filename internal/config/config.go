@@ -69,6 +69,7 @@ type Config struct {
 	Vars                 []string                   `json:"vars"`
 	StateLock            bool                       `json:"state_lock"`
 	StateLockTimeout     string                     `json:"state_lock_timeout"`
+	PlanFile             string                     `json:"plan_file"`
 	Profiles             map[string]json.RawMessage `json:"profiles,omitempty"`
 }
 

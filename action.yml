@@ -1,0 +1,110 @@
+name: TerraDrift Scan
+description: Self-hosted Terraform/OpenTofu drift detection. Always runs a real scan (never bootstrap).
+author: niravraychura
+branding:
+  icon: search
+  color: blue
+
+inputs:
+  version:
+    description: TerraDrift release tag (vX.Y.Z). Defaults to the action ref when it is a v* tag.
+    required: false
+    default: ""
+  directory:
+    description: Terraform root to scan
+    required: false
+    default: "."
+  terraform-bin:
+    description: Terraform-compatible binary on PATH (terraform or tofu)
+    required: false
+    default: terraform
+  workspace-root:
+    description: Trusted workspace root for path checks
+    required: false
+    default: "${{ github.workspace }}"
+  plan-file:
+    description: Existing local Terraform plan; skips init/plan and runs show -json only
+    required: false
+    default: ""
+  args:
+    description: Extra terradrift scan flags (trusted operator input)
+    required: false
+    default: ""
+  plugin-cache:
+    description: Cache Terraform providers via TF_PLUGIN_CACHE_DIR
+    required: false
+    default: "true"
+  redact-paths:
+    description: Redact local filesystem paths in scan output
+    required: false
+    default: "true"
+
+runs:
+  using: composite
+  steps:
+    - name: Install TerraDrift
+      shell: bash
+      env:
+        TERRADRIFT_VERSION_INPUT: ${{ inputs.version }}
+        TERRADRIFT_ACTION_REF: ${{ github.action_ref }}
+        TERRADRIFT_ACTION_PATH: ${{ github.action_path }}
+      run: |
+        set -euo pipefail
+        version="${TERRADRIFT_VERSION_INPUT}"
+        if [ -z "${version}" ]; then
+          case "${TERRADRIFT_ACTION_REF}" in
+            v*.*.*) version="${TERRADRIFT_ACTION_REF}" ;;
+            *)
+              echo "set input version to a release tag (for example v0.3.0); action ref is ${TERRADRIFT_ACTION_REF}" >&2
+              exit 1
+              ;;
+          esac
+        fi
+        prefix="${RUNNER_TEMP}/terradrift"
+        TERRADRIFT_VERSION="${version}" PREFIX="${prefix}" bash "${TERRADRIFT_ACTION_PATH}/scripts/install.sh"
+        echo "${prefix}/bin" >> "${GITHUB_PATH}"
+
+    - name: Cache Terraform providers
+      if: ${{ inputs.plugin-cache == 'true' }}
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ${{ github.workspace }}/.terraform-plugin-cache
+        key: terradrift-tf-plugins-${{ runner.os }}-${{ hashFiles('**/.terraform.lock.hcl') }}
+        restore-keys: terradrift-tf-plugins-${{ runner.os }}-
+
+    - name: Scan
+      shell: bash
+      env:
+        TERRADRIFT_DIRECTORY: ${{ inputs.directory }}
+        TERRADRIFT_BIN: ${{ inputs.terraform-bin }}
+        TERRADRIFT_WORKSPACE_ROOT: ${{ inputs.workspace-root }}
+        TERRADRIFT_PLAN_FILE: ${{ inputs.plan-file }}
+        TERRADRIFT_REDACT_PATHS: ${{ inputs.redact-paths }}
+        TERRADRIFT_PLUGIN_CACHE: ${{ inputs.plugin-cache }}
+        TERRADRIFT_EXTRA_ARGS: ${{ inputs.args }}
+      run: |
+        set -euo pipefail
+        if ! command -v "${TERRADRIFT_BIN}" >/dev/null 2>&1; then
+          echo "error: ${TERRADRIFT_BIN} not found; install Terraform or OpenTofu in this job first (hashicorp/setup-terraform or opentofu/setup-opentofu, terraform_wrapper/tofu_wrapper: false)" >&2
+          exit 1
+        fi
+        if [ "${TERRADRIFT_PLUGIN_CACHE}" = "true" ]; then
+          mkdir -p "${GITHUB_WORKSPACE}/.terraform-plugin-cache"
+          export TF_PLUGIN_CACHE_DIR="${GITHUB_WORKSPACE}/.terraform-plugin-cache"
+        fi
+        extra=()
+        if [ "${TERRADRIFT_REDACT_PATHS}" = "true" ]; then
+          extra+=(--redact-paths)
+        fi
+        if [ -n "${TERRADRIFT_PLAN_FILE}" ]; then
+          extra+=(--plan-file "${TERRADRIFT_PLAN_FILE}")
+        fi
+        # TERRADRIFT_EXTRA_ARGS is operator-controlled workflow YAML, not untrusted input.
+        # shellcheck disable=SC2086
+        terradrift scan \
+          --terraform-exec \
+          --directory "${TERRADRIFT_DIRECTORY}" \
+          --workspace-root "${TERRADRIFT_WORKSPACE_ROOT}" \
+          --terraform-bin "${TERRADRIFT_BIN}" \
+          "${extra[@]}" \
+          ${TERRADRIFT_EXTRA_ARGS}

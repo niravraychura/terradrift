@@ -9,8 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Official GitHub Action (`action.yml`) that always passes `--terraform-exec`, fails if Terraform/OpenTofu is missing, and caches providers (#89)
+- `--plan-file` / `plan_file` to reuse a trusted local Terraform plan (`show -json` only; still requires `--terraform-exec`) (#90)
 - `--state-lock` / `--state-lock-timeout` (default 10m) and `state_lock` / `state_lock_timeout` config for Terraform remote state locking
 - `TF_IN_AUTOMATION=1` and `-no-color` / `-input=false` on Terraform CLI invocations
+
+### Changed
+
+- GitHub Actions examples install a real release via `scripts/install.sh`, cache providers, and document OIDC / GitHub token permissions (#102)
 
 ### Fixed
 

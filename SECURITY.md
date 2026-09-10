@@ -66,6 +66,7 @@ Do not commit cloud credentials, webhook URLs, or `GITHUB_TOKEN` values. Keep th
 - Shared filesystems can share that lock file across runners on the volume. Redis/Postgres distributed backends are out of scope.
 - If a lock already exists, TerraDrift reports the recorded PID and whether that process appears to be running. Remove a stale lock only after confirming no scan is active.
 - `terraform plan` waits for the **remote state lock** (`-lock-timeout`, default 10m). Do not `force-unlock`. `--state-lock=false` skips that lock and can race with apply; it is opt-in for scheduled drift only.
+- `--plan-file` reuses a trusted local plan. The path must be a regular file (not a symlink), size-bounded, and inside `--workspace-root` when that flag is set. TerraDrift still runs `terraform show -json` (requires `--terraform-exec`) and never applies. Do not upload plan files as CI artifacts.
 
 ### Plan JSON honesty
 
@@ -77,7 +78,7 @@ Do not commit cloud credentials, webhook URLs, or `GITHUB_TOKEN` values. Keep th
 
 ### Supply chain and CI
 
-- User-facing and CI workflows pin third-party GitHub Actions to immutable SHAs.
+- User-facing and CI workflows pin third-party GitHub Actions to immutable SHAs. The official TerraDrift Action always passes `--terraform-exec`.
 - GitHub **secret scanning** and **push protection** are enabled for this public repository.
 - **CodeQL** runs via `.github/workflows/codeql.yml` (PRs, pushes to `main`/`dev`, weekly); findings appear under Security → Code scanning.
 - Releases produce checksums, SBOM, provenance, and image scanning as configured in repository workflows.

@@ -9,6 +9,7 @@ End-to-end pattern: JSON manifest with per-root settings, Slack notifications, a
 | `terraform-roots.json` | Roots with per-root `plan_mode` / `profile` / `var_files` |
 | `terradrift.json` | Named profiles and shared delivery defaults |
 | `../github-actions/terradrift-scheduled-multi-root.yml` | Scheduled GitHub Actions workflow |
+| `../github-actions/README.md` | Action vs install.sh, OIDC, plugin cache |
 | `../github-actions/terradrift-opentofu.yml` | Same scan with `--terraform-bin tofu` |
 
 ## Local dry run
