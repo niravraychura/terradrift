@@ -1,5 +1,5 @@
 name: TerraDrift Scan
-description: Self-hosted Terraform/OpenTofu drift detection. Always runs a real scan (never bootstrap).
+description: Independent Terraform/OpenTofu drift CLI (not affiliated with HashiCorp). Always a real scan (never bootstrap).
 author: niravraychura
 branding:
   icon: search
