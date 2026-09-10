@@ -8,7 +8,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
+	"net/url"
+	"os"
 	"strings"
 	"time"
 
@@ -43,11 +46,11 @@ func (notifier GitHubPRNotifier) Notify(ctx context.Context, scanReport report.D
 	if notifier.Number <= 0 {
 		return validation.New("GitHub pull request number", errors.New("must be greater than zero"))
 	}
-	apiURL := strings.TrimRight(notifier.APIURL, "/")
-	if apiURL == "" {
-		apiURL = githubAPIURL
+	apiURL, err := githubAPIBase(notifier.APIURL)
+	if err != nil {
+		return err
 	}
-	client, err := githubHTTPClient(notifier.Client)
+	client, err := githubHTTPClient(notifier.Client, apiURL)
 	if err != nil {
 		return err
 	}
@@ -303,11 +306,11 @@ func (notifier GitHubIssueNotifier) ready() (repository, token string, client HT
 	if err != nil {
 		return "", "", nil, "", err
 	}
-	apiURL = strings.TrimRight(notifier.APIURL, "/")
-	if apiURL == "" {
-		apiURL = githubAPIURL
+	apiURL, err = githubAPIBase(notifier.APIURL)
+	if err != nil {
+		return "", "", nil, "", err
 	}
-	client, err = githubHTTPClient(notifier.Client)
+	client, err = githubHTTPClient(notifier.Client, apiURL)
 	if err != nil {
 		return "", "", nil, "", err
 	}
@@ -372,16 +375,64 @@ func patchGitHubIssue(ctx context.Context, client HTTPDoer, token, apiURL, repos
 	return nil
 }
 
-func githubHTTPClient(client HTTPDoer) (HTTPDoer, error) {
+func githubHTTPClient(client HTTPDoer, apiURL string) (HTTPDoer, error) {
 	if client != nil {
 		return client, nil
 	}
-	secure, err := secureWebhookClientFromCA("")
+	secure, err := secureHTTPClient("", githubAPIAllowHost(apiURL))
 	if err != nil {
 		return nil, fmt.Errorf("create GitHub HTTP client: %w", err)
 	}
 	secure.Timeout = githubHTTPTimeout
 	return secure, nil
+}
+
+// GitHubAPIURL normalizes GITHUB_API_URL. Empty input is https://api.github.com.
+func GitHubAPIURL(raw string) (string, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return githubAPIURL, nil
+	}
+	parsed, err := url.Parse(raw)
+	if err != nil {
+		return "", validation.New("GITHUB_API_URL", errors.New("is malformed"))
+	}
+	if parsed.Scheme != "https" {
+		return "", validation.New("GITHUB_API_URL", errors.New("must use https"))
+	}
+	if parsed.User != nil {
+		return "", validation.New("GITHUB_API_URL", errors.New("must not include user info"))
+	}
+	if parsed.RawQuery != "" || parsed.Fragment != "" {
+		return "", validation.New("GITHUB_API_URL", errors.New("must not include query or fragment"))
+	}
+	host := parsed.Hostname()
+	if host == "" {
+		return "", validation.New("GITHUB_API_URL", errors.New("host is required"))
+	}
+	if net.ParseIP(host) != nil || isBlockedWebhookHost(host) {
+		return "", validation.New("GITHUB_API_URL", errors.New("host is not allowed"))
+	}
+	return strings.TrimRight(parsed.String(), "/"), nil
+}
+
+func githubAPIBase(explicit string) (string, error) {
+	if strings.TrimSpace(explicit) != "" {
+		return GitHubAPIURL(explicit)
+	}
+	return GitHubAPIURL(os.Getenv("GITHUB_API_URL"))
+}
+
+func githubAPIAllowHost(apiURL string) string {
+	parsed, err := url.Parse(apiURL)
+	if err != nil {
+		return ""
+	}
+	host := parsed.Hostname()
+	if host == "" || strings.EqualFold(host, "api.github.com") {
+		return ""
+	}
+	return host
 }
 
 func validateGitHubNotifier(rawRepository string, rawToken string) (string, string, error) {

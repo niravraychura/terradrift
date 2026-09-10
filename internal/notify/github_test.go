@@ -369,7 +369,7 @@ func TestGitHubIssueNotifierCloseResolved(t *testing.T) {
 }
 
 func TestGitHubHTTPClientUsesSecureTimeout(t *testing.T) {
-	client, err := githubHTTPClient(nil)
+	client, err := githubHTTPClient(nil, githubAPIURL)
 	if err != nil {
 		t.Fatalf("githubHTTPClient: %v", err)
 	}
@@ -401,5 +401,70 @@ func TestGitHubNotifierRedactsTransportErrors(t *testing.T) {
 	}
 	if strings.Contains(err.Error(), "leaked-secret") {
 		t.Fatalf("expected redacted transport error, got %v", err)
+	}
+}
+
+func TestGitHubAPIURL(t *testing.T) {
+	got, err := GitHubAPIURL("")
+	if err != nil || got != githubAPIURL {
+		t.Fatalf("empty = %q, %v", got, err)
+	}
+	got, err = GitHubAPIURL("https://ghes.example.test/api/v3")
+	if err != nil || got != "https://ghes.example.test/api/v3" {
+		t.Fatalf("ghes = %q, %v", got, err)
+	}
+	for _, raw := range []string{
+		"http://ghes.example.test/api/v3",
+		"https://user:pass@ghes.example.test/api/v3",
+		"https://ghes.example.test/api/v3?token=1",
+		"https://127.0.0.1/api/v3",
+		"https://10.0.0.1/api/v3",
+		"https://localhost/api/v3",
+	} {
+		_, err = GitHubAPIURL(raw)
+		if err == nil {
+			t.Fatalf("expected reject %q", raw)
+		}
+		if strings.Contains(err.Error(), "pass") || strings.Contains(err.Error(), "token=1") {
+			t.Fatalf("error echoed secret material: %v", err)
+		}
+	}
+}
+
+func TestGitHubPRNotifierHonorsGITHUBAPIURL(t *testing.T) {
+	t.Setenv("GITHUB_API_URL", "https://ghes.example.test/api/v3")
+	var got string
+	notifier := GitHubPRNotifier{
+		Repository: "owner/repo",
+		Number:     12,
+		Token:      "secret-token",
+		Client: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+			got = request.URL.String()
+			if request.Method == http.MethodGet {
+				return &http.Response{StatusCode: http.StatusOK, Status: "200 OK", Body: io.NopCloser(strings.NewReader("[]"))}, nil
+			}
+			return &http.Response{StatusCode: http.StatusCreated, Status: "201 Created", Body: io.NopCloser(strings.NewReader("{}"))}, nil
+		}),
+	}
+	if err := notifier.Notify(context.Background(), report.DriftReport{TotalChangedResources: 1}); err != nil {
+		t.Fatalf("notify: %v", err)
+	}
+	if !strings.HasPrefix(got, "https://ghes.example.test/api/v3/repos/owner/repo/") {
+		t.Fatalf("expected GHES API URL, got %q", got)
+	}
+}
+
+func TestGitHubHTTPClientAllowsPrivateDialForEnterpriseHost(t *testing.T) {
+	if githubAPIAllowHost(githubAPIURL) != "" {
+		t.Fatal("public api.github.com must not skip private-IP blocking")
+	}
+	if githubAPIAllowHost("https://ghes.example.test/api/v3") != "ghes.example.test" {
+		t.Fatal("expected GHES host to be the dialer allow-list")
+	}
+	if !allowPrivateWebhookIP("ghes.example.test", "ghes.example.test") {
+		t.Fatal("expected matching GHES host to allow private IPs")
+	}
+	if allowPrivateWebhookIP("evil.test", "ghes.example.test") {
+		t.Fatal("expected a different host to stay blocked")
 	}
 }

@@ -17,6 +17,7 @@ import (
 	"github.com/niravraychura/terradrift/internal/dashboard"
 	"github.com/niravraychura/terradrift/internal/history"
 	"github.com/niravraychura/terradrift/internal/ioutil"
+	"github.com/niravraychura/terradrift/internal/notify"
 	"github.com/niravraychura/terradrift/internal/report"
 	"github.com/niravraychura/terradrift/internal/scanner"
 	"github.com/niravraychura/terradrift/internal/terraform"
@@ -233,6 +234,9 @@ input, and notifications store attribute paths only unless --attribute-values is
 			if githubPR > 0 || githubIssueAfter >= 2 {
 				if strings.TrimSpace(os.Getenv("GITHUB_TOKEN")) == "" {
 					return fmt.Errorf("GITHUB_TOKEN is required when GitHub notification delivery is configured")
+				}
+				if _, err := notify.GitHubAPIURL(os.Getenv("GITHUB_API_URL")); err != nil {
+					return err
 				}
 			}
 			pipelineTimeout := timeout

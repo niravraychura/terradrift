@@ -15,6 +15,8 @@ The Action always passes `--terraform-exec`, fails if `terraform` / `tofu` is mi
 
 Happy-path GitHub delivery uses `GITHUB_TOKEN` from the job (`--github-pr` / `--github-issue-after`). `--github-issue-after` upserts one issue per root+fingerprint and closes it when that root scans clean. Do not put a PAT in the workflow. Cloud auth is OIDC — [DRIFT_SCAN_IAM.md](DRIFT_SCAN_IAM.md).
 
+On GitHub Enterprise Server or GHEC with data residency, GitHub Actions already sets `GITHUB_API_URL` (for example `https://github.example.com/api/v3`). TerraDrift uses that host for PR comments and persistent issues. The URL must be HTTPS with no userinfo. Generic `--notify webhook` still blocks private destinations.
+
 ## Inputs
 
 | Input | Default | Notes |

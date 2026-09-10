@@ -410,6 +410,7 @@ Compare both modes when unsure whether a finding is out-of-band change vs unappl
 - Attribute **paths** are always available; **values** in history/policy/notifications are paths-only unless `--attribute-values` is set. Sensitive values stay `[REDACTED]`.
 - Prefer read-only cloud credentials for refresh-only scans.
 - Keep webhooks and tokens in a secret manager / CI secrets — never commit them.
+- GitHub PR/issue delivery honors `GITHUB_API_URL` (HTTPS, no userinfo). GHES/GHEC Actions already set this; that API host may be private. Generic `--notify webhook` still blocks private destinations.
 - Full posture and reporting: [SECURITY.md](SECURITY.md) · IAM notes: [docs/DRIFT_SCAN_IAM.md](docs/DRIFT_SCAN_IAM.md)
 
 ---

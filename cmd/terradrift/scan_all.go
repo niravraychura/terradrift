@@ -17,6 +17,7 @@ import (
 	"github.com/niravraychura/terradrift/internal/command"
 	"github.com/niravraychura/terradrift/internal/config"
 	"github.com/niravraychura/terradrift/internal/ioutil"
+	"github.com/niravraychura/terradrift/internal/notify"
 	"github.com/niravraychura/terradrift/internal/report"
 	"github.com/niravraychura/terradrift/internal/scanner"
 	"github.com/niravraychura/terradrift/internal/terraform"
@@ -275,6 +276,9 @@ and --github-pr are refused when more than one root would write the same destina
 			if githubPR > 0 || githubIssueAfter >= 2 {
 				if strings.TrimSpace(os.Getenv("GITHUB_TOKEN")) == "" {
 					return fmt.Errorf("GITHUB_TOKEN is required when GitHub notification delivery is configured")
+				}
+				if _, err := notify.GitHubAPIURL(os.Getenv("GITHUB_API_URL")); err != nil {
+					return err
 				}
 			}
 
