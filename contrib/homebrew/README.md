@@ -1,9 +1,19 @@
 # Homebrew
 
-TerraDrift does not publish a tap. After each GitHub Release:
+Published tap: [`niravraychura/homebrew-terradrift`](https://github.com/niravraychura/homebrew-terradrift).
 
-1. Download `checksums.txt` from the release assets.
-2. Create a local formula (name it `terradrift.rb`) with `url` pointing at the matching `terradrift_<os>_<arch>.tar.gz` and `sha256` copied from `checksums.txt`.
-3. Install with `brew install --formula ./terradrift.rb`.
+```bash
+brew install niravraychura/terradrift/terradrift
+```
 
-Prefer `scripts/install.sh` when you want checksum verification without maintaining a formula. That script downloads `checksums.txt` and the archive from the same release tag and refuses to install on mismatch.
+That installs the GitHub Release archive for your OS/arch and checks `sha256` from `checksums.txt`. Prefer `scripts/install.sh` when you want the same checksum verification without Homebrew.
+
+## After each `v*` tag
+
+Once `release.yml` has uploaded archives:
+
+```bash
+./scripts/gen-homebrew-formula.sh vX.Y.Z > /path/to/homebrew-terradrift/Formula/terradrift.rb
+```
+
+Commit in `niravraychura/homebrew-terradrift` (not this repo). Do not point the formula at a tag with no GitHub Release assets yet.
