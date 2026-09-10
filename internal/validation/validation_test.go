@@ -27,3 +27,15 @@ func TestErrorUnwrapAndAs(t *testing.T) {
 		t.Fatalf("Unwrap() = %v, want %v", typed.Unwrap(), cause)
 	}
 }
+
+func TestGitHubIssueLabels(t *testing.T) {
+	if err := GitHubIssueLabels([]string{"terradrift", "drift"}); err != nil {
+		t.Fatalf("expected valid labels, got %v", err)
+	}
+	if err := GitHubIssueLabels(make([]string, MaxGitHubIssueLabels+1)); err == nil {
+		t.Fatal("expected too many labels to fail")
+	}
+	if err := GitHubIssueLabels([]string{"bad label"}); err == nil {
+		t.Fatal("expected invalid label to fail")
+	}
+}

@@ -31,6 +31,7 @@ type deliveryOptions struct {
 	GitHubRepository     string
 	GitHubPR             int
 	GitHubIssueAfter     int
+	GitHubIssueLabels    []string
 	OwnerWebhooks        map[string]string
 	NotificationThrottle bool
 	// historyMu serializes history/dashboard side effects for concurrent scan-all roots.
@@ -87,8 +88,13 @@ func finalizeRootScan(ctx context.Context, scanReport report.DriftReport, opts d
 				return err
 			}
 			previousReport = previousReportForRoot(entries, scanReport)
+			issueNotifier := notify.GitHubIssueNotifier{Repository: opts.GitHubRepository, Token: os.Getenv("GITHUB_TOKEN"), Labels: opts.GitHubIssueLabels}
 			if shouldCreatePersistentIssue(scanReport, entries, opts.GitHubIssueAfter) {
-				if err := (notify.GitHubIssueNotifier{Repository: opts.GitHubRepository, Token: os.Getenv("GITHUB_TOKEN")}).Notify(ctx, deliveryReport); err != nil {
+				if err := issueNotifier.Notify(ctx, deliveryReport); err != nil {
+					return err
+				}
+			} else if opts.GitHubIssueAfter >= 2 && !report.HasChanges(scanReport.Status) {
+				if err := issueNotifier.CloseResolved(ctx, deliveryReport); err != nil {
 					return err
 				}
 			}

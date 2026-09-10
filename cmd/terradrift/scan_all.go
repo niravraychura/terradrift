@@ -20,6 +20,7 @@ import (
 	"github.com/niravraychura/terradrift/internal/report"
 	"github.com/niravraychura/terradrift/internal/scanner"
 	"github.com/niravraychura/terradrift/internal/terraform"
+	"github.com/niravraychura/terradrift/internal/validation"
 	"github.com/spf13/cobra"
 )
 
@@ -101,6 +102,7 @@ func newScanAllCommand(stdout io.Writer) *cobra.Command {
 	var githubRepository string
 	var githubPR int
 	var githubIssueAfter int
+	var githubIssueLabels []string
 	var artifactURL string
 	var approvalFile string
 	var auditLogPath string
@@ -170,6 +172,10 @@ and --github-pr are refused when more than one root would write the same destina
 					{flag: "github-repository", assign: func() error { githubRepository = cfg.GitHubRepository; return nil }},
 					{flag: "github-pr", assign: func() error { githubPR = cfg.GitHubPR; return nil }},
 					{flag: "github-issue-after", assign: func() error { githubIssueAfter = cfg.GitHubIssueAfter; return nil }},
+					{flag: "github-issue-label", assign: func() error {
+						githubIssueLabels = append([]string(nil), cfg.GitHubIssueLabels...)
+						return nil
+					}},
 					{flag: "artifact-url", assign: func() error { artifactURL = cfg.ArtifactURL; return nil }},
 					{flag: "audit-command", assign: func() error { auditCommand = cfg.AuditCommand; return nil }},
 					{flag: "audit-arg", assign: func() error { auditArgs = append([]string(nil), cfg.AuditArgs...); return nil }},
@@ -263,6 +269,9 @@ and --github-pr are refused when more than one root would write the same destina
 			if githubIssueAfter > 0 && (githubIssueAfter < 2 || githubRepository == "" || historyDir == "") {
 				return fmt.Errorf("github-issue-after requires github-repository, history-dir, and a value of at least 2")
 			}
+			if err := validation.GitHubIssueLabels(githubIssueLabels); err != nil {
+				return err
+			}
 			if githubPR > 0 || githubIssueAfter >= 2 {
 				if strings.TrimSpace(os.Getenv("GITHUB_TOKEN")) == "" {
 					return fmt.Errorf("GITHUB_TOKEN is required when GitHub notification delivery is configured")
@@ -316,6 +325,7 @@ and --github-pr are refused when more than one root would write the same destina
 				GitHubRepository:     githubRepository,
 				GitHubPR:             githubPR,
 				GitHubIssueAfter:     githubIssueAfter,
+				GitHubIssueLabels:    githubIssueLabels,
 				OwnerWebhooks:        ownerWebhooks,
 				NotificationThrottle: notificationThrottle,
 				historyMu:            sideEffectMu,
@@ -408,7 +418,8 @@ and --github-pr are refused when more than one root would write the same destina
 	cmd.Flags().StringVar(&webhookCACert, "webhook-ca-cert", "", "PEM CA certificate file for webhook TLS verification")
 	cmd.Flags().StringVar(&githubRepository, "github-repository", "", "GitHub repository for pull request summary (owner/repo)")
 	cmd.Flags().IntVar(&githubPR, "github-pr", 0, "GitHub pull request number; single-root scan-all only")
-	cmd.Flags().IntVar(&githubIssueAfter, "github-issue-after", 0, "create a GitHub issue after this many consecutive matching drift scans per root")
+	cmd.Flags().IntVar(&githubIssueAfter, "github-issue-after", 0, "upsert one GitHub issue after this many consecutive matching drift scans per root; close it when the root is clean")
+	cmd.Flags().StringArrayVar(&githubIssueLabels, "github-issue-label", nil, "optional label on persistent-drift issues; repeatable, at most 8")
 	cmd.Flags().StringVar(&artifactURL, "artifact-url", "", "presigned HTTPS URL to upload the JSON report (single-root scan-all only)")
 	cmd.Flags().StringVar(&approvalFile, "approval-file", "", "review-only approval artifact to attach to each root report")
 	cmd.Flags().StringVar(&auditLogPath, "audit-log", "", "append secret-safe JSON audit events per root to this path")
