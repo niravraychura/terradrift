@@ -37,7 +37,7 @@ TerraDrift runs `terraform plan` or `tofu plan` (refresh-only by default), turns
 Download a binary from [GitHub Releases](https://github.com/niravraychura/terradrift/releases) (Linux amd64/arm64, macOS amd64/arm64), or install with checksum verification:
 
 ```bash
-TERRADRIFT_VERSION=v0.4.0 PREFIX=/usr/local ./scripts/install.sh
+TERRADRIFT_VERSION=v0.4.1 PREFIX=/usr/local ./scripts/install.sh
 ```
 
 Optional Cosign verification (v0.4.0+; download the matching `.bundle` from the same GitHub Release):
@@ -76,8 +76,8 @@ terradrift completion zsh
 
 ### Step 2 — Have Terraform (or OpenTofu) ready
 
-- `terraform` or `tofu` on your `PATH`
-- A local Terraform root (any folder with `.tf` files — **not** required to live inside this repo)
+- `terraform` or `tofu` on your `PATH` (Terragrunt shops: `terragrunt` as well)
+- A local Terraform root (any folder with `.tf` files — **not** required to live inside this repo), or a Terragrunt stacked root (`terragrunt.hcl`)
 - Credentials / backend access so `terraform plan` can run (same as you would for a normal plan)
 
 ### Step 3 — Run a real drift scan
@@ -101,6 +101,14 @@ OpenTofu:
 
 ```bash
 terradrift scan -d ./terraform/prod --terraform-exec --terraform-bin tofu
+```
+
+Terragrunt (Terraform/OpenTofu stays the planner; TerraDrift invokes `terragrunt` for that working directory):
+
+```bash
+terradrift scan -d ./live/prod --terraform-exec
+# optional override:
+terradrift scan -d ./live/prod --terraform-exec --terragrunt-bin /usr/local/bin/terragrunt
 ```
 
 Example **Terraform-backed** table output (exit **2** means drift was found — that is detection working, not a crash). Attribute **values** stay redacted/paths-only unless `--attribute-values`. This is a recorded terminal transcript, not a bootstrap report:
@@ -180,7 +188,7 @@ Preferred: the official Action (always `--terraform-exec`; fails if Terraform is
 - uses: hashicorp/setup-terraform@v4
   with:
     terraform_wrapper: false
-- uses: niravraychura/terradrift@v0.4.0
+- uses: niravraychura/terradrift@v0.4.1
   with:
     directory: ./terraform/prod
 ```
@@ -207,7 +215,7 @@ Full scheduled examples:
 - Cron: [`examples/cron/terradrift.cron`](examples/cron/terradrift.cron)
 - GitLab CI (install.sh): [`examples/gitlab-ci/.gitlab-ci.yml`](examples/gitlab-ci/.gitlab-ci.yml)
 
-Pin TerraDrift, Terraform/OpenTofu, and provider versions. Use OIDC for cloud roles ([docs/DRIFT_SCAN_IAM.md](docs/DRIFT_SCAN_IAM.md)), not long-lived keys. Cache providers with `TF_PLUGIN_CACHE_DIR`. Keep webhook URLs in CI secrets. Do not upload `*.tfplan` artifacts. OpenTofu is a drop-in planner: set `--terraform-bin tofu` (or `terraform_bin` in config) and keep using `--terraform-exec`.
+Pin TerraDrift, Terraform/OpenTofu, and provider versions. Use OIDC for cloud roles ([docs/DRIFT_SCAN_IAM.md](docs/DRIFT_SCAN_IAM.md)), not long-lived keys. Cache providers with `TF_PLUGIN_CACHE_DIR`. Keep webhook URLs in CI secrets. Do not upload `*.tfplan` artifacts. OpenTofu is a drop-in planner: set `--terraform-bin tofu` (or `terraform_bin` in config) and keep using `--terraform-exec`. Terragrunt stacked roots use `--terragrunt-bin` (default `terragrunt`); `--terraform-bin terragrunt` is also accepted as a passthrough.
 
 ---
 
@@ -224,6 +232,20 @@ terradrift scan -d ./terraform/prod --terraform-exec \
 
 terradrift scan -d ./terraform/prod --terraform-exec \
   --notify webhook --webhook-url "$WEBHOOK_URL"
+```
+
+PagerDuty Events API v2 and Opsgenie are **not** first-party notifiers. Map the webhook JSON in an adapter you host: [`examples/webhooks`](examples/webhooks).
+
+### Approvals vs CI exit code
+
+`terradrift approve` writes a **review-only** artifact. `--approval-file` attaches it to a later report for audit. It does **not** suppress exit **2**. To pass CI while known drift remains, use `ignore_rules` / `baseline_rules` (owner, reason, expiry). Out of scope: auto-apply.
+
+```bash
+terradrift approve \
+  --report report.json \
+  --owner platform \
+  --reason "reviewed, tracking ticket" \
+  --expires-at 2030-01-01T00:00:00Z
 ```
 
 ### History + HTML dashboard
@@ -323,6 +345,8 @@ terradrift scan-all --manifest terraform-roots.txt --terraform-exec --output pro
 terradrift scan-all --discover . --terraform-exec --concurrency 4
 ```
 
+`--discover` also picks up directories that contain `terragrunt.hcl` (even without `.tf` files) and runs `--terragrunt-bin` (default `terragrunt`) for those roots only. Exclude include-only folders such as `_envcommon` with `--exclude`. TerraDrift does not parse Terragrunt includes or generate wrappers.
+
 More detail and examples: [`examples/multi-root`](examples/multi-root).
 
 `scan-all` uses the same per-root delivery path as `scan` (history, notify, policy, ignore/owners, GitHub, artifacts, audit-log). Shared `--dashboard-html`, `--artifact-url`, and `--github-pr` are refused when more than one root would overwrite the same destination — use `terradrift dashboard-index` or scan a single root.
@@ -372,7 +396,7 @@ Image: `ghcr.io/niravraychura/terradrift:<version>` (also `latest` from releases
 The runtime image does **not** include Terraform. For `--terraform-exec`, mount a binary or extend the image:
 
 ```dockerfile
-FROM ghcr.io/niravraychura/terradrift:v0.4.0
+FROM ghcr.io/niravraychura/terradrift:v0.4.1
 USER root
 RUN apk --no-cache add curl unzip \
   && curl -fsSLo /tmp/terraform.zip https://releases.hashicorp.com/terraform/1.10.5/terraform_1.10.5_linux_amd64.zip \
@@ -410,6 +434,8 @@ Compare both modes when unsure whether a finding is out-of-band change vs unappl
 - Attribute **paths** are always available; **values** in history/policy/notifications are paths-only unless `--attribute-values` is set. Sensitive values stay `[REDACTED]`.
 - Prefer read-only cloud credentials for refresh-only scans.
 - Keep webhooks and tokens in a secret manager / CI secrets — never commit them.
+- GitHub PR/issue delivery honors `GITHUB_API_URL` (HTTPS, no userinfo). GHES/GHEC Actions already set this; that API host may be private. Generic `--notify webhook` still blocks private destinations.
+- `--skip-if-open-pr` skips a scheduled scan when an open PR in `--github-repository` changes files under that Terraform root (relative to `--workspace-root` or cwd). Needs `GITHUB_TOKEN` and `pull-requests: read`. Report `status` is `skipped` (exit 0), not `no_drift`. Does not replace `--state-lock-timeout`.
 - Full posture and reporting: [SECURITY.md](SECURITY.md) · IAM notes: [docs/DRIFT_SCAN_IAM.md](docs/DRIFT_SCAN_IAM.md)
 
 ---
@@ -420,8 +446,10 @@ Compare both modes when unsure whether a finding is out-of-band change vs unappl
 | --- | --- |
 | GitHub Action | [docs/GITHUB_ACTION.md](docs/GITHUB_ACTION.md) |
 | GitLab CI example | [examples/gitlab-ci/README.md](examples/gitlab-ci/README.md) |
+| PagerDuty / Opsgenie webhook mapping | [examples/webhooks](examples/webhooks/README.md) |
 | vs plan / driftctl / HCP / rootsami | [docs/COMPARE.md](docs/COMPARE.md) |
 | Architecture & report JSON | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
+| v1.0 flags, exit codes, JSON | [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md) |
 | Roadmap / out of scope | [docs/ROADMAP.md](docs/ROADMAP.md) |
 | Release cycle (`dev` → `main` → tag) | [docs/RELEASE.md](docs/RELEASE.md) |
 | Changelog | [CHANGELOG.md](CHANGELOG.md) |
@@ -429,7 +457,7 @@ Compare both modes when unsure whether a finding is out-of-band change vs unappl
 | Audit adapters | [docs/AUDIT_ADAPTERS.md](docs/AUDIT_ADAPTERS.md) |
 | All `scan` flags | `terradrift scan --help` |
 
-Advanced features (baselines, ignore rules with exact or glob addresses like `module.vpc.*`, owner routing, GitHub PR/issue comments, approvals, artifact upload) are configured via `.terradrift.json` / flags — see `terradrift scan --help` / `terradrift scan-all --help` and [examples/config](examples/config/README.md).
+Advanced features (baselines, ignore rules with exact or glob addresses like `module.vpc.*`, owner routing, GitHub PR comments, persistent GitHub drift issues, review-only approvals, artifact upload) are configured via `.terradrift.json` / flags — see `terradrift scan --help` / `terradrift scan-all --help` and [examples/config](examples/config/README.md). Approvals do not change the scan exit code; ignores/baselines are the CI pass path.
 
 ---
 

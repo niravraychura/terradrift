@@ -11,15 +11,16 @@ TerraDrift uses SemVer (`vMAJOR.MINOR.PATCH`) and ships artifacts from annotated
 | Version | Annotated tag `vMAJOR.MINOR.PATCH` on `main` |
 | Artifacts | Tag push runs `.github/workflows/release.yml` (archives, checksums, SBOM, GHCR image) |
 | Pre-1.0 | Breaking CLI/JSON changes allowed in minors if called out in release notes |
+| After 1.0 | Breaking flags, exit codes, or published JSON is a MAJOR — [COMPATIBILITY.md](COMPATIBILITY.md) |
 | Hotfix | Patch on `main`, then back-merge to `dev` |
-| Support | Security fixes on the latest tagged release / `main` until 1.0 |
+| Support | Security fixes on the latest tagged release / `main` |
 
-**Cadence (pre-1.0):** release when ready after a coherent `dev` → `main` promotion—not on a forced calendar.
+**Cadence:** release when ready after a coherent `dev` → `main` promotion—not on a forced calendar. After 1.0, breaking flags/JSON is a MAJOR ([COMPATIBILITY.md](COMPATIBILITY.md)).
 
 ## Versioning
 
-- **MAJOR** — breaking CLI flags, exit codes, or published JSON schema consumers rely on (after 1.0; before 1.0 prefer calling out breaks in notes and bumping MINOR)
-- **MINOR** — new features, compatible flag additions
+- **MAJOR** — breaking CLI flags, exit codes, or published JSON consumers rely on (after 1.0; before 1.0 prefer calling out breaks in notes and bumping MINOR). The field list is [COMPATIBILITY.md](COMPATIBILITY.md).
+- **MINOR** — new features, compatible flag or optional JSON additions
 - **PATCH** — bug fixes, dependency bumps, docs-only that ship with a tag
 
 Update [CHANGELOG.md](../CHANGELOG.md) before tagging.
@@ -56,4 +57,5 @@ Do not force-push tags that have already been published with artifacts.
 
 - [SECURITY.md](../SECURITY.md) — vulnerability reporting and supported versions
 - [CONTRIBUTING.md](../CONTRIBUTING.md) — branch and PR expectations
+- [docs/COMPATIBILITY.md](COMPATIBILITY.md) — v1.0 flags, exit codes, and published JSON
 - [docs/GITHUB_PRODUCT_SETUP.md](GITHUB_PRODUCT_SETUP.md) — packaging summary (historical checklist archived)

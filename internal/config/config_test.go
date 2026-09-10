@@ -24,7 +24,7 @@ func TestWriteDefaultAndLoad(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load config: %v", err)
 	}
-	if cfg.Schema != SchemaURL || cfg.Directory != "." || cfg.Output != "table" || cfg.Timeout != "5m" || cfg.PlanMode != "refresh-only" || cfg.RedactPaths || cfg.TerraformExec || cfg.TerraformBin != "" || cfg.WorkspaceRoot != "" || cfg.Notify != "" || cfg.SlackWebhookURL != "" || cfg.TeamsWebhookURL != "" || cfg.WebhookURL != "" || cfg.DashboardHTML != "" || cfg.HistoryDir != "" || cfg.PolicyCommand != "" || cfg.PolicyArgs != nil || cfg.CostCommand != "" || cfg.CostArgs != nil || cfg.RemediationRunbooks != nil || cfg.Profiles != nil {
+	if cfg.Schema != SchemaURL || cfg.Directory != "." || cfg.Output != "table" || cfg.Timeout != "5m" || cfg.PlanMode != "refresh-only" || cfg.RedactPaths || cfg.TerraformExec || cfg.TerraformBin != "" || cfg.TerragruntBin != "" || cfg.WorkspaceRoot != "" || cfg.Notify != "" || cfg.SlackWebhookURL != "" || cfg.TeamsWebhookURL != "" || cfg.WebhookURL != "" || cfg.DashboardHTML != "" || cfg.HistoryDir != "" || cfg.PolicyCommand != "" || cfg.PolicyArgs != nil || cfg.CostCommand != "" || cfg.CostArgs != nil || cfg.RemediationRunbooks != nil || cfg.Profiles != nil {
 		t.Fatalf("unexpected config: %#v", cfg)
 	}
 }
@@ -130,6 +130,16 @@ func TestLoadBaselineRules(t *testing.T) {
 	cfg, err := Load(path)
 	if err != nil || len(cfg.BaselineRules) != 1 || cfg.BaselineRules[0].Address != "aws_instance.web" {
 		t.Fatalf("unexpected baseline config: %#v, %v", cfg, err)
+	}
+}
+
+func TestLoadRejectsTooManyGitHubIssueLabels(t *testing.T) {
+	path := filepath.Join(t.TempDir(), DefaultPath)
+	if err := os.WriteFile(path, []byte(`{"github_issue_labels":["a","b","c","d","e","f","g","h","i"]}`), 0o600); err != nil {
+		t.Fatalf("write config fixture: %v", err)
+	}
+	if _, err := Load(path); err == nil {
+		t.Fatal("expected too many github_issue_labels to fail")
 	}
 }
 

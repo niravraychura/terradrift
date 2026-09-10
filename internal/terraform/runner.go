@@ -4,6 +4,7 @@ package terraform
 import (
 	"context"
 	"fmt"
+	"io"
 	"strings"
 )
 
@@ -35,6 +36,6 @@ type Runner interface {
 	Init(ctx context.Context, directory string) error
 	// Plan writes a plan for mode and returns Terraform's detailed exit code.
 	Plan(ctx context.Context, directory string, outputPath string, mode PlanMode) (int, error)
-	// ShowJSON returns the JSON rendering of a plan file.
-	ShowJSON(ctx context.Context, directory string, planPath string) ([]byte, error)
+	// ShowJSON streams the JSON rendering of a plan file (terraform show -json).
+	ShowJSON(ctx context.Context, directory string, planPath string) (io.ReadCloser, error)
 }

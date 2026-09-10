@@ -1,8 +1,10 @@
 package scanner
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -41,10 +43,13 @@ func (runner *fakeRunner) Plan(ctx context.Context, directory string, outputPath
 	return runner.planExit, runner.planErr
 }
 
-func (runner *fakeRunner) ShowJSON(ctx context.Context, directory string, planPath string) ([]byte, error) {
+func (runner *fakeRunner) ShowJSON(ctx context.Context, directory string, planPath string) (io.ReadCloser, error) {
 	runner.showCalled = true
 	runner.showPath = planPath
-	return runner.showJSON, runner.showErr
+	if runner.showErr != nil {
+		return nil, runner.showErr
+	}
+	return io.NopCloser(bytes.NewReader(runner.showJSON)), nil
 }
 
 func TestScanReturnsNoDriftBootstrapResult(t *testing.T) {
@@ -302,6 +307,17 @@ func TestScanRequiresTerraformFilesWhenRequested(t *testing.T) {
 	result, err := Scan(context.Background(), Options{Directory: t.TempDir(), RequireTerraformFiles: true})
 	if err == nil || result.Outcome != OutcomeFailed {
 		t.Fatalf("expected missing Terraform file failure, got %#v, %v", result, err)
+	}
+}
+
+func TestScanAcceptsTerragruntRootWhenTerraformFilesRequired(t *testing.T) {
+	directory := t.TempDir()
+	if err := os.WriteFile(filepath.Join(directory, "terragrunt.hcl"), []byte("# synthetic\n"), 0o600); err != nil {
+		t.Fatalf("write fixture: %v", err)
+	}
+	result, err := Scan(context.Background(), Options{Directory: directory, RequireTerraformFiles: true})
+	if err != nil || result.Outcome != OutcomeNoDrift {
+		t.Fatalf("expected Terragrunt root bootstrap scan, got %#v, %v", result, err)
 	}
 }
 

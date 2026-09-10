@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/niravraychura/terradrift/internal/config"
+	"github.com/niravraychura/terradrift/internal/dashboard"
 	"github.com/niravraychura/terradrift/internal/history"
 	"github.com/niravraychura/terradrift/internal/ioutil"
 	"github.com/niravraychura/terradrift/internal/notify"
@@ -237,6 +238,22 @@ func TestResolveRootOptionsAppliesOverrides(t *testing.T) {
 	}
 }
 
+func TestResolveRootOptionsUsesTerragruntBinary(t *testing.T) {
+	directory := t.TempDir()
+	if err := os.WriteFile(filepath.Join(directory, "terragrunt.hcl"), []byte("# synthetic\n"), 0o600); err != nil {
+		t.Fatalf("write fixture: %v", err)
+	}
+	runner := terraform.NewCLIRunner("tofu")
+	resolved, err := resolveRootOptions(manifestRoot{Directory: directory}, rootDefaults{PlanMode: "refresh-only", TerragruntBin: "/opt/terragrunt"}, scanner.Options{Runner: runner, PlanMode: terraform.PlanModeRefreshOnly})
+	if err != nil {
+		t.Fatalf("resolve: %v", err)
+	}
+	cli, ok := resolved.Runner.(terraform.CLIRunner)
+	if !ok || cli.Path != "/opt/terragrunt" {
+		t.Fatalf("expected terragrunt binary, got %#v", resolved.Runner)
+	}
+}
+
 func TestScanAllAcceptsNormalPlanMode(t *testing.T) {
 	root := t.TempDir()
 	directory := filepath.Join(root, "production")
@@ -276,6 +293,34 @@ func TestMultiScanStatus(t *testing.T) {
 func TestMultiScanStatusReportsNormalChanges(t *testing.T) {
 	if got := multiScanStatusFor(1, 0, 1, 0); got != multiScanStatusChangesDetected {
 		t.Fatalf("expected normal changes status, got %q", got)
+	}
+}
+
+func TestStableMultiScanReportJSONKeys(t *testing.T) {
+	data, err := json.Marshal(multiScanReport{
+		Status:                multiScanStatusComplete,
+		Roots:                 []multiScanRoot{},
+		TotalRoots:            0,
+		DriftedRoots:          0,
+		ChangedRoots:          0,
+		FailedRoots:           0,
+		TotalResourcesChecked: 0,
+		TotalChangedResources: 0,
+	})
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	var got map[string]any
+	if err := json.Unmarshal(data, &got); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	for _, key := range []string{
+		"status", "roots", "total_roots", "drifted_roots", "changed_roots", "failed_roots",
+		"total_resources_checked", "total_changed_resources",
+	} {
+		if _, ok := got[key]; !ok {
+			t.Fatalf("missing stable field %q in %s", key, data)
+		}
 	}
 }
 
@@ -360,6 +405,40 @@ func TestDiscoverTerraformRootsHonorsPatterns(t *testing.T) {
 	}
 }
 
+func TestDiscoverTerraformRootsIncludesTerragrunt(t *testing.T) {
+	root := t.TempDir()
+	tfDir := filepath.Join(root, "terraform-stack")
+	tgDir := filepath.Join(root, "live", "prod")
+	cacheDir := filepath.Join(root, "live", "prod", ".terragrunt-cache", "generated")
+	includeDir := filepath.Join(root, "_envcommon")
+	for _, directory := range []string{tfDir, tgDir, cacheDir, includeDir} {
+		if err := os.MkdirAll(directory, 0o700); err != nil {
+			t.Fatalf("create root fixture: %v", err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(tfDir, "main.tf"), []byte("terraform {}"), 0o600); err != nil {
+		t.Fatalf("write Terraform fixture: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(tgDir, "terragrunt.hcl"), []byte("# synthetic\n"), 0o600); err != nil {
+		t.Fatalf("write Terragrunt fixture: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(cacheDir, "main.tf"), []byte("terraform {}"), 0o600); err != nil {
+		t.Fatalf("write cache fixture: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(includeDir, "terragrunt.hcl"), []byte("# include-only\n"), 0o600); err != nil {
+		t.Fatalf("write include fixture: %v", err)
+	}
+
+	directories, err := discoverTerraformRoots(root, nil, []string{"_envcommon"})
+	if err != nil {
+		t.Fatalf("discover roots: %v", err)
+	}
+	want := []string{tgDir, tfDir}
+	if len(directories) != 2 || directories[0] != want[0] || directories[1] != want[1] {
+		t.Fatalf("unexpected discovered roots: %#v want %#v", directories, want)
+	}
+}
+
 func TestHistoryHandlerServesReadOnlyReports(t *testing.T) {
 	historyDir := t.TempDir()
 	if _, err := history.Write(historyDir, report.DriftReport{Status: report.ScanStatusNoDrift}); err != nil {
@@ -372,6 +451,14 @@ func TestHistoryHandlerServesReadOnlyReports(t *testing.T) {
 		handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, path, nil))
 		if recorder.Code != http.StatusOK {
 			t.Fatalf("expected %s to succeed, got %d", path, recorder.Code)
+		}
+		if path == "/" {
+			if recorder.Header().Get("Content-Security-Policy") != dashboard.ContentSecurityPolicy {
+				t.Fatalf("expected HTML CSP header, got %q", recorder.Header().Get("Content-Security-Policy"))
+			}
+			if !strings.Contains(recorder.Body.String(), dashboard.ContentSecurityPolicy) {
+				t.Fatalf("expected CSP meta in HTML body")
+			}
 		}
 	}
 	recorder := httptest.NewRecorder()
@@ -417,6 +504,18 @@ func TestApproveCreatesSecureArtifact(t *testing.T) {
 	info, err := os.Stat(approvalPath)
 	if err != nil || info.Mode().Perm() != 0o600 {
 		t.Fatalf("expected secure approval artifact, info=%v err=%v", info, err)
+	}
+}
+
+func TestApproveHelpStatesReviewOnly(t *testing.T) {
+	stdout, _, err := executeCommand("approve", "--help")
+	if err != nil {
+		t.Fatalf("approve help: %v", err)
+	}
+	for _, needle := range []string{"review-only", "suppress exit 2", "ignore_rules"} {
+		if !strings.Contains(stdout, needle) {
+			t.Fatalf("expected %q in approve help, got %q", needle, stdout)
+		}
 	}
 }
 
@@ -784,6 +883,28 @@ func TestScanUsesTerraformBinaryFromConfig(t *testing.T) {
 	}
 }
 
+func TestScanUsesTerragruntBinaryForTerragruntRoot(t *testing.T) {
+	directory := t.TempDir()
+	if err := os.WriteFile(filepath.Join(directory, "terragrunt.hcl"), []byte("# synthetic\n"), 0o600); err != nil {
+		t.Fatalf("write fixture: %v", err)
+	}
+	_, _, err := executeCommand("scan", "-d", directory, "--terraform-exec", "--terragrunt-bin", "terragrunt-not-installed")
+	if err == nil || !strings.Contains(err.Error(), "terragrunt-not-installed") {
+		t.Fatalf("expected configured Terragrunt binary error, got %v", err)
+	}
+}
+
+func TestScanKeepsTerraformBinaryForTerraformRoot(t *testing.T) {
+	directory := t.TempDir()
+	if err := os.WriteFile(filepath.Join(directory, "main.tf"), []byte("terraform {}"), 0o600); err != nil {
+		t.Fatalf("write fixture: %v", err)
+	}
+	_, _, err := executeCommand("scan", "-d", directory, "--terraform-exec", "--terraform-bin", "tofu-not-installed", "--terragrunt-bin", "terragrunt-not-installed")
+	if err == nil || !strings.Contains(err.Error(), "tofu-not-installed") || strings.Contains(err.Error(), "terragrunt-not-installed") {
+		t.Fatalf("expected Terraform binary error, got %v", err)
+	}
+}
+
 func TestInitCreatesDefaultConfig(t *testing.T) {
 	path := filepath.Join(t.TempDir(), ".terradrift.json")
 	stdout, _, err := executeCommand("init", "--config", path)
@@ -1009,7 +1130,7 @@ func TestScanAllHelpIncludesDeliveryFlags(t *testing.T) {
 	}
 	for _, flag := range []string{
 		"--history-dir", "--notify", "--policy-command", "--cost-command", "--workspace", "--var-file", "--config",
-		"--github-repository", "--github-pr", "--github-issue-after", "--artifact-url", "--approval-file", "--audit-log",
+		"--github-repository", "--github-pr", "--github-issue-after", "--github-issue-label", "--skip-if-open-pr", "--artifact-url", "--approval-file", "--audit-log",
 	} {
 		if !strings.Contains(stdout, flag) {
 			t.Fatalf("expected scan-all help to contain %q", flag)
@@ -1201,6 +1322,12 @@ func TestExitCodeConstants(t *testing.T) {
 func TestExitCodeForDriftDetected(t *testing.T) {
 	if got := exitCodeForError(errDriftDetected); got != exitCodeDriftDetected {
 		t.Fatalf("expected drift exit code %d, got %d", exitCodeDriftDetected, got)
+	}
+	if got := exitCodeForError(errChangesDetected); got != exitCodeDriftDetected {
+		t.Fatalf("expected changes exit code %d, got %d", exitCodeDriftDetected, got)
+	}
+	if got := exitCodeForError(errMultiScanFailed); got != exitCodeFailure {
+		t.Fatalf("expected failure exit code %d, got %d", exitCodeFailure, got)
 	}
 }
 
@@ -1452,6 +1579,31 @@ func TestScanAllRequiresGitHubToken(t *testing.T) {
 	)
 	if err == nil || !strings.Contains(err.Error(), "GITHUB_TOKEN") {
 		t.Fatalf("expected GITHUB_TOKEN error, got %v", err)
+	}
+}
+
+func TestScanRejectsSkipIfOpenPRWithoutRepository(t *testing.T) {
+	t.Setenv("GITHUB_TOKEN", "token")
+	_, _, err := executeCommand("scan", "-d", t.TempDir(), "--skip-if-open-pr")
+	if err == nil || !strings.Contains(err.Error(), "github-repository") {
+		t.Fatalf("expected github-repository error, got %v", err)
+	}
+}
+
+func TestScanRejectsSkipIfOpenPRWithGitHubPR(t *testing.T) {
+	t.Setenv("GITHUB_TOKEN", "token")
+	_, _, err := executeCommand("scan", "-d", t.TempDir(), "--github-repository", "example/terradrift", "--github-pr", "1", "--skip-if-open-pr")
+	if err == nil || !strings.Contains(err.Error(), "skip-if-open-pr") {
+		t.Fatalf("expected skip-if-open-pr combination error, got %v", err)
+	}
+}
+
+func TestScanRejectsInvalidGitHubAPIURL(t *testing.T) {
+	t.Setenv("GITHUB_TOKEN", "token")
+	t.Setenv("GITHUB_API_URL", "http://ghes.example.test/api/v3")
+	_, _, err := executeCommand("scan", "-d", t.TempDir(), "--github-repository", "example/terradrift", "--github-pr", "1")
+	if err == nil || !strings.Contains(err.Error(), "GITHUB_API_URL") {
+		t.Fatalf("expected GITHUB_API_URL error, got %v", err)
 	}
 }
 

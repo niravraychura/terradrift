@@ -32,6 +32,7 @@ type Config struct {
 	RedactPaths          bool                       `json:"redact_paths"`
 	TerraformExec        bool                       `json:"terraform_exec"`
 	TerraformBin         string                     `json:"terraform_bin"`
+	TerragruntBin        string                     `json:"terragrunt_bin,omitempty"`
 	PlanMode             string                     `json:"plan_mode"`
 	WorkspaceRoot        string                     `json:"workspace_root"`
 	Notify               string                     `json:"notify"`
@@ -58,6 +59,8 @@ type Config struct {
 	GitHubRepository     string                     `json:"github_repository"`
 	GitHubPR             int                        `json:"github_pr"`
 	GitHubIssueAfter     int                        `json:"github_issue_after"`
+	GitHubIssueLabels    []string                   `json:"github_issue_labels,omitempty"`
+	SkipIfOpenPR         bool                       `json:"skip_if_open_pr,omitempty"`
 	ArtifactURL          string                     `json:"artifact_url"`
 	AuditCommand         string                     `json:"audit_command"`
 	AuditArgs            []string                   `json:"audit_args"`
@@ -168,6 +171,9 @@ func (cfg Config) Validate() error {
 	}
 	if cfg.GitHubPR < 0 || cfg.GitHubIssueAfter < 0 {
 		return validation.New("config GitHub numbers", fmt.Errorf("must not be negative"))
+	}
+	if err := validation.GitHubIssueLabels(cfg.GitHubIssueLabels); err != nil {
+		return err
 	}
 	if timeout, err := time.ParseDuration(cfg.StateLockTimeout); err != nil || timeout < 0 {
 		return validation.New("config state_lock_timeout", fmt.Errorf("must be a duration of zero or more"))

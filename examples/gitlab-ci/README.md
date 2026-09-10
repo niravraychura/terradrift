@@ -2,7 +2,7 @@
 
 Copy [`.gitlab-ci.yml`](.gitlab-ci.yml) into your infrastructure repository. This is the same job as the GitHub scheduled example: checksum-verifying `scripts/install.sh`, `--terraform-exec`, `--redact-paths`. There is no GitLab-only binary or SaaS.
 
-The official GitHub Action (`uses: niravraychura/terradrift@v0.4.0`) is GitHub-only. On GitLab, pin `TERRADRIFT_VERSION` to a published GitHub Release.
+The official GitHub Action (`uses: niravraychura/terradrift@v0.4.1`) is GitHub-only. On GitLab, pin `TERRADRIFT_VERSION` to a published GitHub Release.
 
 ## Schedule
 
@@ -16,3 +16,4 @@ The official GitHub Action (`uses: niravraychura/terradrift@v0.4.0`) is GitHub-o
 - **Plugin cache:** `TF_PLUGIN_CACHE_DIR` plus GitLab `cache:` on `.terraform-plugin-cache/`.
 - **Plans:** do not upload `*.tfplan` artifacts. Encrypted OpenTofu/Terraform state needs decrypt rights in CI; still do not publish the plan file.
 - **OpenTofu:** install `tofu` instead of Terraform and add `--terraform-bin tofu`.
+- **Terragrunt:** install `terragrunt` and scan stacked roots (`terragrunt.hcl`); `--terragrunt-bin` defaults to `terragrunt`.

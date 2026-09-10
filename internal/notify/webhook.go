@@ -140,12 +140,25 @@ func secureWebhookClient() *http.Client {
 	return client
 }
 
+func allowPrivateWebhookIP(resolvedHost, allowHost string) bool {
+	if allowHost == "" {
+		return false
+	}
+	return strings.EqualFold(strings.TrimSuffix(resolvedHost, "."), strings.TrimSuffix(allowHost, "."))
+}
+
 // secureWebhookClientFromCA builds the SSRF-hardened webhook HTTP client.
 // When caCertPath is set, PEM certificates from that file are used as TLS roots.
 func secureWebhookClientFromCA(caCertPath string) (*http.Client, error) {
+	return secureHTTPClient(caCertPath, "")
+}
+
+func secureHTTPClient(caCertPath, allowHost string) (*http.Client, error) {
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.Proxy = nil
-	transport.DialContext = secureWebhookDialContext
+	transport.DialContext = func(ctx context.Context, network, address string) (net.Conn, error) {
+		return dialWebhook(ctx, network, address, allowHost)
+	}
 	transport.TLSHandshakeTimeout = webhookTLSHandshakeTimeout
 	transport.ResponseHeaderTimeout = webhookResponseHeaderTimeout
 	if caCertPath != "" {
@@ -171,7 +184,7 @@ func secureWebhookClientFromCA(caCertPath string) (*http.Client, error) {
 	}, nil
 }
 
-func secureWebhookDialContext(ctx context.Context, network string, address string) (net.Conn, error) {
+func dialWebhook(ctx context.Context, network string, address, allowHost string) (net.Conn, error) {
 	host, port, err := net.SplitHostPort(address)
 	if err != nil {
 		return nil, fmt.Errorf("split webhook address: %w", err)
@@ -184,7 +197,7 @@ func secureWebhookDialContext(ctx context.Context, network string, address strin
 	dialer := net.Dialer{Timeout: webhookDialTimeout}
 	var dialErr error
 	for _, ip := range addresses {
-		if isBlockedWebhookIP(ip) {
+		if !allowPrivateWebhookIP(host, allowHost) && isBlockedWebhookIP(ip) {
 			continue
 		}
 		connection, err := dialer.DialContext(ctx, network, net.JoinHostPort(ip.String(), port))

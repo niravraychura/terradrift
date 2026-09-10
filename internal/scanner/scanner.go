@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -158,18 +159,13 @@ func Scan(ctx context.Context, options Options) (Result, error) {
 		}
 	}
 	if options.RequireTerraformFiles {
-		matches, err := filepath.Glob(filepath.Join(absDir, "*.tf"))
+		ok, err := hasPlannerFiles(absDir)
 		if err != nil {
 			logger.Error(ctx, "scan failed", "directory", logDirectory(options.RedactPaths, absDir), "error", logError(options.RedactPaths, err, absDir))
-			return Result{Outcome: OutcomeFailed}, fmt.Errorf("list Terraform files: %w", err)
+			return Result{Outcome: OutcomeFailed}, err
 		}
-		jsonMatches, err := filepath.Glob(filepath.Join(absDir, "*.tf.json"))
-		if err != nil {
-			logger.Error(ctx, "scan failed", "directory", logDirectory(options.RedactPaths, absDir), "error", logError(options.RedactPaths, err, absDir))
-			return Result{Outcome: OutcomeFailed}, fmt.Errorf("list Terraform JSON files: %w", err)
-		}
-		if len(matches)+len(jsonMatches) == 0 {
-			err := fmt.Errorf("terraform directory has no .tf or .tf.json files: %s", absDir)
+		if !ok {
+			err := fmt.Errorf("terraform directory has no .tf, .tf.json, or terragrunt.hcl files: %s", absDir)
 			logger.Error(ctx, "scan failed", "directory", logDirectory(options.RedactPaths, absDir), "error", logError(options.RedactPaths, err, absDir))
 			return Result{Outcome: OutcomeFailed}, err
 		}
@@ -294,6 +290,21 @@ func validateResolvedWorkspaceRoot(directory string, workspaceRoot string) error
 		return fmt.Errorf("terraform directory %s is outside workspace root %s", directory, workspaceRoot)
 	}
 	return nil
+}
+
+func hasPlannerFiles(directory string) (bool, error) {
+	matches, err := filepath.Glob(filepath.Join(directory, "*.tf"))
+	if err != nil {
+		return false, fmt.Errorf("list Terraform files: %w", err)
+	}
+	jsonMatches, err := filepath.Glob(filepath.Join(directory, "*.tf.json"))
+	if err != nil {
+		return false, fmt.Errorf("list Terraform JSON files: %w", err)
+	}
+	if len(matches)+len(jsonMatches) > 0 {
+		return true, nil
+	}
+	return terraform.IsTerragruntRoot(directory), nil
 }
 
 // ValidateDirectory resolves and validates the local directory selected for scanning.
@@ -428,14 +439,24 @@ func runTerraformScan(ctx context.Context, runner terraform.Runner, directory st
 	}
 
 	logger.Info(ctx, "terraform show", "directory", logDirectory(redactPaths, directory))
-	planJSON, err := runner.ShowJSON(ctx, directory, planFile)
+	planReader, err := runner.ShowJSON(ctx, directory, planFile)
 	if err != nil {
 		failReport(&scanReport, err)
 		return scanReport, fmt.Errorf("terraform show JSON: %s", scanReport.ErrorMessage)
 	}
+	defer func() {
+		if err := planReader.Close(); err != nil && returnErr == nil {
+			failReport(&scanReport, err)
+			returnErr = fmt.Errorf("terraform show JSON: %s", scanReport.ErrorMessage)
+		}
+	}()
 
 	logger.Info(ctx, "parse plan", "directory", logDirectory(redactPaths, directory))
-	resourceChanges, outputChanges, totalResources, resourcesExact, err := parser.ParsePlan(planJSON, mode)
+	limited := &io.LimitedReader{R: planReader, N: maxPlanFileBytes + 1}
+	resourceChanges, outputChanges, totalResources, resourcesExact, err := parser.ParsePlanReader(limited, mode)
+	if limited.N == 0 {
+		err = fmt.Errorf("terraform show JSON exceeded %d bytes", maxPlanFileBytes)
+	}
 	if err != nil {
 		failReport(&scanReport, err)
 		return scanReport, errors.New(scanReport.ErrorMessage)

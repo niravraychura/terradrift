@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-09-10
+
+### Added
+
+- Honor `GITHUB_API_URL` for `--github-pr` / `--github-issue-after` so GHES and GHEC API hosts work (#101)
+- `--skip-if-open-pr` skips a root when an open GitHub PR in `--github-repository` changes files under that root (`status: skipped`, exit 0) (#103)
+- `scan-all --discover` treats `terragrunt.hcl` as a scan root; `--terragrunt-bin` (default `terragrunt`) is used for those roots so mixed Terraform/Terragrunt trees work (#93)
+- Dashboard report and index HTML include a strict Content-Security-Policy (inline CSS allowed; scripts forbidden) (#105)
+- PagerDuty Events API v2 and Opsgenie payload mapping from `--notify webhook` JSON (`examples/webhooks`) (#94)
+
+### Changed
+
+- `--github-issue-after` upserts one issue per Terraform root + drift fingerprint and closes it when that root later scans clean (#100)
+- `terraform show -json` is piped into `ParsePlanReader` so the raw plan JSON is not held as a second full buffer (32 MiB fail-closed cap unchanged) (#104)
+- Document that `approve` / `--approval-file` is review-only; ignores/baselines are the CI pass path (exit 2 unchanged) (#92)
+- Document the v1.0 compatibility contract for flags, exit codes, and published JSON (`docs/COMPATIBILITY.md`) (#95)
+
 ## [0.4.1] - 2026-09-10
 
 ### Added
@@ -101,7 +118,8 @@ First public tagged release of the self-hosted TerraDrift CLI.
 - SSRF-safe GitHub HTTP client, fail-closed truncated I/O, attribute value heuristics
 - Size budgets and redaction defaults for user-facing output
 
-[Unreleased]: https://github.com/niravraychura/terradrift/compare/v0.4.1...HEAD
+[Unreleased]: https://github.com/niravraychura/terradrift/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/niravraychura/terradrift/releases/tag/v1.0.0
 [0.4.1]: https://github.com/niravraychura/terradrift/releases/tag/v0.4.1
 [0.4.0]: https://github.com/niravraychura/terradrift/releases/tag/v0.4.0
 [0.3.0]: https://github.com/niravraychura/terradrift/releases/tag/v0.3.0

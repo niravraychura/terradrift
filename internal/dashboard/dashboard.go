@@ -10,6 +10,10 @@ import (
 	"github.com/niravraychura/terradrift/internal/report"
 )
 
+// ContentSecurityPolicy is the dashboard CSP. Inline CSS is required by the
+// static templates; scripts are forbidden so inline handlers cannot appear later.
+const ContentSecurityPolicy = "default-src 'none'; script-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+
 // Data contains the current scan and optional historical scan reports.
 type Data struct {
 	Current report.DriftReport
@@ -29,6 +33,7 @@ var reportTemplate = template.Must(template.New("dashboard").Parse(`<!doctype ht
 <html lang="en">
 <head>
   <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="` + ContentSecurityPolicy + `">
   <title>TerraDrift Report</title>
   <style>
     body { font-family: system-ui, sans-serif; margin: 1.5rem; color: #1a1a1a; line-height: 1.4; }
@@ -77,6 +82,7 @@ var indexTemplate = template.Must(template.New("dashboard-index").Parse(`<!docty
 <html lang="en">
 <head>
   <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="` + ContentSecurityPolicy + `">
   <title>TerraDrift Dashboard Index</title>
   <style>
     body { font-family: system-ui, sans-serif; margin: 1.5rem; color: #1a1a1a; line-height: 1.4; }

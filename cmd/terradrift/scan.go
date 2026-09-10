@@ -17,9 +17,11 @@ import (
 	"github.com/niravraychura/terradrift/internal/dashboard"
 	"github.com/niravraychura/terradrift/internal/history"
 	"github.com/niravraychura/terradrift/internal/ioutil"
+	"github.com/niravraychura/terradrift/internal/notify"
 	"github.com/niravraychura/terradrift/internal/report"
 	"github.com/niravraychura/terradrift/internal/scanner"
 	"github.com/niravraychura/terradrift/internal/terraform"
+	"github.com/niravraychura/terradrift/internal/validation"
 	"github.com/spf13/cobra"
 )
 
@@ -47,6 +49,7 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 	var redactPaths bool
 	var terraformExec bool
 	var terraformBin string
+	var terragruntBin string
 	var scanConfigPath string
 	var configProfile string
 	var workspaceRoot string
@@ -72,6 +75,8 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 	var githubRepository string
 	var githubPR int
 	var githubIssueAfter int
+	var githubIssueLabels []string
+	var skipIfOpenPR bool
 	var artifactURL string
 	var approvalFile string
 	var auditCommand string
@@ -98,13 +103,13 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 
 Flag groups:
   Core:       --directory, --output, --timeout, --terraform-exec, --terraform-bin,
-              --plan-mode, --workspace, --var-file, --var, --config, --profile,
+              --terragrunt-bin, --plan-mode, --workspace, --var-file, --var, --config, --profile,
               --failure-severity, --workspace-root, --redact-paths, --lock-backend,
               --skip-terraform-init, --state-lock, --state-lock-timeout, --plan-file, --attribute-values
   Delivery:   --history-dir, --history-retention, --history-compressed, --dashboard-html,
               --notify, --slack-webhook-url, --teams-webhook-url, --webhook-url,
               --webhook-ca-cert, --artifact-url, --audit-log, --github-repository,
-              --github-pr, --github-issue-after, --approval-file
+              --github-pr, --github-issue-after, --github-issue-label, --skip-if-open-pr, --approval-file
   Enrichment: --policy-command, --policy-arg, --cost-command, --cost-arg,
               --audit-command, --audit-arg
 
@@ -148,6 +153,7 @@ input, and notifications store attribute paths only unless --attribute-values is
 					{flag: "redact-paths", assign: func() error { redactPaths = cfg.RedactPaths; return nil }},
 					{flag: "terraform-exec", assign: func() error { terraformExec = cfg.TerraformExec; return nil }},
 					{flag: "terraform-bin", assign: func() error { terraformBin = cfg.TerraformBin; return nil }},
+					{flag: "terragrunt-bin", assign: func() error { terragruntBin = cfg.TerragruntBin; return nil }},
 					{flag: "plan-mode", assign: func() error { planMode = cfg.PlanMode; return nil }},
 					{flag: "workspace-root", assign: func() error { workspaceRoot = cfg.WorkspaceRoot; return nil }},
 					{flag: "notify", assign: func() error { notifyTarget = cfg.Notify; return nil }},
@@ -173,6 +179,11 @@ input, and notifications store attribute paths only unless --attribute-values is
 					{flag: "github-repository", assign: func() error { githubRepository = cfg.GitHubRepository; return nil }},
 					{flag: "github-pr", assign: func() error { githubPR = cfg.GitHubPR; return nil }},
 					{flag: "github-issue-after", assign: func() error { githubIssueAfter = cfg.GitHubIssueAfter; return nil }},
+					{flag: "github-issue-label", assign: func() error {
+						githubIssueLabels = append([]string(nil), cfg.GitHubIssueLabels...)
+						return nil
+					}},
+					{flag: "skip-if-open-pr", assign: func() error { skipIfOpenPR = cfg.SkipIfOpenPR; return nil }},
 					{flag: "artifact-url", assign: func() error { artifactURL = cfg.ArtifactURL; return nil }},
 					{flag: "audit-command", assign: func() error { auditCommand = cfg.AuditCommand; return nil }},
 					{flag: "audit-arg", assign: func() error { auditArgs = append([]string(nil), cfg.AuditArgs...); return nil }},
@@ -221,9 +232,21 @@ input, and notifications store attribute paths only unless --attribute-values is
 			if githubIssueAfter > 0 && (githubIssueAfter < 2 || githubRepository == "" || historyDir == "") {
 				return fmt.Errorf("github-issue-after requires github-repository, history-dir, and a value of at least 2")
 			}
-			if githubPR > 0 || githubIssueAfter >= 2 {
+			if skipIfOpenPR && githubPR > 0 {
+				return fmt.Errorf("skip-if-open-pr cannot be used with github-pr")
+			}
+			if skipIfOpenPR && githubRepository == "" {
+				return fmt.Errorf("github-repository is required with skip-if-open-pr")
+			}
+			if err := validation.GitHubIssueLabels(githubIssueLabels); err != nil {
+				return err
+			}
+			if githubPR > 0 || githubIssueAfter >= 2 || skipIfOpenPR {
 				if strings.TrimSpace(os.Getenv("GITHUB_TOKEN")) == "" {
 					return fmt.Errorf("GITHUB_TOKEN is required when GitHub notification delivery is configured")
+				}
+				if _, err := notify.GitHubAPIURL(os.Getenv("GITHUB_API_URL")); err != nil {
+					return err
 				}
 			}
 			pipelineTimeout := timeout
@@ -265,11 +288,20 @@ input, and notifications store attribute paths only unless --attribute-values is
 			if err != nil {
 				return err
 			}
+			if skipped, ok, err := skipOpenPRReport(scanContext, newOpenPRSkipper(skipIfOpenPR, githubRepository), workspaceRoot, scanOptions.Directory, redactPaths, cmd.ErrOrStderr()); err != nil {
+				return err
+			} else if ok {
+				auditReport = skipped
+				if err := writeScanReport(stdout, skipped, parsedFormat); err != nil {
+					return err
+				}
+				return nil
+			}
 			if planFile != "" && !terraformExec {
 				return fmt.Errorf("--plan-file requires --terraform-exec")
 			}
 			if terraformExec {
-				runner := configureCLIRunner(terraform.NewCLIRunner(terraformBin), terraformWorkspace, varFiles, vars, stateLock, stateLockTimeout)
+				runner := configureCLIRunner(terraform.NewCLIRunner(terraform.PlannerPath(scanOptions.Directory, terraformBin, terragruntBin)), terraformWorkspace, varFiles, vars, stateLock, stateLockTimeout)
 				scanOptions.Runner = runner
 				scanOptions.RequireTerraformFiles = true
 				if planFile == "" {
@@ -340,6 +372,7 @@ input, and notifications store attribute paths only unless --attribute-values is
 				GitHubRepository:     githubRepository,
 				GitHubPR:             githubPR,
 				GitHubIssueAfter:     githubIssueAfter,
+				GitHubIssueLabels:    githubIssueLabels,
 				OwnerWebhooks:        ownerWebhooks,
 				NotificationThrottle: notificationThrottle,
 			}); err != nil {
@@ -369,6 +402,7 @@ input, and notifications store attribute paths only unless --attribute-values is
 	cmd.Flags().BoolVar(&redactPaths, "redact-paths", false, "redact local filesystem paths from scan output")
 	cmd.Flags().BoolVar(&terraformExec, "terraform-exec", false, "run Terraform init, plan, and show -json (required with --plan-file)")
 	cmd.Flags().StringVar(&terraformBin, "terraform-bin", "", "Terraform-compatible executable to run (default: terraform)")
+	cmd.Flags().StringVar(&terragruntBin, "terragrunt-bin", "", "Terragrunt executable for roots with terragrunt.hcl (default: terragrunt)")
 	cmd.Flags().StringVar(&planMode, "plan-mode", string(terraform.PlanModeRefreshOnly), "plan mode: refresh-only (remote drift) or normal (configuration reconciliation)")
 	cmd.Flags().StringVar(&scanConfigPath, "config", "", "optional TerraDrift config file to load")
 	cmd.Flags().StringVar(&configProfile, "profile", "", "named config profile to load")
@@ -381,7 +415,9 @@ input, and notifications store attribute paths only unless --attribute-values is
 	cmd.Flags().StringVar(&webhookCACert, "webhook-ca-cert", "", "PEM CA certificate file for webhook TLS verification")
 	cmd.Flags().StringVar(&githubRepository, "github-repository", "", "GitHub repository for pull request summary (owner/repo)")
 	cmd.Flags().IntVar(&githubPR, "github-pr", 0, "GitHub pull request number; upserts one TerraDrift summary comment")
-	cmd.Flags().IntVar(&githubIssueAfter, "github-issue-after", 0, "create a GitHub issue after this many consecutive matching drift scans")
+	cmd.Flags().IntVar(&githubIssueAfter, "github-issue-after", 0, "upsert one GitHub issue after this many consecutive matching drift scans; close it when the root is clean")
+	cmd.Flags().StringArrayVar(&githubIssueLabels, "github-issue-label", nil, "optional label on persistent-drift issues; repeatable, at most 8")
+	cmd.Flags().BoolVar(&skipIfOpenPR, "skip-if-open-pr", false, "skip when an open GitHub PR in --github-repository changes files under this root")
 	cmd.Flags().StringVar(&artifactURL, "artifact-url", "", "presigned HTTPS URL to upload the JSON report")
 	cmd.Flags().StringVar(&approvalFile, "approval-file", "", "review-only approval artifact to attach to the report")
 	cmd.Flags().StringVar(&auditCommand, "audit-command", "", "audit correlation command to enrich the scan report")

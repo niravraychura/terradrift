@@ -17,9 +17,11 @@ import (
 	"github.com/niravraychura/terradrift/internal/command"
 	"github.com/niravraychura/terradrift/internal/config"
 	"github.com/niravraychura/terradrift/internal/ioutil"
+	"github.com/niravraychura/terradrift/internal/notify"
 	"github.com/niravraychura/terradrift/internal/report"
 	"github.com/niravraychura/terradrift/internal/scanner"
 	"github.com/niravraychura/terradrift/internal/terraform"
+	"github.com/niravraychura/terradrift/internal/validation"
 	"github.com/spf13/cobra"
 )
 
@@ -49,6 +51,8 @@ type scanAllParams struct {
 	AuditArgs    []string
 	Enrichment   reportEnrichmentOptions
 	Delivery     deliveryOptions
+	PRSkipper    *notify.GitHubOpenPRSkipper
+	Stderr       io.Writer
 }
 
 func newScanAllCommand(stdout io.Writer) *cobra.Command {
@@ -61,6 +65,7 @@ func newScanAllCommand(stdout io.Writer) *cobra.Command {
 	var concurrency int
 	var terraformExec bool
 	var terraformBin string
+	var terragruntBin string
 	var workspaceRoot string
 	var redactPaths bool
 	var incrementalState string
@@ -101,6 +106,8 @@ func newScanAllCommand(stdout io.Writer) *cobra.Command {
 	var githubRepository string
 	var githubPR int
 	var githubIssueAfter int
+	var githubIssueLabels []string
+	var skipIfOpenPR bool
 	var artifactURL string
 	var approvalFile string
 	var auditLogPath string
@@ -112,11 +119,12 @@ func newScanAllCommand(stdout io.Writer) *cobra.Command {
 
 Text manifests list one root directory per line. JSON manifests (version 1) can set
 per-root profile, plan_mode, workspace, var_files, and vars. Named profiles require --config.
+--discover also treats terragrunt.hcl directories as roots (exclude include-only trees).
 
 Delivery matches scan per root: history, dashboard HTML, slack/teams/webhook notifications,
 owner webhooks, policy publish gate, cost/audit enrichment, ignore/baseline rules, owners,
 runbooks, approvals, GitHub PR/issue summaries, --artifact-url, --audit-log, notification
-throttle (via config), attribute-values, workspace/var-file defaults, and --failure-severity.
+throttle (via config), attribute-values, workspace/var-file defaults, --failure-severity, and --skip-if-open-pr.
 
 Prefer terradrift dashboard-index for multi-root HTML. Shared --dashboard-html, --artifact-url,
 and --github-pr are refused when more than one root would write the same destination.`,
@@ -145,6 +153,7 @@ and --github-pr are refused when more than one root would write the same destina
 					{flag: "redact-paths", assign: func() error { redactPaths = cfg.RedactPaths; return nil }},
 					{flag: "terraform-exec", assign: func() error { terraformExec = cfg.TerraformExec; return nil }},
 					{flag: "terraform-bin", assign: func() error { terraformBin = cfg.TerraformBin; return nil }},
+					{flag: "terragrunt-bin", assign: func() error { terragruntBin = cfg.TerragruntBin; return nil }},
 					{flag: "plan-mode", assign: func() error { planMode = cfg.PlanMode; return nil }},
 					{flag: "workspace-root", assign: func() error { workspaceRoot = cfg.WorkspaceRoot; return nil }},
 					{flag: "notify", assign: func() error { notifyTarget = cfg.Notify; return nil }},
@@ -170,6 +179,11 @@ and --github-pr are refused when more than one root would write the same destina
 					{flag: "github-repository", assign: func() error { githubRepository = cfg.GitHubRepository; return nil }},
 					{flag: "github-pr", assign: func() error { githubPR = cfg.GitHubPR; return nil }},
 					{flag: "github-issue-after", assign: func() error { githubIssueAfter = cfg.GitHubIssueAfter; return nil }},
+					{flag: "github-issue-label", assign: func() error {
+						githubIssueLabels = append([]string(nil), cfg.GitHubIssueLabels...)
+						return nil
+					}},
+					{flag: "skip-if-open-pr", assign: func() error { skipIfOpenPR = cfg.SkipIfOpenPR; return nil }},
 					{flag: "artifact-url", assign: func() error { artifactURL = cfg.ArtifactURL; return nil }},
 					{flag: "audit-command", assign: func() error { auditCommand = cfg.AuditCommand; return nil }},
 					{flag: "audit-arg", assign: func() error { auditArgs = append([]string(nil), cfg.AuditArgs...); return nil }},
@@ -263,9 +277,21 @@ and --github-pr are refused when more than one root would write the same destina
 			if githubIssueAfter > 0 && (githubIssueAfter < 2 || githubRepository == "" || historyDir == "") {
 				return fmt.Errorf("github-issue-after requires github-repository, history-dir, and a value of at least 2")
 			}
-			if githubPR > 0 || githubIssueAfter >= 2 {
+			if skipIfOpenPR && githubPR > 0 {
+				return fmt.Errorf("skip-if-open-pr cannot be used with github-pr")
+			}
+			if skipIfOpenPR && githubRepository == "" {
+				return fmt.Errorf("github-repository is required with skip-if-open-pr")
+			}
+			if err := validation.GitHubIssueLabels(githubIssueLabels); err != nil {
+				return err
+			}
+			if githubPR > 0 || githubIssueAfter >= 2 || skipIfOpenPR {
 				if strings.TrimSpace(os.Getenv("GITHUB_TOKEN")) == "" {
 					return fmt.Errorf("GITHUB_TOKEN is required when GitHub notification delivery is configured")
+				}
+				if _, err := notify.GitHubAPIURL(os.Getenv("GITHUB_API_URL")); err != nil {
+					return err
 				}
 			}
 
@@ -316,16 +342,18 @@ and --github-pr are refused when more than one root would write the same destina
 				GitHubRepository:     githubRepository,
 				GitHubPR:             githubPR,
 				GitHubIssueAfter:     githubIssueAfter,
+				GitHubIssueLabels:    githubIssueLabels,
 				OwnerWebhooks:        ownerWebhooks,
 				NotificationThrottle: notificationThrottle,
 				historyMu:            sideEffectMu,
 			}
 			defaults := rootDefaults{
-				PlanMode:  planMode,
-				Workspace: terraformWorkspace,
-				VarFiles:  append([]string(nil), varFiles...),
-				Vars:      append([]string(nil), vars...),
-				Config:    scanConfigPath,
+				PlanMode:      planMode,
+				Workspace:     terraformWorkspace,
+				VarFiles:      append([]string(nil), varFiles...),
+				Vars:          append([]string(nil), vars...),
+				Config:        scanConfigPath,
+				TerragruntBin: terragruntBin,
 			}
 			aggregate := scanAll(cmd.Context(), scanAllParams{
 				Specs:        roots,
@@ -349,7 +377,9 @@ and --github-pr are refused when more than one root would write the same destina
 					TerraformBin:        terraformBin,
 					PolicyCommand:       policyCommand,
 				},
-				Delivery: delivery,
+				Delivery:  delivery,
+				PRSkipper: newOpenPRSkipper(skipIfOpenPR, githubRepository),
+				Stderr:    cmd.ErrOrStderr(),
 			})
 			if err := writeMultiScanReport(stdout, aggregate, parsedFormat); err != nil {
 				return err
@@ -381,7 +411,7 @@ and --github-pr are refused when more than one root would write the same destina
 		},
 	}
 	cmd.Flags().StringVar(&manifest, "manifest", "", "text or JSON Terraform root manifest")
-	cmd.Flags().StringVar(&discover, "discover", "", "workspace root to discover Terraform roots")
+	cmd.Flags().StringVar(&discover, "discover", "", "workspace root to discover Terraform or Terragrunt roots")
 	cmd.Flags().StringArrayVar(&includes, "include", nil, "root-relative include pattern; repeatable")
 	cmd.Flags().StringArrayVar(&excludes, "exclude", nil, "root-relative exclude pattern; repeatable")
 	cmd.Flags().StringVarP(&format, "output", "o", string(outputFormatTable), "output format: table, json, junit, sarif, prometheus")
@@ -390,6 +420,7 @@ and --github-pr are refused when more than one root would write the same destina
 	cmd.Flags().BoolVar(&terraformExec, "terraform-exec", false, "run Terraform-compatible scans")
 	cmd.Flags().StringVar(&planMode, "plan-mode", string(terraform.PlanModeRefreshOnly), "default plan mode: refresh-only or normal (overridable per root)")
 	cmd.Flags().StringVar(&terraformBin, "terraform-bin", "", "Terraform-compatible executable to run (default: terraform)")
+	cmd.Flags().StringVar(&terragruntBin, "terragrunt-bin", "", "Terragrunt executable for roots with terragrunt.hcl (default: terragrunt)")
 	cmd.Flags().StringVar(&workspaceRoot, "workspace-root", "", "require roots to resolve inside this workspace root")
 	cmd.Flags().BoolVar(&redactPaths, "redact-paths", false, "redact local filesystem paths from scan output")
 	cmd.Flags().StringVar(&incrementalState, "incremental-state", "", "JSON state file; retry only roots previously drifted or failed")
@@ -408,7 +439,9 @@ and --github-pr are refused when more than one root would write the same destina
 	cmd.Flags().StringVar(&webhookCACert, "webhook-ca-cert", "", "PEM CA certificate file for webhook TLS verification")
 	cmd.Flags().StringVar(&githubRepository, "github-repository", "", "GitHub repository for pull request summary (owner/repo)")
 	cmd.Flags().IntVar(&githubPR, "github-pr", 0, "GitHub pull request number; single-root scan-all only")
-	cmd.Flags().IntVar(&githubIssueAfter, "github-issue-after", 0, "create a GitHub issue after this many consecutive matching drift scans per root")
+	cmd.Flags().IntVar(&githubIssueAfter, "github-issue-after", 0, "upsert one GitHub issue after this many consecutive matching drift scans per root; close it when the root is clean")
+	cmd.Flags().StringArrayVar(&githubIssueLabels, "github-issue-label", nil, "optional label on persistent-drift issues; repeatable, at most 8")
+	cmd.Flags().BoolVar(&skipIfOpenPR, "skip-if-open-pr", false, "skip a root when an open GitHub PR in --github-repository changes files under that root")
 	cmd.Flags().StringVar(&artifactURL, "artifact-url", "", "presigned HTTPS URL to upload the JSON report (single-root scan-all only)")
 	cmd.Flags().StringVar(&approvalFile, "approval-file", "", "review-only approval artifact to attach to each root report")
 	cmd.Flags().StringVar(&auditLogPath, "audit-log", "", "append secret-safe JSON audit events per root to this path")
@@ -482,6 +515,7 @@ const (
 	multiScanStatusChangesDetected multiScanStatus = "changes_detected"
 	multiScanStatusPartial         multiScanStatus = "partial"
 	multiScanStatusFailed          multiScanStatus = "failed"
+	multiScanStatusSkipped         multiScanStatus = "skipped"
 )
 
 type multiScanRoot struct {
@@ -547,6 +581,8 @@ func writeIncrementalState(path string, aggregate multiScanReport) error {
 			entry.Status = multiScanStatusFailed
 		} else if root.Report.Status == report.ScanStatusDriftDetected {
 			entry.Status = multiScanStatusDriftDetected
+		} else if root.Report.Status == report.ScanStatusSkipped {
+			entry.Status = multiScanStatusSkipped
 		}
 		entry.ScanID = root.Report.ScanID
 		entry.Completed = root.Report.CompletedAt
@@ -603,12 +639,14 @@ func discoverTerraformRoots(root string, includes []string, excludes []string) (
 			return err
 		}
 		if entry.IsDir() {
-			if entry.Name() == ".terraform" || (relative != "." && matchesPath(relative, excludes)) {
+			// ponytail: skip generated caches only; include-only terragrunt.hcl dirs
+			// are still roots — operators --exclude those. Parsing include graphs is Terragrunt reimplementation.
+			if entry.Name() == ".terraform" || entry.Name() == ".terragrunt-cache" || (relative != "." && matchesPath(relative, excludes)) {
 				return filepath.SkipDir
 			}
 			return nil
 		}
-		if filepath.Ext(path) != ".tf" {
+		if entry.Name() != terraform.TerragruntConfigName && filepath.Ext(path) != ".tf" {
 			return nil
 		}
 		directory := filepath.Dir(path)
@@ -631,7 +669,7 @@ func discoverTerraformRoots(root string, includes []string, excludes []string) (
 	}
 	sort.Strings(directories)
 	if len(directories) == 0 {
-		return nil, fmt.Errorf("no Terraform roots found under %s", root)
+		return nil, fmt.Errorf("no Terraform or Terragrunt roots found under %s", root)
 	}
 	return directories, nil
 }
@@ -671,6 +709,25 @@ func scanAll(ctx context.Context, params scanAllParams) multiScanReport {
 						root.Error = resolveErr.Error()
 						_ = appendScanAllAudit(params, root, spec.Profile, resolveErr)
 					}
+					roots[index] = root
+					continue
+				}
+				if skipped, ok, skipErr := skipOpenPRReport(ctx, params.PRSkipper, params.Options.WorkspaceRoot, rootOptions.Directory, params.RedactPaths, params.Stderr); skipErr != nil {
+					if params.RedactPaths {
+						root.Directory = "[REDACTED]"
+						root.Error = "scan failed"
+					} else {
+						root.Error = skipErr.Error()
+					}
+					_ = appendScanAllAudit(params, root, spec.Profile, skipErr)
+					roots[index] = root
+					continue
+				} else if ok {
+					root.Report = skipped
+					if params.RedactPaths {
+						root.Directory = "[REDACTED]"
+					}
+					_ = appendScanAllAudit(params, root, spec.Profile, nil)
 					roots[index] = root
 					continue
 				}

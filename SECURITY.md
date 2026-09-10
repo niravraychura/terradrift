@@ -2,7 +2,7 @@
 
 ## Supported versions
 
-TerraDrift is pre-1.0. Security fixes land on `dev` first, then `main` through the normal promotion path. Until 1.0, **only the latest tagged release on `main`** (and `main` itself) is supported for security fixes. See [docs/RELEASE.md](docs/RELEASE.md) for the release cycle.
+TerraDrift **1.0** is the stability promise for CLI flags, exit codes, and published JSON ([docs/COMPATIBILITY.md](docs/COMPATIBILITY.md)). Security fixes land on `dev` first, then `main` through the normal promotion path. **Only the latest tagged release on `main`** (and `main` itself) is supported for security fixes. Breaking CLI/JSON changes after 1.0 are a MAJOR. See [docs/RELEASE.md](docs/RELEASE.md) for the release cycle.
 
 ## Reporting a vulnerability
 
@@ -50,8 +50,10 @@ Do not commit cloud credentials, webhook URLs, or `GITHUB_TOKEN` values. Keep th
 ### Notifications and outbound HTTP
 
 - Slack, Teams, generic webhooks, artifact upload, and GitHub issue/PR delivery share an SSRF-hardened HTTPS client: no proxy, no redirects, blocked private/loopback/link-local destinations, and explicit dial / TLS / overall timeouts.
+- GitHub PR/issue delivery honors `GITHUB_API_URL` (HTTPS, no userinfo; GitHub Actions sets this on GHES/GHEC). That **one** API host may resolve to a private IP. Generic `--notify webhook` destinations stay blocked.
 - Optional `--webhook-ca-cert` (or `webhook_ca_cert`) loads a PEM CA bundle for enterprise TLS interception.
 - `GITHUB_TOKEN` is read only from the environment and validated early when GitHub delivery is configured.
+- `--skip-if-open-pr` lists open pull requests and their files; it skips instead of planning when a file path sits under the Terraform root. It does not report `no_drift`.
 
 ### Policy, adapters, and publish gate
 
@@ -74,7 +76,7 @@ Do not commit cloud credentials, webhook URLs, or `GITHUB_TOKEN` values. Keep th
 
 ### Local API (`serve`)
 
-- `terradrift serve` binds to loopback only and has no authentication. Do not expose it through a tunnel or public interface without your own front-door controls. Multi-tenant auth is out of scope.
+- `terradrift serve` binds to loopback only and has no authentication. Do not expose it through a tunnel or public interface without your own front-door controls. Multi-tenant auth is out of scope. Dashboard HTML includes a Content-Security-Policy that allows inline CSS and forbids scripts; `serve` also sends that header on the HTML page.
 
 ### Supply chain and CI
 

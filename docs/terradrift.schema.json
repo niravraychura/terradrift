@@ -10,6 +10,7 @@
     "redact_paths": { "type": "boolean" },
     "terraform_exec": { "type": "boolean" },
     "terraform_bin": { "type": "string" },
+    "terragrunt_bin": { "type": "string", "description": "Terragrunt executable for roots with terragrunt.hcl (default terragrunt)" },
     "plan_mode": { "enum": ["refresh-only", "normal"] },
     "workspace_root": { "type": "string" },
     "notify": { "enum": ["slack", "teams", "webhook"] },
@@ -39,6 +40,12 @@
     "github_repository": { "type": "string" },
     "github_pr": { "type": "integer", "minimum": 1 },
     "github_issue_after": { "type": "integer", "minimum": 2 },
+    "github_issue_labels": {
+      "type": "array",
+      "maxItems": 8,
+      "items": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,49}$" }
+    },
+    "skip_if_open_pr": { "type": "boolean", "description": "Skip a root when an open GitHub PR in github_repository changes files under that root" },
     "artifact_url": { "type": "string" },
     "attribute_values": { "type": "boolean" },
     "workspace": { "type": "string" },
