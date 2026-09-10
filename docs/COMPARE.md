@@ -22,7 +22,7 @@ Those products run plans/applies in their control plane, with run history, VCS c
 
 ## vs [rootsami/terradrift](https://github.com/rootsami/terradrift)
 
-That project is a 2023 Go **server** (last push 2023) with a different architecture and GitHub path. This repository (`niravraychura/terradrift`) is a CLI. Same name, different product.
+That project is a 2023 Go **server** (last push 2023) with a different architecture and GitHub path. This repository (`niravraychura/terradrift`) is a CLI. Same name, different product. TerraDrift is also not a HashiCorp or OpenTofu product — see the trademarks note in the README.
 
 ## Out of scope (still)
 

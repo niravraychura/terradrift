@@ -13,6 +13,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - GitHub Marketplace listing for the official Action ([TerraDrift Scan](https://github.com/marketplace/actions/terradrift-scan)) (#111)
 - Homebrew tap `niravraychura/tap` (`brew install niravraychura/tap/terradrift`) (#109, #129)
 
+### Changed
+
+- README / SECURITY: trademarks, no HashiCorp/OpenTofu/GitHub affiliation, operator is responsible for permission to plan (#131)
+
 ## [0.4.0] - 2026-09-10
 
 ### Added
