@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/niravraychura/terradrift/internal/ioutil"
 	"github.com/niravraychura/terradrift/internal/redact"
@@ -18,14 +19,18 @@ import (
 const (
 	maxCommandOutputBytes   = 32 << 20
 	maxModulesManifestBytes = 32 << 20
+	// DefaultLockTimeout is how long terraform plan waits for the remote state lock.
+	DefaultLockTimeout = 10 * time.Minute
 )
 
 // CLIRunner executes Terraform-compatible CLI commands.
 type CLIRunner struct {
-	Path      string
-	Workspace string
-	VarFiles  []string
-	Vars      []string
+	Path        string
+	Workspace   string
+	VarFiles    []string
+	Vars        []string
+	DisableLock bool
+	LockTimeout time.Duration
 }
 
 // Inventory describes the selected CLI, providers, and initialized modules.
@@ -66,11 +71,20 @@ func (runner CLIRunner) Plan(ctx context.Context, directory string, outputPath s
 	if err := runner.selectWorkspace(ctx, directory); err != nil {
 		return 1, err
 	}
-	args := []string{"plan"}
+	args := []string{"plan", "-input=false"}
 	if mode == PlanModeRefreshOnly {
 		args = append(args, "-refresh-only")
 	}
 	args = append(args, "-detailed-exitcode", "-out", outputPath)
+	if runner.DisableLock {
+		args = append(args, "-lock=false")
+	} else {
+		timeout := runner.LockTimeout
+		if timeout <= 0 {
+			timeout = DefaultLockTimeout
+		}
+		args = append(args, "-lock=true", "-lock-timeout="+timeout.String())
+	}
 	for _, varFile := range runner.VarFiles {
 		args = append(args, "-var-file="+varFile)
 	}
@@ -93,7 +107,7 @@ func (runner CLIRunner) selectWorkspace(ctx context.Context, directory string) e
 	if workspace == "" {
 		return nil
 	}
-	_, err := runner.run(ctx, directory, "workspace", "select", workspace)
+	_, err := runner.run(ctx, directory, "workspace", "select", "-input=false", workspace)
 	if err != nil {
 		return fmt.Errorf("terraform workspace select %q: %w", workspace, err)
 	}
@@ -148,8 +162,9 @@ func redactModuleSource(source string) string {
 }
 
 func (runner CLIRunner) run(ctx context.Context, directory string, args ...string) ([]byte, error) {
-	cmd := exec.CommandContext(ctx, runner.Path, args...)
+	cmd := exec.CommandContext(ctx, runner.Path, withNoColor(args)...)
 	cmd.Dir = directory
+	cmd.Env = withTerraformAutomation(os.Environ())
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
@@ -171,4 +186,26 @@ func (runner CLIRunner) run(ctx context.Context, directory string, args ...strin
 		return stdout.Bytes(), fmt.Errorf("terraform %v: command output exceeded %d bytes", args, maxCommandOutputBytes)
 	}
 	return stdout.Bytes(), nil
+}
+
+// withNoColor inserts -no-color after the Terraform subcommand so wrappers that
+// require argv[1] to be init/plan/show (hashicorp/setup-terraform) keep working.
+func withNoColor(args []string) []string {
+	if len(args) == 0 {
+		return []string{"-no-color"}
+	}
+	out := make([]string, 0, len(args)+1)
+	out = append(out, args[0], "-no-color")
+	return append(out, args[1:]...)
+}
+
+func withTerraformAutomation(environ []string) []string {
+	out := make([]string, 0, len(environ)+1)
+	for _, entry := range environ {
+		if strings.HasPrefix(entry, "TF_IN_AUTOMATION=") {
+			continue
+		}
+		out = append(out, entry)
+	}
+	return append(out, "TF_IN_AUTOMATION=1")
 }

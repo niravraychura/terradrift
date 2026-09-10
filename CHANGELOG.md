@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `--state-lock` / `--state-lock-timeout` (default 10m) and `state_lock` / `state_lock_timeout` config for Terraform remote state locking
+- `TF_IN_AUTOMATION=1` and `-no-color` / `-input=false` on Terraform CLI invocations
+
+### Fixed
+
+- GitHub Actions (`GITHUB_ACTIONS=true`) and `TERRADRIFT_REQUIRE_EXEC` fail closed unless `--terraform-exec` is set (#83)
+- `--notify github` is rejected; use `--github-pr` or `--github-issue-after` (#84)
+- `--skip-terraform-init` fails if `.terraform` is missing or uninitialized (#98)
+- Incomplete Terraform plans (`complete=false`, `errored=true`, or `deferred_changes`) fail instead of reporting no drift (#99)
+
 ## [0.3.0] - 2026-09-09
 
 ### Added

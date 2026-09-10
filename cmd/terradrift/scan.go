@@ -87,6 +87,8 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 	var terraformWorkspace string
 	var varFiles []string
 	var vars []string
+	var stateLock bool
+	var stateLockTimeout time.Duration
 
 	cmd := &cobra.Command{
 		Use:   "scan",
@@ -97,7 +99,7 @@ Flag groups:
   Core:       --directory, --output, --timeout, --terraform-exec, --terraform-bin,
               --plan-mode, --workspace, --var-file, --var, --config, --profile,
               --failure-severity, --workspace-root, --redact-paths, --lock-backend,
-              --skip-terraform-init, --attribute-values
+              --skip-terraform-init, --state-lock, --state-lock-timeout, --attribute-values
   Delivery:   --history-dir, --history-retention, --history-compressed, --dashboard-html,
               --notify, --slack-webhook-url, --teams-webhook-url, --webhook-url,
               --webhook-ca-cert, --artifact-url, --audit-log, --github-repository,
@@ -180,6 +182,15 @@ input, and notifications store attribute paths only unless --attribute-values is
 					{flag: "workspace", assign: func() error { terraformWorkspace = cfg.Workspace; return nil }},
 					{flag: "var-file", assign: func() error { varFiles = append([]string(nil), cfg.VarFiles...); return nil }},
 					{flag: "var", assign: func() error { vars = append([]string(nil), cfg.Vars...); return nil }},
+					{flag: "state-lock", assign: func() error { stateLock = cfg.StateLock; return nil }},
+					{flag: "state-lock-timeout", assign: func() error {
+						parsed, err := time.ParseDuration(cfg.StateLockTimeout)
+						if err != nil {
+							return fmt.Errorf("parse config state_lock_timeout: %w", err)
+						}
+						stateLockTimeout = parsed
+						return nil
+					}},
 				}); err != nil {
 					return err
 				}
@@ -196,13 +207,16 @@ input, and notifications store attribute paths only unless --attribute-values is
 					}
 				}
 			}
+			if err := rejectDeadGitHubNotify(notifyTarget); err != nil {
+				return err
+			}
 			if githubPR > 0 && githubRepository == "" {
 				return fmt.Errorf("github-repository is required with github-pr")
 			}
 			if githubIssueAfter > 0 && (githubIssueAfter < 2 || githubRepository == "" || historyDir == "") {
 				return fmt.Errorf("github-issue-after requires github-repository, history-dir, and a value of at least 2")
 			}
-			if strings.EqualFold(strings.TrimSpace(notifyTarget), "github") || githubPR > 0 || githubIssueAfter >= 2 {
+			if githubPR > 0 || githubIssueAfter >= 2 {
 				if strings.TrimSpace(os.Getenv("GITHUB_TOKEN")) == "" {
 					return fmt.Errorf("GITHUB_TOKEN is required when GitHub notification delivery is configured")
 				}
@@ -246,12 +260,12 @@ input, and notifications store attribute paths only unless --attribute-values is
 				return err
 			}
 			if terraformExec {
-				runner := terraform.NewCLIRunner(terraformBin)
-				runner.Workspace = terraformWorkspace
-				runner.VarFiles = append([]string(nil), varFiles...)
-				runner.Vars = append([]string(nil), vars...)
+				runner := configureCLIRunner(terraform.NewCLIRunner(terraformBin), terraformWorkspace, varFiles, vars, stateLock, stateLockTimeout)
 				scanOptions.Runner = runner
 				scanOptions.RequireTerraformFiles = true
+				warnStateLockDisabled(cmd, stateLock)
+			} else if terraformExecRequired() {
+				return errTerraformExecRequired()
 			} else {
 				_, _ = fmt.Fprintln(cmd.ErrOrStderr(), "warning: bootstrap report only; pass --terraform-exec for a real drift scan")
 			}
@@ -371,7 +385,9 @@ input, and notifications store attribute paths only unless --attribute-values is
 	cmd.Flags().StringVar(&costCommand, "cost-command", "", "cost command to enrich the scan report from JSON stdin/stdout")
 	cmd.Flags().StringArrayVar(&costArgs, "cost-arg", nil, "cost command argument; repeat for multiple arguments")
 	cmd.Flags().StringVar(&lockBackendName, "lock-backend", "local", "scan lock backend: local (single-host file lock)")
-	cmd.Flags().BoolVar(&skipTerraformInit, "skip-terraform-init", false, "skip terraform init when .terraform is already valid")
+	cmd.Flags().BoolVar(&skipTerraformInit, "skip-terraform-init", false, "skip terraform init; fails if .terraform is missing or uninitialized")
+	cmd.Flags().BoolVar(&stateLock, "state-lock", true, "acquire Terraform remote state lock during plan (use --state-lock=false only for scheduled drift vs apply contention)")
+	cmd.Flags().DurationVar(&stateLockTimeout, "state-lock-timeout", terraform.DefaultLockTimeout, "how long terraform plan waits for the remote state lock")
 	cmd.Flags().BoolVar(&attributeValues, "attribute-values", false, "include safe attribute values in history, artifacts, policy input, dashboards, and notifications (default: paths only)")
 	cmd.Flags().StringVar(&terraformWorkspace, "workspace", "", "Terraform workspace to select before plan")
 	cmd.Flags().StringArrayVar(&varFiles, "var-file", nil, "Terraform -var-file path; repeatable")
