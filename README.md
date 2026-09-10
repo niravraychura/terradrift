@@ -4,12 +4,11 @@
 [![Release](https://img.shields.io/github/v/release/niravraychura/terradrift?include_prereleases&sort=semver)](https://github.com/niravraychura/terradrift/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-**Self-hosted Terraform / OpenTofu drift detection CLI.**  
-Run it on a laptop, in CI, or on a cron runner. No SaaS required.
+**Plan-based Terraform / OpenTofu drift CLI** for CI and cron on *your* runner. Not a SaaS, not unmanaged-resource inventory, and not the 2023 [rootsami/terradrift](https://github.com/rootsami/terradrift) server.
 
-TerraDrift runs `terraform plan` (or OpenTofu), turns the plan into a clear report, and can notify Slack/Teams/webhooks, write history/dashboards, and gate on policy.
+TerraDrift runs `terraform plan` or `tofu plan` (refresh-only by default), turns that plan into a report, and can notify Slack/Teams/webhooks, write history/dashboards, and gate on policy. Comparison: [docs/COMPARE.md](docs/COMPARE.md).
 
-> **Important:** Always pass `--terraform-exec` for a real drift scan. GitHub Actions and `TERRADRIFT_REQUIRE_EXEC` fail without it. Without `--terraform-exec` locally, TerraDrift only checks the directory and emits a bootstrap placeholder report.
+> **Important:** A real scan is `--terraform-exec` (or the official Action, which always passes it). GitHub Actions and `TERRADRIFT_REQUIRE_EXEC` fail without it. Without `--terraform-exec` locally, TerraDrift only checks the directory and emits a bootstrap placeholder — **exit 0 there is not “no drift”.**
 
 ---
 
@@ -38,6 +37,17 @@ Download a binary from [GitHub Releases](https://github.com/niravraychura/terrad
 
 ```bash
 TERRADRIFT_VERSION=v0.3.0 PREFIX=/usr/local ./scripts/install.sh
+```
+
+Optional, after the next tagged release that includes Cosign bundles (not v0.3.0):
+
+```bash
+# Download terradrift_linux_amd64.tar.gz and terradrift_linux_amd64.tar.gz.bundle from the GitHub Release
+cosign verify-blob \
+  --bundle terradrift_linux_amd64.tar.gz.bundle \
+  --certificate-identity-regexp '^https://github.com/niravraychura/terradrift/\.github/workflows/release\.yml@refs/tags/v[0-9]+\.[0-9]+\.[0-9]+$' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  terradrift_linux_amd64.tar.gz
 ```
 
 Homebrew: there is no published tap; see [`contrib/homebrew/README.md`](contrib/homebrew/README.md). Or build from source:
@@ -84,6 +94,21 @@ OpenTofu:
 
 ```bash
 terradrift scan -d ./terraform/prod --terraform-exec --terraform-bin tofu
+```
+
+Example **Terraform-backed** table output (exit **2** means drift was found — that is detection working, not a crash). Attribute **values** stay redacted/paths-only unless `--attribute-values`. This is a recorded terminal transcript, not a bootstrap report:
+
+```text
+$ terradrift scan -d ./terraform/prod --terraform-exec
+TerraDrift scan complete
+Status: drift_detected
+Plan mode: refresh-only
+Terraform directory: ./terraform/prod
+Resources checked: 12
+Changed resources: 1
+
+HIGH  update  aws_instance.web
+  ami: [REDACTED] -> [REDACTED]
 ```
 
 ### Step 4 — Optional: write a starter config
@@ -387,6 +412,7 @@ Compare both modes when unsure whether a finding is out-of-band change vs unappl
 | Topic | Doc |
 | --- | --- |
 | GitHub Action | [docs/GITHUB_ACTION.md](docs/GITHUB_ACTION.md) |
+| vs plan / driftctl / HCP / rootsami | [docs/COMPARE.md](docs/COMPARE.md) |
 | Architecture & report JSON | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
 | Roadmap / out of scope | [docs/ROADMAP.md](docs/ROADMAP.md) |
 | Release cycle (`dev` → `main` → tag) | [docs/RELEASE.md](docs/RELEASE.md) |
