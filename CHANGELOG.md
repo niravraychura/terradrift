@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-09-10
+
 ### Added
 
 - Honor `GITHUB_API_URL` for `--github-pr` / `--github-issue-after` so GHES and GHEC API hosts work (#101)
@@ -116,7 +118,8 @@ First public tagged release of the self-hosted TerraDrift CLI.
 - SSRF-safe GitHub HTTP client, fail-closed truncated I/O, attribute value heuristics
 - Size budgets and redaction defaults for user-facing output
 
-[Unreleased]: https://github.com/niravraychura/terradrift/compare/v0.4.1...HEAD
+[Unreleased]: https://github.com/niravraychura/terradrift/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/niravraychura/terradrift/releases/tag/v1.0.0
 [0.4.1]: https://github.com/niravraychura/terradrift/releases/tag/v0.4.1
 [0.4.0]: https://github.com/niravraychura/terradrift/releases/tag/v0.4.0
 [0.3.0]: https://github.com/niravraychura/terradrift/releases/tag/v0.3.0

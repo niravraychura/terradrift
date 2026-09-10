@@ -1,8 +1,6 @@
 # Compatibility (v1.0)
 
-This is the SemVer contract for CLI flags, process exit codes, and published JSON. It takes effect when the **`v1.0.0` tag** ships on `main`. Until then, pre-1.0 rules in [RELEASE.md](RELEASE.md) still apply (breaking changes may ship in a MINOR if called out in the changelog).
-
-Cutting `v1.0.0` is a separate release. This document does not tag it.
+This is the SemVer contract for CLI flags, process exit codes, and published JSON. It bound at the **`v1.0.0` tag** on `main`. Removing or renaming a contracted flag, exit code, or JSON field is a **MAJOR**.
 
 ## Commands
 
