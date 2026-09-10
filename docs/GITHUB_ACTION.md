@@ -11,8 +11,6 @@ TerraDrift ships a composite Action at the repository root (`action.yml`).
     directory: ./terraform/prod
 ```
 
-Until v0.4.0 is tagged, pin `uses:` to `dev` (or a commit SHA) and set `version: v0.3.0` so `scripts/install.sh` fetches a real release.
-
 The Action always passes `--terraform-exec`, fails if `terraform` / `tofu` is missing, sets `--workspace-root` to `github.workspace`, and caches providers in `TF_PLUGIN_CACHE_DIR` unless `plugin-cache: false`.
 
 Happy-path GitHub delivery uses `GITHUB_TOKEN` from the job (`--github-pr` / `--github-issue-after`). Do not put a PAT in the workflow. Cloud auth is OIDC — [DRIFT_SCAN_IAM.md](DRIFT_SCAN_IAM.md).
@@ -30,14 +28,10 @@ Happy-path GitHub delivery uses `GITHUB_TOKEN` from the job (`--github-pr` / `--
 | `plugin-cache` | `true` | `actions/cache` + `TF_PLUGIN_CACHE_DIR` |
 | `redact-paths` | `true` | CI default |
 
-`--plan-file` requires a TerraDrift version that includes that flag (this change, shipping in the next CLI tag).
+`--plan-file` ships in v0.4.0+.
 
 ## Marketplace
 
-GitHub Marketplace listing needs a public repo, root `action.yml` with branding (this file), and a tagged release. After v0.4.0 is tagged on `main`:
+Listed: [TerraDrift Scan](https://github.com/marketplace/actions/terradrift-scan) (free Action listing). Pin `uses: niravraychura/terradrift@v0.4.0`.
 
-1. Open https://github.com/niravraychura/terradrift/releases
-2. Use **Publish this Action to the GitHub Marketplace** on that release
-3. Add the Marketplace badge/link to the README
-
-The listing URL will be `https://github.com/marketplace/actions/terradrift-scan` (name from `action.yml`).
+To refresh the listing after a new tag, edit that release and keep **Publish this release to the GitHub Marketplace** checked.

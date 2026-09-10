@@ -2,6 +2,7 @@
 
 [![CI](https://github.com/niravraychura/terradrift/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/niravraychura/terradrift/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/niravraychura/terradrift?include_prereleases&sort=semver)](https://github.com/niravraychura/terradrift/releases)
+[![GitHub Marketplace](https://img.shields.io/badge/Marketplace-TerraDrift%20Scan-blue?logo=github)](https://github.com/marketplace/actions/terradrift-scan)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 **Plan-based Terraform / OpenTofu drift CLI** for CI and cron on *your* runner. Not a SaaS, not unmanaged-resource inventory, and not the 2023 [rootsami/terradrift](https://github.com/rootsami/terradrift) server.
@@ -25,7 +26,7 @@ TerraDrift runs `terraform plan` or `tofu plan` (refresh-only by default), turns
 9. [Security defaults](#9-security-defaults)
 10. [More documentation](#10-more-documentation)
 11. [Develop from source](#11-develop-from-source)
-12. [Contributing & license](#12-contributing--license)
+12. [Contributing, license, and trademarks](#12-contributing-license-and-trademarks)
 
 ---
 
@@ -36,10 +37,10 @@ TerraDrift runs `terraform plan` or `tofu plan` (refresh-only by default), turns
 Download a binary from [GitHub Releases](https://github.com/niravraychura/terradrift/releases) (Linux amd64/arm64, macOS amd64/arm64), or install with checksum verification:
 
 ```bash
-TERRADRIFT_VERSION=v0.3.0 PREFIX=/usr/local ./scripts/install.sh
+TERRADRIFT_VERSION=v0.4.0 PREFIX=/usr/local ./scripts/install.sh
 ```
 
-Optional, after the next tagged release that includes Cosign bundles (not v0.3.0):
+Optional Cosign verification (v0.4.0+; download the matching `.bundle` from the same GitHub Release):
 
 ```bash
 # Download terradrift_linux_amd64.tar.gz and terradrift_linux_amd64.tar.gz.bundle from the GitHub Release
@@ -50,7 +51,13 @@ cosign verify-blob \
   terradrift_linux_amd64.tar.gz
 ```
 
-Homebrew: there is no published tap; see [`contrib/homebrew/README.md`](contrib/homebrew/README.md). Or build from source:
+Homebrew (macOS/Linux):
+
+```bash
+brew install niravraychura/tap/terradrift
+```
+
+Tap: [`niravraychura/homebrew-tap`](https://github.com/niravraychura/homebrew-tap). Or build from source:
 
 ```bash
 git clone https://github.com/niravraychura/terradrift.git
@@ -173,13 +180,12 @@ Preferred: the official Action (always `--terraform-exec`; fails if Terraform is
 - uses: hashicorp/setup-terraform@v4
   with:
     terraform_wrapper: false
-- uses: niravraychura/terradrift@dev # pin to a v* tag after v0.4.0
+- uses: niravraychura/terradrift@v0.4.0
   with:
-    version: v0.3.0
     directory: ./terraform/prod
 ```
 
-Details: [docs/GITHUB_ACTION.md](docs/GITHUB_ACTION.md) · [examples/github-actions](examples/github-actions/README.md).
+Details: [GitHub Marketplace](https://github.com/marketplace/actions/terradrift-scan) · [docs/GITHUB_ACTION.md](docs/GITHUB_ACTION.md) · [examples/github-actions](examples/github-actions/README.md) · [examples/gitlab-ci](examples/gitlab-ci/README.md).
 
 Minimal pattern without the Action:
 
@@ -199,6 +205,7 @@ Full scheduled examples:
 - Pull request comment (upsert): [`examples/github-actions/terradrift-pr.yml`](examples/github-actions/terradrift-pr.yml)
 - Multi-root + Slack: [`examples/github-actions/terradrift-scheduled-multi-root.yml`](examples/github-actions/terradrift-scheduled-multi-root.yml)
 - Cron: [`examples/cron/terradrift.cron`](examples/cron/terradrift.cron)
+- GitLab CI (install.sh): [`examples/gitlab-ci/.gitlab-ci.yml`](examples/gitlab-ci/.gitlab-ci.yml)
 
 Pin TerraDrift, Terraform/OpenTofu, and provider versions. Use OIDC for cloud roles ([docs/DRIFT_SCAN_IAM.md](docs/DRIFT_SCAN_IAM.md)), not long-lived keys. Cache providers with `TF_PLUGIN_CACHE_DIR`. Keep webhook URLs in CI secrets. Do not upload `*.tfplan` artifacts. OpenTofu is a drop-in planner: set `--terraform-bin tofu` (or `terraform_bin` in config) and keep using `--terraform-exec`.
 
@@ -365,7 +372,7 @@ Image: `ghcr.io/niravraychura/terradrift:<version>` (also `latest` from releases
 The runtime image does **not** include Terraform. For `--terraform-exec`, mount a binary or extend the image:
 
 ```dockerfile
-FROM ghcr.io/niravraychura/terradrift:v0.3.0
+FROM ghcr.io/niravraychura/terradrift:v0.4.0
 USER root
 RUN apk --no-cache add curl unzip \
   && curl -fsSLo /tmp/terraform.zip https://releases.hashicorp.com/terraform/1.10.5/terraform_1.10.5_linux_amd64.zip \
@@ -412,6 +419,7 @@ Compare both modes when unsure whether a finding is out-of-band change vs unappl
 | Topic | Doc |
 | --- | --- |
 | GitHub Action | [docs/GITHUB_ACTION.md](docs/GITHUB_ACTION.md) |
+| GitLab CI example | [examples/gitlab-ci/README.md](examples/gitlab-ci/README.md) |
 | vs plan / driftctl / HCP / rootsami | [docs/COMPARE.md](docs/COMPARE.md) |
 | Architecture & report JSON | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
 | Roadmap / out of scope | [docs/ROADMAP.md](docs/ROADMAP.md) |
@@ -437,9 +445,15 @@ make ci             # fmt check, vet, test, race, vuln, lint
 
 ---
 
-## 12. Contributing & license
+## 12. Contributing, license, and trademarks
 
 - PRs target **`dev`** — see [CONTRIBUTING.md](CONTRIBUTING.md)
 - Security reports: [SECURITY.md](SECURITY.md)
 - Agents / Cursor defaults: [AGENTS.md](AGENTS.md)
 - License: [MIT](LICENSE)
+
+TerraDrift is an independent project. It is **not** affiliated with, endorsed by, or sponsored by HashiCorp, the Linux Foundation, OpenTofu, or GitHub.
+
+[Terraform](https://www.terraform.io/) is a trademark of HashiCorp, Inc. [OpenTofu](https://opentofu.org/) is a Linux Foundation project. GitHub is a trademark of GitHub, Inc. Those names appear here only to describe compatibility: TerraDrift runs the `terraform` or `tofu` binary **you** install and does not redistribute HashiCorp Terraform.
+
+You are responsible for having permission and credentials to plan the roots you scan, and for complying with your cloud provider terms and with the licenses of the planner binaries you run.

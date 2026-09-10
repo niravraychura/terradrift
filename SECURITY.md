@@ -93,3 +93,4 @@ Do not commit cloud credentials, webhook URLs, or `GITHUB_TOKEN` values. Keep th
 5. Leave `--attribute-values` off unless you intentionally need safe values in persisted/automation channels.
 6. Treat policy failure as a failed publish, not only a log line.
 7. For multi-runner CI, do not assume the local file lock coordinates across hosts unless they share the lock path on a shared filesystem.
+8. Only scan Terraform/OpenTofu roots and cloud accounts you are authorized to plan. TerraDrift uses whatever credentials the process already has.

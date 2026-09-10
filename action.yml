@@ -1,5 +1,5 @@
 name: TerraDrift Scan
-description: Self-hosted Terraform/OpenTofu drift detection. Always runs a real scan (never bootstrap).
+description: Independent Terraform/OpenTofu drift CLI (not affiliated with HashiCorp). Always a real scan (never bootstrap).
 author: niravraychura
 branding:
   icon: search
@@ -55,7 +55,7 @@ runs:
           case "${TERRADRIFT_ACTION_REF}" in
             v*.*.*) version="${TERRADRIFT_ACTION_REF}" ;;
             *)
-              echo "set input version to a release tag (for example v0.3.0); action ref is ${TERRADRIFT_ACTION_REF}" >&2
+              echo "set input version to a release tag (for example v0.4.0); action ref is ${TERRADRIFT_ACTION_REF}" >&2
               exit 1
               ;;
           esac

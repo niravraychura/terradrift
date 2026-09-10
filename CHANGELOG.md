@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-09-10
+
+### Added
+
+- GitLab CI scheduled scan example (`examples/gitlab-ci/`) (#110)
+- GitHub Marketplace listing for the official Action ([TerraDrift Scan](https://github.com/marketplace/actions/terradrift-scan)) (#111)
+- Homebrew tap `niravraychura/tap` (`brew install niravraychura/tap/terradrift`) (#109, #129)
+
+### Changed
+
+- README / SECURITY: trademarks, no HashiCorp/OpenTofu/GitHub affiliation, operator is responsible for permission to plan (#131)
+- Action Marketplace description: independent CLI, not affiliated with HashiCorp (#133)
+
 ## [0.4.0] - 2026-09-10
 
 ### Added
@@ -88,7 +101,8 @@ First public tagged release of the self-hosted TerraDrift CLI.
 - SSRF-safe GitHub HTTP client, fail-closed truncated I/O, attribute value heuristics
 - Size budgets and redaction defaults for user-facing output
 
-[Unreleased]: https://github.com/niravraychura/terradrift/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/niravraychura/terradrift/compare/v0.4.1...HEAD
+[0.4.1]: https://github.com/niravraychura/terradrift/releases/tag/v0.4.1
 [0.4.0]: https://github.com/niravraychura/terradrift/releases/tag/v0.4.0
 [0.3.0]: https://github.com/niravraychura/terradrift/releases/tag/v0.3.0
 [0.2.0]: https://github.com/niravraychura/terradrift/releases/tag/v0.2.0
