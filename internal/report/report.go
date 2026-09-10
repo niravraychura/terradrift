@@ -13,6 +13,7 @@ const (
 	ScanStatusNoChanges       ScanStatus = "no_changes"
 	ScanStatusChangesDetected ScanStatus = "changes_detected"
 	ScanStatusFailed          ScanStatus = "failed"
+	ScanStatusSkipped         ScanStatus = "skipped"
 )
 
 // AttributeChange describes one attribute path that differs between before and after.

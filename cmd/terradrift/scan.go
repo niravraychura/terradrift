@@ -75,6 +75,7 @@ func newScanCommand(stdout io.Writer) *cobra.Command {
 	var githubPR int
 	var githubIssueAfter int
 	var githubIssueLabels []string
+	var skipIfOpenPR bool
 	var artifactURL string
 	var approvalFile string
 	var auditCommand string
@@ -107,7 +108,7 @@ Flag groups:
   Delivery:   --history-dir, --history-retention, --history-compressed, --dashboard-html,
               --notify, --slack-webhook-url, --teams-webhook-url, --webhook-url,
               --webhook-ca-cert, --artifact-url, --audit-log, --github-repository,
-              --github-pr, --github-issue-after, --github-issue-label, --approval-file
+              --github-pr, --github-issue-after, --github-issue-label, --skip-if-open-pr, --approval-file
   Enrichment: --policy-command, --policy-arg, --cost-command, --cost-arg,
               --audit-command, --audit-arg
 
@@ -180,6 +181,7 @@ input, and notifications store attribute paths only unless --attribute-values is
 						githubIssueLabels = append([]string(nil), cfg.GitHubIssueLabels...)
 						return nil
 					}},
+					{flag: "skip-if-open-pr", assign: func() error { skipIfOpenPR = cfg.SkipIfOpenPR; return nil }},
 					{flag: "artifact-url", assign: func() error { artifactURL = cfg.ArtifactURL; return nil }},
 					{flag: "audit-command", assign: func() error { auditCommand = cfg.AuditCommand; return nil }},
 					{flag: "audit-arg", assign: func() error { auditArgs = append([]string(nil), cfg.AuditArgs...); return nil }},
@@ -228,10 +230,16 @@ input, and notifications store attribute paths only unless --attribute-values is
 			if githubIssueAfter > 0 && (githubIssueAfter < 2 || githubRepository == "" || historyDir == "") {
 				return fmt.Errorf("github-issue-after requires github-repository, history-dir, and a value of at least 2")
 			}
+			if skipIfOpenPR && githubPR > 0 {
+				return fmt.Errorf("skip-if-open-pr cannot be used with github-pr")
+			}
+			if skipIfOpenPR && githubRepository == "" {
+				return fmt.Errorf("github-repository is required with skip-if-open-pr")
+			}
 			if err := validation.GitHubIssueLabels(githubIssueLabels); err != nil {
 				return err
 			}
-			if githubPR > 0 || githubIssueAfter >= 2 {
+			if githubPR > 0 || githubIssueAfter >= 2 || skipIfOpenPR {
 				if strings.TrimSpace(os.Getenv("GITHUB_TOKEN")) == "" {
 					return fmt.Errorf("GITHUB_TOKEN is required when GitHub notification delivery is configured")
 				}
@@ -277,6 +285,15 @@ input, and notifications store attribute paths only unless --attribute-values is
 			scanOptions, err = scanner.PrepareOptions(scanOptions)
 			if err != nil {
 				return err
+			}
+			if skipped, ok, err := skipOpenPRReport(scanContext, newOpenPRSkipper(skipIfOpenPR, githubRepository), workspaceRoot, scanOptions.Directory, redactPaths, cmd.ErrOrStderr()); err != nil {
+				return err
+			} else if ok {
+				auditReport = skipped
+				if err := writeScanReport(stdout, skipped, parsedFormat); err != nil {
+					return err
+				}
+				return nil
 			}
 			if planFile != "" && !terraformExec {
 				return fmt.Errorf("--plan-file requires --terraform-exec")
@@ -397,6 +414,7 @@ input, and notifications store attribute paths only unless --attribute-values is
 	cmd.Flags().IntVar(&githubPR, "github-pr", 0, "GitHub pull request number; upserts one TerraDrift summary comment")
 	cmd.Flags().IntVar(&githubIssueAfter, "github-issue-after", 0, "upsert one GitHub issue after this many consecutive matching drift scans; close it when the root is clean")
 	cmd.Flags().StringArrayVar(&githubIssueLabels, "github-issue-label", nil, "optional label on persistent-drift issues; repeatable, at most 8")
+	cmd.Flags().BoolVar(&skipIfOpenPR, "skip-if-open-pr", false, "skip when an open GitHub PR in --github-repository changes files under this root")
 	cmd.Flags().StringVar(&artifactURL, "artifact-url", "", "presigned HTTPS URL to upload the JSON report")
 	cmd.Flags().StringVar(&approvalFile, "approval-file", "", "review-only approval artifact to attach to the report")
 	cmd.Flags().StringVar(&auditCommand, "audit-command", "", "audit correlation command to enrich the scan report")
