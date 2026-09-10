@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `scan-all --output junit` and `--output sarif` emit one aggregate artifact across roots (#86)
 - Official GitHub Action (`action.yml`) that always passes `--terraform-exec`, fails if Terraform/OpenTofu is missing, and caches providers (#89)
 - `--plan-file` / `plan_file` to reuse a trusted local Terraform plan (`show -json` only; still requires `--terraform-exec`) (#90)
 - `--state-lock` / `--state-lock-timeout` (default 10m) and `state_lock` / `state_lock_timeout` config for Terraform remote state locking
@@ -16,6 +17,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `scan-all` refuses shared `--dashboard-html`, `--artifact-url`, and `--github-pr` when more than one root would overwrite the same destination (#85)
+- GitHub Actions / `TERRADRIFT_REQUIRE_EXEC` require `allowed_commands` and `trusted_command_dirs` when policy, cost, or audit adapters are set (#88)
+- Docs state that stdout is emitted before the policy publish gate; treat the exit code as the gate, not the printed report (#87)
 - GitHub Actions examples install a real release via `scripts/install.sh`, cache providers, and document OIDC / GitHub token permissions (#102)
 
 ### Fixed

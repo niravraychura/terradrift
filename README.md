@@ -130,7 +130,7 @@ terradrift scan -d ./terraform/prod --terraform-exec --output sarif
 terradrift scan -d ./terraform/prod --terraform-exec --output prometheus
 ```
 
-Prometheus series use a bounded `root_id` hash per Terraform root (never a directory path). `scan-all --output prometheus` adds `terradrift_roots{result="total|drifted|changed|failed"}` plus one sample set per successful root.
+Prometheus series use a bounded `root_id` hash per Terraform root (never a directory path). `scan-all --output prometheus` adds `terradrift_roots{result="total|drifted|changed|failed"}` plus one sample set per successful root. `scan-all --output junit` / `--output sarif` emit one aggregate artifact across roots.
 
 Scan progress (`scan started`, `terraform init` / `plan` / `show`, parse) goes to **stderr**. Use `--quiet` to keep only errors. `--redact-paths` redacts directories in those logs too.
 
@@ -269,6 +269,7 @@ environments/production
 
 ```bash
 terradrift scan-all --manifest terraform-roots.txt --concurrency 4 --terraform-exec --output json
+terradrift scan-all --manifest terraform-roots.txt --terraform-exec --output junit
 terradrift scan-all --manifest terraform-roots.txt --terraform-exec --output prometheus
 ```
 
@@ -292,7 +293,7 @@ terradrift scan-all --discover . --terraform-exec --concurrency 4
 
 More detail and examples: [`examples/multi-root`](examples/multi-root).
 
-`scan-all` uses the same per-root delivery path as `scan` (history, notify, policy, ignore/owners, GitHub, artifacts, audit-log). Shared `--dashboard-html` is overwritten by the last successful root when concurrency > 1; `--github-pr` upserts one TerraDrift comment on that PR.
+`scan-all` uses the same per-root delivery path as `scan` (history, notify, policy, ignore/owners, GitHub, artifacts, audit-log). Shared `--dashboard-html`, `--artifact-url`, and `--github-pr` are refused when more than one root would overwrite the same destination — use `terradrift dashboard-index` or scan a single root.
 
 Cross-root HTML index from history (grouped by directory):
 
@@ -360,7 +361,7 @@ With `--terraform-exec`, each scan roughly:
 2. Runs `terraform init` (unless `--skip-terraform-init` or `--plan-file`) with `-lockfile=readonly` — a committed `.terraform.lock.hcl` is required. `--skip-terraform-init` fails closed unless `.terraform/providers` or `.terraform/modules/modules.json` exists.
 3. Runs `plan` (`refresh-only` or `normal`) with `-input=false`, `-detailed-exitcode`, and `-lock-timeout` (default `10m`), unless `--plan-file` points at a trusted local plan. Use `--state-lock=false` only when a scheduled drift job must not contend with apply.
 4. Runs `terraform show -json`, parses the plan, builds the TerraDrift report. Incomplete or errored plan JSON fails the scan.
-5. Writes stdout, then optional policy gate → history / dashboard / notifications.
+5. Writes stdout, then optional policy gate → history / dashboard / notifications. **Stdout is not policy-gated:** a policy failure still prints the report, then exits non-zero and skips publish (history, dashboards, artifacts, notifications). Treat the process exit code as the policy result, not the JSON body alone.
 
 In GitHub Actions (`GITHUB_ACTIONS=true`) or when `TERRADRIFT_REQUIRE_EXEC` is set, `--terraform-exec` is required. Local bootstrap without it still prints a warning.
 

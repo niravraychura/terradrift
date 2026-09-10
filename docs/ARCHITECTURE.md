@@ -15,7 +15,7 @@ cmd/terradrift -> config -> scanner -> terraform -> parser -> report
 3. `internal/terraform` runs Terraform or OpenTofu with bounded command output.
 4. `internal/parser` converts plan JSON into deterministic resource changes with safe attribute diffs.
 5. `internal/report` adds risk, ownership, remediation, approvals, and audit metadata. `WithoutAttributeValues` clears Before/After for persistence defaults.
-6. Policy runs before history, dashboard, artifact upload, and notifications. On failure those side effects are skipped.
+6. Policy runs **after stdout** and before history, dashboard, artifact upload, and notifications. On failure those side effects are skipped. A CI job that only parses stdout can miss a policy failure; the process still exits non-zero.
 7. `internal/history`, `dashboard`, and `notify` persist or deliver the publish-gated report.
 
 ## Attribute security contract
