@@ -13,10 +13,10 @@ Completed engineering history (through v0.1.0): [archive/PLAN-v0.1.md](archive/P
 | **v0.1.0** | Shipped — first public tagged CLI release |
 | **v0.2.0** | Shipped — `--version`, scan-all delivery parity, refresh-only attribute diffs |
 | **v0.3.0** | Shipped — operator UX, glob ignores, GitHub PR upsert, install.sh / extra GOARCH |
-| **v0.4.0** | Next train — CI honesty, scan-all delivery, GitHub Action, `--plan-file`, CLI Cosign (issues on [the Project](https://github.com/users/niravraychura/projects/1), Ready column; no empty milestone yet) |
+| **v0.4.0** | Next train — CI honesty, lock/plan honesty, incomplete-plan fail-closed, GitHub Action, `--plan-file`, CLI Cosign (issues on [the Project](https://github.com/users/niravraychura/projects/1), Ready column; no empty milestone yet) |
 | **v1.0.0** | Stability promise for CLI flags and published JSON — [#95](https://github.com/niravraychura/terradrift/issues/95); open a milestone when freeze work starts |
 
-Triage: [TerraDrift Project](https://github.com/users/niravraychura/projects/1). **Ready** is the next slice; **Backlog** is later (approve vs exit code, Terragrunt, on-call webhook examples, v1.0 freeze).
+Triage: [TerraDrift Project](https://github.com/users/niravraychura/projects/1). **Ready** is the next slice (including [#97](https://github.com/niravraychura/terradrift/issues/97)–[#99](https://github.com/niravraychura/terradrift/issues/99), [#102](https://github.com/niravraychura/terradrift/issues/102)). **Backlog** is later (GitHub issue lifecycle, GHES, skip-if-PR, Terragrunt, v1.0 freeze).
 
 ## Out of scope (for now)
 
