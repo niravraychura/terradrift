@@ -9,7 +9,7 @@ stages:
   - scan
 
 variables:
-  TERRADRIFT_VERSION: "v0.4.1"
+  TERRADRIFT_VERSION: "v1.0.0"
   TERRAFORM_VERSION: "1.10.5"
   TF_PLUGIN_CACHE_DIR: "$CI_PROJECT_DIR/.terraform-plugin-cache"
   TF_IN_AUTOMATION: "true"

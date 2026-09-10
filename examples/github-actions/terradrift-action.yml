@@ -31,6 +31,6 @@ jobs:
         with:
           terraform_wrapper: false
       - name: Drift scan
-        uses: niravraychura/terradrift@v0.4.1
+        uses: niravraychura/terradrift@v1.0.0
         with:
           directory: ./terraform/prod
