@@ -150,17 +150,28 @@ func writeScanReport(stdout io.Writer, scanReport report.DriftReport, format out
 }
 
 func writeMultiScanReport(stdout io.Writer, aggregate multiScanReport, format outputFormat) error {
-	if format == outputFormatPrometheus {
+	switch format {
+	case outputFormatPrometheus:
 		return writePrometheusMultiScan(stdout, aggregate)
-	}
-	if format == outputFormatJSON {
+	case outputFormatJSON:
 		encoder := json.NewEncoder(stdout)
 		encoder.SetIndent("", "  ")
 		if err := encoder.Encode(aggregate); err != nil {
 			return fmt.Errorf("write scan output: %w", err)
 		}
 		return nil
+	case outputFormatJUnit:
+		return writeMultiScanJUnit(stdout, aggregate)
+	case outputFormatSARIF:
+		return writeMultiScanSARIF(stdout, aggregate)
+	case outputFormatTable:
+		return writeMultiScanTable(stdout, aggregate)
+	default:
+		return fmt.Errorf("unsupported output format %q; supported values: table, json, junit, sarif, prometheus", format)
 	}
+}
+
+func writeMultiScanTable(stdout io.Writer, aggregate multiScanReport) error {
 	for _, line := range []string{
 		"TerraDrift multi-root scan complete",
 		fmt.Sprintf("Status: %s", aggregate.Status),
@@ -186,6 +197,70 @@ func writeMultiScanReport(stdout io.Writer, aggregate multiScanReport, format ou
 				return fmt.Errorf("write scan output: %w", err)
 			}
 		}
+	}
+	return nil
+}
+
+func writeMultiScanJUnit(stdout io.Writer, aggregate multiScanReport) error {
+	suite := junitTestSuite{Name: "terradrift", Tests: len(aggregate.Roots), TestCases: make([]junitTestCase, 0, len(aggregate.Roots))}
+	for _, root := range aggregate.Roots {
+		name := root.Directory
+		if name == "" {
+			name = "root"
+		}
+		testCase := junitTestCase{Name: name, ClassName: "terradrift"}
+		switch {
+		case root.Error != "":
+			suite.Failures++
+			testCase.Failure = &junitFailure{Message: root.Error}
+		case report.HasChanges(root.Report.Status):
+			suite.Failures++
+			testCase.Failure = &junitFailure{Message: fmt.Sprintf("%d resources changed", root.Report.TotalChangedResources)}
+		}
+		suite.TestCases = append(suite.TestCases, testCase)
+	}
+	if _, err := io.WriteString(stdout, xml.Header); err != nil {
+		return fmt.Errorf("write scan output: %w", err)
+	}
+	if err := xml.NewEncoder(stdout).Encode(junitTestSuites{Suites: []junitTestSuite{suite}}); err != nil {
+		return fmt.Errorf("write scan output: %w", err)
+	}
+	return nil
+}
+
+func writeMultiScanSARIF(stdout io.Writer, aggregate multiScanReport) error {
+	results := make([]sarifResult, 0)
+	for _, root := range aggregate.Roots {
+		if root.Error != "" {
+			results = append(results, sarifResult{RuleID: "terradrift.failed", Level: "error", Message: sarifMessage{Text: fmt.Sprintf("%s: %s", root.Directory, root.Error)}})
+			continue
+		}
+		ruleID, prefix := "terradrift.drift", "Terraform drift"
+		if root.Report.Status == report.ScanStatusChangesDetected {
+			ruleID, prefix = "terradrift.change", "Terraform configuration change"
+		}
+		for _, change := range root.Report.ResourceChanges {
+			if change.Ignored {
+				continue
+			}
+			results = append(results, sarifResult{RuleID: ruleID, Level: "error", Message: sarifMessage{Text: fmt.Sprintf("%s: %s %s", prefix, root.Directory, change.Address)}})
+		}
+	}
+	encoder := json.NewEncoder(stdout)
+	encoder.SetIndent("", "  ")
+	if err := encoder.Encode(sarifLog{
+		Schema:  "https://json.schemastore.org/sarif-2.1.0.json",
+		Version: "2.1.0",
+		Runs: []sarifRun{{
+			Tool: sarifTool{Driver: sarifDriver{Name: "TerraDrift", Rules: []sarifRule{
+				{ID: "terradrift.drift", Name: "Terraform drift detected"},
+				{ID: "terradrift.change", Name: "Terraform changes detected"},
+				{ID: "terradrift.failed", Name: "Terraform scan failed"},
+			}}},
+			Results: results,
+		}},
+	}); err != nil {
+		return fmt.Errorf("write scan output: %w", err)
 	}
 	return nil
 }

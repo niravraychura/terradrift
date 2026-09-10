@@ -27,6 +27,19 @@ func errTerraformExecRequired() error {
 	return errors.New("terraform execution is required in CI; pass --terraform-exec (or set terraform_exec in config)")
 }
 
+func requireCIAdapterAllowlist(policyCommand, costCommand, auditCommand string, allowedCommands, trustedCommandDirs []string) error {
+	if !terraformExecRequired() {
+		return nil
+	}
+	if strings.TrimSpace(policyCommand) == "" && strings.TrimSpace(costCommand) == "" && strings.TrimSpace(auditCommand) == "" {
+		return nil
+	}
+	if len(allowedCommands) == 0 || len(trustedCommandDirs) == 0 {
+		return errors.New("CI requires allowed_commands and trusted_command_dirs when policy, cost, or audit adapters are set")
+	}
+	return nil
+}
+
 func rejectDeadGitHubNotify(notifyTarget string) error {
 	if strings.EqualFold(strings.TrimSpace(notifyTarget), "github") {
 		return errors.New("--notify github is not supported; use --github-pr or --github-issue-after")

@@ -56,8 +56,8 @@ Do not commit cloud credentials, webhook URLs, or `GITHUB_TOKEN` values. Keep th
 ### Policy, adapters, and publish gate
 
 - External policy, cost, and audit commands never use an implicit shell; pass arguments with repeated `--*-arg` flags.
-- For CI, set both `allowed_commands` and `trusted_command_dirs`. Empty allowlists mean **local trust only**.
-- Policy runs as a **publish gate**: on failure, TerraDrift does not write history, dashboards, artifacts, or notifications for that scan (stdout may already have been emitted).
+- For CI, set both `allowed_commands` and `trusted_command_dirs`. Empty allowlists mean **local trust only**. GitHub Actions (`GITHUB_ACTIONS=true`) and `TERRADRIFT_REQUIRE_EXEC` reject policy/cost/audit adapters unless both lists are set.
+- Policy runs as a **publish gate**: on failure, TerraDrift does not write history, dashboards, artifacts, or notifications for that scan. **Stdout is already emitted** before policy, so treat a non-zero exit as the gate — do not assume a printed report means policy passed.
 - Adapter stdout/stderr capture fails closed when size budgets are exceeded.
 
 ### Locks
@@ -89,7 +89,7 @@ Do not commit cloud credentials, webhook URLs, or `GITHUB_TOKEN` values. Keep th
 1. Use `--terraform-exec` (or config) for real scans; do not treat bootstrap output as drift truth. CI (`GITHUB_ACTIONS` / `TERRADRIFT_REQUIRE_EXEC`) fails closed without it.
 2. Prefer `--redact-paths` and `--workspace-root` in CI.
 3. Keep webhook URLs and tokens in secrets; never commit them.
-4. Set `allowed_commands` and `trusted_command_dirs` for any policy/cost/audit adapters in CI.
+4. Set `allowed_commands` and `trusted_command_dirs` for any policy/cost/audit adapters in CI. CI fails closed if those lists are empty while an adapter is configured.
 5. Leave `--attribute-values` off unless you intentionally need safe values in persisted/automation channels.
 6. Treat policy failure as a failed publish, not only a log line.
 7. For multi-runner CI, do not assume the local file lock coordinates across hosts unless they share the lock path on a shared filesystem.

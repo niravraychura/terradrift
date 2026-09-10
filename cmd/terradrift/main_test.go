@@ -648,6 +648,44 @@ func TestWriteScanReportJUnit(t *testing.T) {
 	}
 }
 
+func TestWriteMultiScanJUnitAndSARIF(t *testing.T) {
+	aggregate := multiScanReport{
+		Status: multiScanStatusPartial,
+		Roots: []multiScanRoot{
+			{
+				Directory: "terraform/prod",
+				Report: report.DriftReport{
+					Status:                report.ScanStatusDriftDetected,
+					TotalChangedResources: 2,
+					ResourceChanges:       []report.ResourceChange{{Address: "aws_instance.web"}},
+				},
+			},
+			{Directory: "terraform/broken", Error: "init failed"},
+		},
+	}
+	var junitOut bytes.Buffer
+	if err := writeMultiScanReport(&junitOut, aggregate, outputFormatJUnit); err != nil {
+		t.Fatalf("junit: %v", err)
+	}
+	got := junitOut.String()
+	for _, want := range []string{`tests="2" failures="2"`, `name="terraform/prod"`, `name="terraform/broken"`, `init failed`} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("expected JUnit to contain %q, got %q", want, got)
+		}
+	}
+	var sarifOut bytes.Buffer
+	if err := writeMultiScanReport(&sarifOut, aggregate, outputFormatSARIF); err != nil {
+		t.Fatalf("sarif: %v", err)
+	}
+	var log sarifLog
+	if err := json.Unmarshal(sarifOut.Bytes(), &log); err != nil {
+		t.Fatalf("sarif json: %v", err)
+	}
+	if len(log.Runs) != 1 || len(log.Runs[0].Results) != 2 {
+		t.Fatalf("expected 2 SARIF results, got %#v", log.Runs)
+	}
+}
+
 func TestWriteScanReportSARIF(t *testing.T) {
 	var output bytes.Buffer
 	err := writeScanReport(&output, report.DriftReport{ResourceChanges: []report.ResourceChange{{Address: "aws_instance.web"}}}, outputFormatSARIF)
@@ -1054,6 +1092,63 @@ func TestScanAllHelpOmitsPlanFile(t *testing.T) {
 	}
 	if strings.Contains(stdout, "--plan-file") {
 		t.Fatal("scan-all should not advertise --plan-file")
+	}
+	for _, format := range []string{"junit", "sarif"} {
+		if !strings.Contains(stdout, format) {
+			t.Fatalf("expected scan-all help to list %s output", format)
+		}
+	}
+}
+
+func TestScanAllRefusesSharedMultiRootDelivery(t *testing.T) {
+	root := t.TempDir()
+	for _, name := range []string{"development", "production"} {
+		if err := os.Mkdir(filepath.Join(root, name), 0o700); err != nil {
+			t.Fatalf("mkdir: %v", err)
+		}
+	}
+	manifest := filepath.Join(root, "roots.txt")
+	if err := os.WriteFile(manifest, []byte("development\nproduction\n"), 0o600); err != nil {
+		t.Fatalf("manifest: %v", err)
+	}
+	t.Setenv("GITHUB_TOKEN", "token")
+	for _, extra := range [][]string{
+		{"--dashboard-html", filepath.Join(t.TempDir(), "dash.html")},
+		{"--artifact-url", "https://example.test/artifact"},
+		{"--github-repository", "example/terradrift", "--github-pr", "1"},
+	} {
+		args := append([]string{"scan-all", "--manifest", manifest}, extra...)
+		_, _, err := executeCommand(args...)
+		if err == nil || !strings.Contains(err.Error(), "refuses shared") {
+			t.Fatalf("expected shared delivery refusal for %v, got %v", extra, err)
+		}
+	}
+}
+
+func TestScanAllJUnitIncludesFailedRoot(t *testing.T) {
+	root := t.TempDir()
+	ok := filepath.Join(root, "ok")
+	if err := os.Mkdir(ok, 0o700); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	manifest := filepath.Join(root, "roots.txt")
+	if err := os.WriteFile(manifest, []byte("ok\nmissing\n"), 0o600); err != nil {
+		t.Fatalf("manifest: %v", err)
+	}
+	stdout, _, err := executeCommand("scan-all", "--manifest", manifest, "--output", "junit", "--concurrency", "1")
+	if err == nil {
+		t.Fatal("expected failed root to fail the scan-all")
+	}
+	if !strings.Contains(stdout, `failures="1"`) || !strings.Contains(stdout, "/ok") || !strings.Contains(stdout, "/missing") {
+		t.Fatalf("expected junit aggregate for ok+missing, got %q err=%v", stdout, err)
+	}
+}
+
+func TestScanRequiresAdapterAllowlistInCI(t *testing.T) {
+	t.Setenv("GITHUB_ACTIONS", "true")
+	_, _, err := executeCommand("scan", "-d", t.TempDir(), "--policy-command", "true")
+	if err == nil || !strings.Contains(err.Error(), "allowed_commands") {
+		t.Fatalf("expected CI adapter allowlist error, got %v", err)
 	}
 }
 

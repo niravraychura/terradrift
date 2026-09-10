@@ -202,6 +202,9 @@ input, and notifications store attribute paths only unless --attribute-values is
 			if err != nil {
 				return err
 			}
+			if err := requireCIAdapterAllowlist(policyCommand, costCommand, auditCommand, allowedCommands, trustedCommandDirs); err != nil {
+				return err
+			}
 			for _, external := range []string{costCommand, policyCommand, auditCommand} {
 				if external != "" {
 					if err := command.Validate(external, allowedCommands, trustedCommandDirs); err != nil {
