@@ -47,13 +47,20 @@ exit 2
 	}
 }
 
+func TestWithNoColorInsertsAfterSubcommand(t *testing.T) {
+	got := strings.Join(withNoColor([]string{"init", "-input=false"}), " ")
+	if got != "init -no-color -input=false" {
+		t.Fatalf("got %q", got)
+	}
+}
+
 func TestCLIRunnerPlanUsesModeArguments(t *testing.T) {
 	for _, test := range []struct {
 		mode PlanMode
 		want string
 	}{
-		{PlanModeRefreshOnly, "-no-color plan -input=false -refresh-only -detailed-exitcode -out plan.tfplan -lock=true -lock-timeout=10m0s"},
-		{PlanModeNormal, "-no-color plan -input=false -detailed-exitcode -out plan.tfplan -lock=true -lock-timeout=10m0s"},
+		{PlanModeRefreshOnly, "plan -no-color -input=false -refresh-only -detailed-exitcode -out plan.tfplan -lock=true -lock-timeout=10m0s"},
+		{PlanModeNormal, "plan -no-color -input=false -detailed-exitcode -out plan.tfplan -lock=true -lock-timeout=10m0s"},
 	} {
 		t.Run(string(test.mode), func(t *testing.T) {
 			runner := NewCLIRunner(writeTerraformStub(t, `#!/bin/sh
@@ -92,7 +99,7 @@ printf '%s\n' "$*" >> "$TERRADRIFT_COMMANDS"
 	if len(lines) != 2 {
 		t.Fatalf("expected workspace select then plan, got %q", data)
 	}
-	if lines[0] != "-no-color -input=false workspace select staging" {
+	if lines[0] != "workspace -no-color select -input=false staging" {
 		t.Fatalf("workspace command = %q", lines[0])
 	}
 	if !strings.Contains(lines[1], "-var-file=prod.tfvars") || !strings.Contains(lines[1], "-var=region=us-east-1") {
@@ -152,7 +159,7 @@ printf '%s' "$*" > "$TERRADRIFT_ARGS"
 	if err != nil {
 		t.Fatalf("read arguments: %v", err)
 	}
-	if string(data) != "-no-color init -input=false -backend=true -lockfile=readonly" {
+	if string(data) != "init -no-color -input=false -backend=true -lockfile=readonly" {
 		t.Fatalf("unexpected init arguments: %q", data)
 	}
 }
@@ -171,7 +178,7 @@ printf '%s' "$*" > "$TERRADRIFT_ARGS"
 	if err != nil {
 		t.Fatalf("read arguments: %v", err)
 	}
-	if string(data) != "-no-color plan -input=false -detailed-exitcode -out plan.tfplan -lock=false" {
+	if string(data) != "plan -no-color -input=false -detailed-exitcode -out plan.tfplan -lock=false" {
 		t.Fatalf("unexpected plan arguments: %q", data)
 	}
 }

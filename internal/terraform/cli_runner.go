@@ -107,7 +107,7 @@ func (runner CLIRunner) selectWorkspace(ctx context.Context, directory string) e
 	if workspace == "" {
 		return nil
 	}
-	_, err := runner.run(ctx, directory, "-input=false", "workspace", "select", workspace)
+	_, err := runner.run(ctx, directory, "workspace", "select", "-input=false", workspace)
 	if err != nil {
 		return fmt.Errorf("terraform workspace select %q: %w", workspace, err)
 	}
@@ -162,7 +162,7 @@ func redactModuleSource(source string) string {
 }
 
 func (runner CLIRunner) run(ctx context.Context, directory string, args ...string) ([]byte, error) {
-	cmd := exec.CommandContext(ctx, runner.Path, append([]string{"-no-color"}, args...)...)
+	cmd := exec.CommandContext(ctx, runner.Path, withNoColor(args)...)
 	cmd.Dir = directory
 	cmd.Env = withTerraformAutomation(os.Environ())
 
@@ -186,6 +186,17 @@ func (runner CLIRunner) run(ctx context.Context, directory string, args ...strin
 		return stdout.Bytes(), fmt.Errorf("terraform %v: command output exceeded %d bytes", args, maxCommandOutputBytes)
 	}
 	return stdout.Bytes(), nil
+}
+
+// withNoColor inserts -no-color after the Terraform subcommand so wrappers that
+// require argv[1] to be init/plan/show (hashicorp/setup-terraform) keep working.
+func withNoColor(args []string) []string {
+	if len(args) == 0 {
+		return []string{"-no-color"}
+	}
+	out := make([]string, 0, len(args)+1)
+	out = append(out, args[0], "-no-color")
+	return append(out, args[1:]...)
 }
 
 func withTerraformAutomation(environ []string) []string {
