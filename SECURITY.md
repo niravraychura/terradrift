@@ -76,7 +76,7 @@ Do not commit cloud credentials, webhook URLs, or `GITHUB_TOKEN` values. Keep th
 
 ### Local API (`serve`)
 
-- `terradrift serve` binds to loopback only and has no authentication. Do not expose it through a tunnel or public interface without your own front-door controls. Multi-tenant auth is out of scope.
+- `terradrift serve` binds to loopback only and has no authentication. Do not expose it through a tunnel or public interface without your own front-door controls. Multi-tenant auth is out of scope. Dashboard HTML includes a Content-Security-Policy that allows inline CSS and forbids scripts; `serve` also sends that header on the HTML page.
 
 ### Supply chain and CI
 
