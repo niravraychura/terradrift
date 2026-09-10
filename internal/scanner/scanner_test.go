@@ -320,7 +320,8 @@ func TestScanSkipInitSkipsRunnerInit(t *testing.T) {
 		planExit: 0,
 		showJSON: []byte(`{"prior_state":{"values":{"root_module":{"resources":[]}}},"resource_changes":[]}`),
 	}
-	result, err := Scan(context.Background(), Options{Directory: t.TempDir(), Runner: runner, SkipInit: true})
+	directory := initializedTerraformDir(t)
+	result, err := Scan(context.Background(), Options{Directory: directory, Runner: runner, SkipInit: true})
 	if err != nil {
 		t.Fatalf("scan: %v", err)
 	}
@@ -330,4 +331,36 @@ func TestScanSkipInitSkipsRunnerInit(t *testing.T) {
 	if result.Outcome != OutcomeNoDrift {
 		t.Fatalf("expected no drift, got %q", result.Outcome)
 	}
+}
+
+func TestScanSkipInitFailsWithoutTerraformDir(t *testing.T) {
+	runner := &fakeRunner{planExit: 0, showJSON: []byte(`{"resource_changes":[]}`)}
+	_, err := Scan(context.Background(), Options{Directory: t.TempDir(), Runner: runner, SkipInit: true})
+	if err == nil || !strings.Contains(err.Error(), "--skip-terraform-init") {
+		t.Fatalf("expected skip-init failure, got %v", err)
+	}
+	if runner.initCalled {
+		t.Fatal("expected Init not to run when skip-init is invalid")
+	}
+}
+
+func TestScanSkipInitFailsWithoutProvidersOrModules(t *testing.T) {
+	directory := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(directory, ".terraform"), 0o700); err != nil {
+		t.Fatalf("create .terraform fixture: %v", err)
+	}
+	runner := &fakeRunner{planExit: 0, showJSON: []byte(`{"resource_changes":[]}`)}
+	_, err := Scan(context.Background(), Options{Directory: directory, Runner: runner, SkipInit: true})
+	if err == nil || !strings.Contains(err.Error(), "providers") {
+		t.Fatalf("expected uninitialized .terraform failure, got %v", err)
+	}
+}
+
+func initializedTerraformDir(t *testing.T) string {
+	t.Helper()
+	directory := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(directory, ".terraform", "providers"), 0o700); err != nil {
+		t.Fatalf("create .terraform fixture: %v", err)
+	}
+	return directory
 }

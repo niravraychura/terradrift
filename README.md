@@ -9,7 +9,7 @@ Run it on a laptop, in CI, or on a cron runner. No SaaS required.
 
 TerraDrift runs `terraform plan` (or OpenTofu), turns the plan into a clear report, and can notify Slack/Teams/webhooks, write history/dashboards, and gate on policy.
 
-> **Important:** Always pass `--terraform-exec` for a real drift scan. Without it, TerraDrift only checks the directory and emits a bootstrap placeholder report.
+> **Important:** Always pass `--terraform-exec` for a real drift scan. GitHub Actions and `TERRADRIFT_REQUIRE_EXEC` fail without it. Without `--terraform-exec` locally, TerraDrift only checks the directory and emits a bootstrap placeholder report.
 
 ---
 
@@ -208,6 +208,8 @@ terradrift scan -d ./terraform/prod --terraform-exec \
   --var 'region=us-east-1'
 ```
 
+Terraform `plan` waits up to `--state-lock-timeout` (default `10m`) for the remote state lock. Use `--state-lock=false` only when a scheduled drift job must not block apply.
+
 ### Policy publish gate (before history / notify)
 
 ```bash
@@ -330,10 +332,12 @@ Do not bake cloud credentials into the image.
 With `--terraform-exec`, each scan roughly:
 
 1. Validates the directory and takes a **local** scan lock (`.terradrift-scan.lock` on that host).
-2. Runs `terraform init` (unless `--skip-terraform-init`) with `-lockfile=readonly` — a committed `.terraform.lock.hcl` is required.
-3. Runs `plan` (`refresh-only` or `normal`) with `-detailed-exitcode`.
-4. Runs `terraform show -json`, parses the plan, builds the TerraDrift report.
+2. Runs `terraform init` (unless `--skip-terraform-init`) with `-lockfile=readonly` — a committed `.terraform.lock.hcl` is required. `--skip-terraform-init` fails closed unless `.terraform/providers` or `.terraform/modules/modules.json` exists.
+3. Runs `plan` (`refresh-only` or `normal`) with `-input=false`, `-detailed-exitcode`, and `-lock-timeout` (default `10m`). Use `--state-lock=false` only when a scheduled drift job must not contend with apply.
+4. Runs `terraform show -json`, parses the plan, builds the TerraDrift report. Incomplete or errored plan JSON fails the scan.
 5. Writes stdout, then optional policy gate → history / dashboard / notifications.
+
+In GitHub Actions (`GITHUB_ACTIONS=true`) or when `TERRADRIFT_REQUIRE_EXEC` is set, `--terraform-exec` is required. Local bootstrap without it still prints a warning.
 
 `refresh-only` statuses: `no_drift` / `drift_detected`.  
 `normal` statuses: `no_changes` / `changes_detected` (config drift is not labelled as infrastructure drift).

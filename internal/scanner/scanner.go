@@ -316,6 +316,9 @@ func runTerraformScan(ctx context.Context, runner terraform.Runner, directory st
 			failReport(&scanReport, err)
 			return scanReport, fmt.Errorf("terraform init: %s", scanReport.ErrorMessage)
 		}
+	} else if err := requireInitializedTerraform(directory); err != nil {
+		failReport(&scanReport, err)
+		return scanReport, fmt.Errorf("skip terraform init: %s", scanReport.ErrorMessage)
 	}
 	if inventoryRunner, ok := runner.(interface {
 		Inventory(context.Context, string) (terraform.Inventory, error)
@@ -399,6 +402,22 @@ func failReport(scanReport *report.DriftReport, err error) {
 	scanReport.Status = report.ScanStatusFailed
 	scanReport.CompletedAt = time.Now().UTC()
 	scanReport.ErrorMessage = redact.String(err.Error())
+}
+
+func requireInitializedTerraform(directory string) error {
+	terraformDir := filepath.Join(directory, ".terraform")
+	info, err := os.Stat(terraformDir)
+	if err != nil || !info.IsDir() {
+		return fmt.Errorf("--skip-terraform-init requires an initialized .terraform directory")
+	}
+	providers := filepath.Join(terraformDir, "providers")
+	if st, err := os.Stat(providers); err == nil && st.IsDir() {
+		return nil
+	}
+	if _, err := os.Stat(filepath.Join(terraformDir, "modules", "modules.json")); err == nil {
+		return nil
+	}
+	return fmt.Errorf("--skip-terraform-init requires .terraform/providers or .terraform/modules/modules.json")
 }
 
 func securePlanFile(directory string) (string, func() error, error) {

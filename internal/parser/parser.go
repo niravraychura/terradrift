@@ -74,6 +74,10 @@ func ParsePlanReader(reader io.Reader, mode terraform.PlanMode) ([]report.Resour
 	var haveResourceDrift bool
 	var outputChanges map[string]terraformChange
 	var relevantAttrs []terraformRelevantAttr
+	var haveComplete bool
+	var complete bool
+	var errored bool
+	var deferredCount int
 	priorTotal := 0
 	priorExact := false
 
@@ -104,6 +108,22 @@ func ParsePlanReader(reader io.Reader, mode terraform.PlanMode) ([]report.Resour
 			}
 		case "prior_state":
 			priorTotal, priorExact, err = countPriorStateFromDecoder(decoder)
+		case "complete":
+			haveComplete = true
+			err = decoder.Decode(&complete)
+			if err != nil {
+				err = fmt.Errorf("parse terraform plan complete: %w", err)
+			}
+		case "errored":
+			err = decoder.Decode(&errored)
+			if err != nil {
+				err = fmt.Errorf("parse terraform plan errored: %w", err)
+			}
+		case "deferred_changes":
+			deferredCount, err = countJSONArray(decoder)
+			if err != nil {
+				err = fmt.Errorf("parse terraform deferred changes: %w", err)
+			}
 		default:
 			err = skipValue(decoder)
 		}
@@ -113,6 +133,15 @@ func ParsePlanReader(reader io.Reader, mode terraform.PlanMode) ([]report.Resour
 	}
 	if _, err := decoder.Token(); err != nil {
 		return nil, nil, 0, false, fmt.Errorf("parse terraform plan JSON: %w", err)
+	}
+	if errored {
+		return nil, nil, 0, false, fmt.Errorf("terraform plan JSON reports errored=true")
+	}
+	if haveComplete && !complete {
+		return nil, nil, 0, false, fmt.Errorf("terraform plan JSON reports complete=false")
+	}
+	if deferredCount > 0 {
+		return nil, nil, 0, false, fmt.Errorf("terraform plan JSON has %d deferred changes", deferredCount)
 	}
 
 	selected := resourceChanges
@@ -493,6 +522,28 @@ func resourceModeFromDecoder(decoder *json.Decoder) (string, error) {
 		return "", err
 	}
 	return mode, nil
+}
+
+func countJSONArray(decoder *json.Decoder) (int, error) {
+	token, err := decoder.Token()
+	if err != nil {
+		return 0, err
+	}
+	if token == nil {
+		return 0, nil
+	}
+	if token != json.Delim('[') {
+		return 0, fmt.Errorf("expected array")
+	}
+	count := 0
+	for decoder.More() {
+		if err := skipValue(decoder); err != nil {
+			return 0, err
+		}
+		count++
+	}
+	_, err = decoder.Token()
+	return count, err
 }
 
 // skipValue discards the next JSON value from decoder without retaining it.

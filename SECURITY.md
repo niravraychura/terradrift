@@ -25,7 +25,7 @@ When `--terraform-exec` is enabled, TerraDrift runs Terraform/OpenTofu locally. 
 - `terraform plan` can contact cloud APIs using credentials available to the process
 - plan and state data can contain sensitive infrastructure values
 
-Without `--terraform-exec`, TerraDrift only validates the directory and emits a bootstrap placeholder report (with a warning). That mode is for wiring checks, not production drift detection.
+Without `--terraform-exec`, TerraDrift only validates the directory and emits a bootstrap placeholder report (with a warning). That mode is for wiring checks, not production drift detection. In GitHub Actions (`GITHUB_ACTIONS=true`) or when `TERRADRIFT_REQUIRE_EXEC` is set, omitting `--terraform-exec` fails the scan.
 
 Do not commit cloud credentials, webhook URLs, or `GITHUB_TOKEN` values. Keep them in CI secrets or a secret manager.
 
@@ -65,6 +65,11 @@ Do not commit cloud credentials, webhook URLs, or `GITHUB_TOKEN` values. Keep th
 - Terraform-backed scans use a local `.terradrift-scan.lock` (`--lock-backend local` only) to prevent overlapping scans of the same root on a **single host**.
 - Shared filesystems can share that lock file across runners on the volume. Redis/Postgres distributed backends are out of scope.
 - If a lock already exists, TerraDrift reports the recorded PID and whether that process appears to be running. Remove a stale lock only after confirming no scan is active.
+- `terraform plan` waits for the **remote state lock** (`-lock-timeout`, default 10m). Do not `force-unlock`. `--state-lock=false` skips that lock and can race with apply; it is opt-in for scheduled drift only.
+
+### Plan JSON honesty
+
+- Incomplete Terraform 1.14+ plans (`complete=false`, `errored=true`, or non-empty `deferred_changes`) fail the scan. They are never reported as `no_drift`.
 
 ### Local API (`serve`)
 
@@ -80,7 +85,7 @@ Do not commit cloud credentials, webhook URLs, or `GITHUB_TOKEN` values. Keep th
 
 ## Operator checklist
 
-1. Use `--terraform-exec` (or config) for real scans; do not treat bootstrap output as drift truth.
+1. Use `--terraform-exec` (or config) for real scans; do not treat bootstrap output as drift truth. CI (`GITHUB_ACTIONS` / `TERRADRIFT_REQUIRE_EXEC`) fails closed without it.
 2. Prefer `--redact-paths` and `--workspace-root` in CI.
 3. Keep webhook URLs and tokens in secrets; never commit them.
 4. Set `allowed_commands` and `trusted_command_dirs` for any policy/cost/audit adapters in CI.

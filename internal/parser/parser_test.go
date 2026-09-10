@@ -54,6 +54,33 @@ func TestParsePlanRejectsInvalidJSON(t *testing.T) {
 	}
 }
 
+func TestParsePlanFailsClosedOnIncompletePlans(t *testing.T) {
+	tests := []struct {
+		name string
+		plan string
+		want string
+	}{
+		{name: "errored", plan: `{"errored":true,"resource_changes":[]}`, want: "errored=true"},
+		{name: "incomplete", plan: `{"complete":false,"resource_changes":[]}`, want: "complete=false"},
+		{name: "deferred", plan: `{"deferred_changes":[{"reason":"resource_config_unknown"}],"resource_changes":[]}`, want: "deferred changes"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			_, _, _, _, err := ParsePlan([]byte(test.plan), terraform.PlanModeRefreshOnly)
+			if err == nil || !strings.Contains(err.Error(), test.want) {
+				t.Fatalf("expected %q, got %v", test.want, err)
+			}
+		})
+	}
+}
+
+func TestParsePlanAcceptsCompleteTrue(t *testing.T) {
+	_, _, _, _, err := ParsePlan([]byte(`{"complete":true,"errored":false,"deferred_changes":[],"resource_changes":[]}`), terraform.PlanModeRefreshOnly)
+	if err != nil {
+		t.Fatalf("expected complete plan to parse, got %v", err)
+	}
+}
+
 func BenchmarkParsePlanLargePlan(b *testing.B) {
 	plan := largePlanFixture(1000)
 	b.ResetTimer()

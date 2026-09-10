@@ -33,6 +33,12 @@ func executeCommand(args ...string) (string, string, error) {
 	return stdout.String(), stderr.String(), err
 }
 
+func TestMain(m *testing.M) {
+	_ = os.Unsetenv("GITHUB_ACTIONS")
+	_ = os.Unsetenv("TERRADRIFT_REQUIRE_EXEC")
+	os.Exit(m.Run())
+}
+
 func TestVersionFlag(t *testing.T) {
 	stdout, _, err := executeCommand("--version")
 	if err != nil {
@@ -978,7 +984,7 @@ func TestScanHelpIncludesAttributeValuesAndWorkspace(t *testing.T) {
 	if err != nil {
 		t.Fatalf("scan help: %v", err)
 	}
-	for _, flag := range []string{"--attribute-values", "--workspace", "--var-file", "--var"} {
+	for _, flag := range []string{"--attribute-values", "--workspace", "--var-file", "--var", "--state-lock", "--state-lock-timeout"} {
 		if !strings.Contains(stdout, flag) {
 			t.Fatalf("expected scan help to contain %q", flag)
 		}
@@ -999,6 +1005,34 @@ func TestScanRejectsUnsupportedNotificationTarget(t *testing.T) {
 	_, _, err := executeCommand("scan", "-d", t.TempDir(), "--notify", "email")
 	if err == nil || !strings.Contains(err.Error(), "unsupported notification target") {
 		t.Fatalf("expected unsupported notification target error, got %v", err)
+	}
+}
+
+func TestScanRejectsNotifyGitHub(t *testing.T) {
+	t.Setenv("GITHUB_TOKEN", "token")
+	_, _, err := executeCommand("scan", "-d", t.TempDir(), "--notify", "github")
+	if err == nil || !strings.Contains(err.Error(), "--github-pr") {
+		t.Fatalf("expected --notify github to point at GitHub flags, got %v", err)
+	}
+}
+
+func TestScanRequiresTerraformExecInCI(t *testing.T) {
+	t.Setenv("GITHUB_ACTIONS", "true")
+	_, _, err := executeCommand("scan", "-d", t.TempDir())
+	if err == nil || !strings.Contains(err.Error(), "--terraform-exec") {
+		t.Fatalf("expected CI without terraform-exec to fail, got %v", err)
+	}
+}
+
+func TestScanAllRequiresTerraformExecWhenEnvSet(t *testing.T) {
+	t.Setenv("TERRADRIFT_REQUIRE_EXEC", "1")
+	manifest := filepath.Join(t.TempDir(), "roots.txt")
+	if err := os.WriteFile(manifest, []byte(".\n"), 0o600); err != nil {
+		t.Fatalf("write manifest: %v", err)
+	}
+	_, _, err := executeCommand("scan-all", "--manifest", manifest)
+	if err == nil || !strings.Contains(err.Error(), "--terraform-exec") {
+		t.Fatalf("expected require-exec without terraform-exec to fail, got %v", err)
 	}
 }
 
