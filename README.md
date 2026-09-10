@@ -234,6 +234,20 @@ terradrift scan -d ./terraform/prod --terraform-exec \
   --notify webhook --webhook-url "$WEBHOOK_URL"
 ```
 
+PagerDuty Events API v2 and Opsgenie are **not** first-party notifiers. Map the webhook JSON in an adapter you host: [`examples/webhooks`](examples/webhooks).
+
+### Approvals vs CI exit code
+
+`terradrift approve` writes a **review-only** artifact. `--approval-file` attaches it to a later report for audit. It does **not** suppress exit **2**. To pass CI while known drift remains, use `ignore_rules` / `baseline_rules` (owner, reason, expiry). Out of scope: auto-apply.
+
+```bash
+terradrift approve \
+  --report report.json \
+  --owner platform \
+  --reason "reviewed, tracking ticket" \
+  --expires-at 2030-01-01T00:00:00Z
+```
+
 ### History + HTML dashboard
 
 ```bash
@@ -432,6 +446,7 @@ Compare both modes when unsure whether a finding is out-of-band change vs unappl
 | --- | --- |
 | GitHub Action | [docs/GITHUB_ACTION.md](docs/GITHUB_ACTION.md) |
 | GitLab CI example | [examples/gitlab-ci/README.md](examples/gitlab-ci/README.md) |
+| PagerDuty / Opsgenie webhook mapping | [examples/webhooks](examples/webhooks/README.md) |
 | vs plan / driftctl / HCP / rootsami | [docs/COMPARE.md](docs/COMPARE.md) |
 | Architecture & report JSON | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
 | Roadmap / out of scope | [docs/ROADMAP.md](docs/ROADMAP.md) |
@@ -441,7 +456,7 @@ Compare both modes when unsure whether a finding is out-of-band change vs unappl
 | Audit adapters | [docs/AUDIT_ADAPTERS.md](docs/AUDIT_ADAPTERS.md) |
 | All `scan` flags | `terradrift scan --help` |
 
-Advanced features (baselines, ignore rules with exact or glob addresses like `module.vpc.*`, owner routing, GitHub PR comments, persistent GitHub drift issues, approvals, artifact upload) are configured via `.terradrift.json` / flags — see `terradrift scan --help` / `terradrift scan-all --help` and [examples/config](examples/config/README.md).
+Advanced features (baselines, ignore rules with exact or glob addresses like `module.vpc.*`, owner routing, GitHub PR comments, persistent GitHub drift issues, review-only approvals, artifact upload) are configured via `.terradrift.json` / flags — see `terradrift scan --help` / `terradrift scan-all --help` and [examples/config](examples/config/README.md). Approvals do not change the scan exit code; ignores/baselines are the CI pass path.
 
 ---
 

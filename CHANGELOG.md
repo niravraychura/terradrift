@@ -13,11 +13,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `--skip-if-open-pr` skips a root when an open GitHub PR in `--github-repository` changes files under that root (`status: skipped`, exit 0) (#103)
 - `scan-all --discover` treats `terragrunt.hcl` as a scan root; `--terragrunt-bin` (default `terragrunt`) is used for those roots so mixed Terraform/Terragrunt trees work (#93)
 - Dashboard report and index HTML include a strict Content-Security-Policy (inline CSS allowed; scripts forbidden) (#105)
+- PagerDuty Events API v2 and Opsgenie payload mapping from `--notify webhook` JSON (`examples/webhooks`) (#94)
 
 ### Changed
 
 - `--github-issue-after` upserts one issue per Terraform root + drift fingerprint and closes it when that root later scans clean (#100)
 - `terraform show -json` is piped into `ParsePlanReader` so the raw plan JSON is not held as a second full buffer (32 MiB fail-closed cap unchanged) (#104)
+- Document that `approve` / `--approval-file` is review-only; ignores/baselines are the CI pass path (exit 2 unchanged) (#92)
 
 ## [0.4.1] - 2026-09-10
 

@@ -6,6 +6,6 @@
 
 Each example sets `"$schema"` to [`docs/terradrift.schema.json`](../../docs/terradrift.schema.json) so editors can validate the file. `terradrift init` writes the same field.
 
-Ignore/baseline `address` values are exact Terraform addresses, or globs such as `module.vpc.*` (`*` / `?`, Go `path.Match`).
+Ignore/baseline `address` values are exact Terraform addresses, or globs such as `module.vpc.*` (`*` / `?`, Go `path.Match`). Those rules (owner, reason, expiry) are the CI pass path; `terradrift approve` / `--approval-file` is review-only and does not suppress exit 2.
 
 Copy an example to `.terradrift.json` and replace paths and adapter names. Keep webhook URLs and API tokens in environment variables or a secret manager, not in config files.

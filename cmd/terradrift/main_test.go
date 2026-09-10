@@ -479,6 +479,18 @@ func TestApproveCreatesSecureArtifact(t *testing.T) {
 	}
 }
 
+func TestApproveHelpStatesReviewOnly(t *testing.T) {
+	stdout, _, err := executeCommand("approve", "--help")
+	if err != nil {
+		t.Fatalf("approve help: %v", err)
+	}
+	for _, needle := range []string{"review-only", "suppress exit 2", "ignore_rules"} {
+		if !strings.Contains(stdout, needle) {
+			t.Fatalf("expected %q in approve help, got %q", needle, stdout)
+		}
+	}
+}
+
 func TestScanHelpIncludesSafetyFlags(t *testing.T) {
 	stdout, _, err := executeCommand("scan", "--help")
 	if err != nil {
