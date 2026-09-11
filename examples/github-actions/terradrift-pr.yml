@@ -34,7 +34,7 @@ jobs:
           restore-keys: terraform-plugins-${{ runner.os }}-
       - name: Install TerraDrift
         env:
-          TERRADRIFT_VERSION: v1.0.0
+          TERRADRIFT_VERSION: v1.1.0
         run: |
           curl -fsSLo install-terradrift.sh "https://raw.githubusercontent.com/niravraychura/terradrift/${TERRADRIFT_VERSION}/scripts/install.sh"
           PREFIX="${HOME}/.local" bash install-terradrift.sh
