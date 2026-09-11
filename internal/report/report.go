@@ -16,6 +16,11 @@ const (
 	ScanStatusSkipped         ScanStatus = "skipped"
 )
 
+const (
+	ChangeKindRefresh = "refresh"
+	ChangeKindConfig  = "config"
+)
+
 // AttributeChange describes one attribute path that differs between before and after.
 // Before/After are omitempty so paths-only persistence omits cleared values.
 type AttributeChange struct {
@@ -37,6 +42,7 @@ type ResourceChange struct {
 	RunbookURL         string            `json:"runbook_url,omitempty"`
 	CostImpact         string            `json:"cost_impact,omitempty"`
 	RiskLevel          string            `json:"risk_level,omitempty"`
+	ChangeKind         string            `json:"change_kind,omitempty"`
 	Owner              string            `json:"owner,omitempty"`
 	Provider           string            `json:"provider,omitempty"`
 	CloudProvider      string            `json:"cloud_provider,omitempty"`
@@ -83,6 +89,7 @@ type DriftReport struct {
 	Status                ScanStatus        `json:"status"`
 	Directory             string            `json:"directory"`
 	PlanMode              string            `json:"plan_mode"`
+	ConfigStatus          ScanStatus        `json:"config_status,omitempty"`
 	TotalResourcesChecked int               `json:"total_resources_checked"`
 	ResourcesCheckedExact bool              `json:"resources_checked_exact"`
 	TotalChangedResources int               `json:"total_changed_resources"`
@@ -100,4 +107,18 @@ type DriftReport struct {
 // HasChanges reports whether a completed scan contains active findings.
 func HasChanges(status ScanStatus) bool {
 	return status == ScanStatusDriftDetected || status == ScanStatusChangesDetected
+}
+
+// AttributeSides labels Terraform before/after for operators. Refresh-only is state vs remote; normal is state vs planned config.
+func AttributeSides(planMode string) string {
+	switch planMode {
+	case "refresh-only":
+		return "state -> remote"
+	case "normal":
+		return "state -> planned config"
+	case "both":
+		return "refresh: state -> remote; config: state -> planned config"
+	default:
+		return "before -> after"
+	}
 }

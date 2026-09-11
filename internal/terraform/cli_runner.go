@@ -70,6 +70,9 @@ func (runner CLIRunner) Plan(ctx context.Context, directory string, outputPath s
 	if err != nil {
 		return 1, err
 	}
+	if mode == PlanModeBoth {
+		return 1, fmt.Errorf("plan mode both is not a terraform plan flag")
+	}
 	if err := runner.selectWorkspace(ctx, directory); err != nil {
 		return 1, err
 	}

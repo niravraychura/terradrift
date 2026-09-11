@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `--plan-mode both` runs refresh-only then a normal plan and labels findings `change_kind` (`refresh` or `config`) with optional `config_status` (#155)
+- GitHub Actions jobs write a paths-only `$GITHUB_STEP_SUMMARY` (#154)
+
+### Changed
+
+- Slack/Teams/webhook (and GitHub PR/issue) alerts include resource type, actions, address, attribute paths, duration, and by-risk totals; values still require `--attribute-values` (#162)
+- Table output: spacing, type on the resource line, state vs remote legend, `(absent)` note, and drop duplicate `tags_all` diffs (#163)
+
 ## [1.0.0] - 2026-09-10
 
 ### Added

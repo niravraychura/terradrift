@@ -6,7 +6,7 @@ Copy these into your infrastructure repository. Pin third-party actions to SHAs.
 
 [`terradrift-action.yml`](terradrift-action.yml) uses the composite Action in this repo. It always passes `--terraform-exec` and fails if Terraform/OpenTofu is missing.
 
-Pin `uses: niravraychura/terradrift@v0.4.1`. Empty `version:` installs that tag. `action.yml` has shipped since v0.4.0.
+Pin `uses: niravraychura/terradrift@v1.0.0`. Empty `version:` installs that tag. `action.yml` has shipped since v0.4.0.
 
 Marketplace: [TerraDrift Scan](https://github.com/marketplace/actions/terradrift-scan).
 

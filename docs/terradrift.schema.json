@@ -11,7 +11,7 @@
     "terraform_exec": { "type": "boolean" },
     "terraform_bin": { "type": "string" },
     "terragrunt_bin": { "type": "string", "description": "Terragrunt executable for roots with terragrunt.hcl (default terragrunt)" },
-    "plan_mode": { "enum": ["refresh-only", "normal"] },
+    "plan_mode": { "enum": ["refresh-only", "normal", "both"] },
     "workspace_root": { "type": "string" },
     "notify": { "enum": ["slack", "teams", "webhook"] },
     "slack_webhook_url": { "type": "string" },

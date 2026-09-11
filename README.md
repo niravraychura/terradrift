@@ -37,7 +37,7 @@ TerraDrift runs `terraform plan` or `tofu plan` (refresh-only by default), turns
 Download a binary from [GitHub Releases](https://github.com/niravraychura/terradrift/releases) (Linux amd64/arm64, macOS amd64/arm64), or install with checksum verification:
 
 ```bash
-TERRADRIFT_VERSION=v0.4.1 PREFIX=/usr/local ./scripts/install.sh
+TERRADRIFT_VERSION=v1.0.0 PREFIX=/usr/local ./scripts/install.sh
 ```
 
 Optional Cosign verification (v0.4.0+; download the matching `.bundle` from the same GitHub Release):
@@ -97,6 +97,12 @@ To see unapplied config changes as well:
 terradrift scan -d ./terraform/prod --terraform-exec --plan-mode normal
 ```
 
+To classify **both** in one invocation (refresh-only, then a normal plan; each finding gets `change_kind`):
+
+```bash
+terradrift scan -d ./terraform/prod --terraform-exec --plan-mode both
+```
+
 OpenTofu:
 
 ```bash
@@ -121,8 +127,9 @@ Plan mode: refresh-only
 Terraform directory: ./terraform/prod
 Resources checked: 12
 Changed resources: 1
+Diff: state -> remote. (absent) means missing on that side. MEDIUM=update HIGH=delete CRITICAL=replace
 
-HIGH  update  aws_instance.web
+MEDIUM  update  aws_instance  aws_instance.web
   ami: [REDACTED] -> [REDACTED]
 ```
 
@@ -150,13 +157,14 @@ The generated file includes `"$schema"` pointing at [`docs/terradrift.schema.jso
 ### Example table output
 
 ```text
-TerraDrift scan initialized
+TerraDrift scan complete
 Status: drift_detected
 Plan mode: refresh-only
 Resources checked: 144
 Changed resources: 2
+Diff: state -> remote. (absent) means missing on that side. MEDIUM=update HIGH=delete CRITICAL=replace
 
-CRITICAL  delete,create  module.ecs.aws_ecs_task_definition.td
+CRITICAL  delete,create  aws_ecs_task_definition  module.ecs.aws_ecs_task_definition.td
   reason: replace_because_cannot_update
   cpu: "256" -> "512"
 ```
@@ -188,7 +196,7 @@ Preferred: the official Action (always `--terraform-exec`; fails if Terraform is
 - uses: hashicorp/setup-terraform@v4
   with:
     terraform_wrapper: false
-- uses: niravraychura/terradrift@v0.4.1
+- uses: niravraychura/terradrift@v1.0.0
   with:
     directory: ./terraform/prod
 ```
@@ -234,7 +242,7 @@ terradrift scan -d ./terraform/prod --terraform-exec \
   --notify webhook --webhook-url "$WEBHOOK_URL"
 ```
 
-PagerDuty Events API v2 and Opsgenie are **not** first-party notifiers. Map the webhook JSON in an adapter you host: [`examples/webhooks`](examples/webhooks).
+PagerDuty Events API v2 and Opsgenie are **not** first-party notifiers. Map the webhook JSON in an adapter you host: [`examples/webhooks`](examples/webhooks). Slack/Teams/webhook `message` includes resource type, address, actions, and attribute **paths** (values only with `--attribute-values`). Long scans are capped. GitHub Actions jobs also write `$GITHUB_STEP_SUMMARY` (paths-only).
 
 ### Approvals vs CI exit code
 
@@ -396,7 +404,7 @@ Image: `ghcr.io/niravraychura/terradrift:<version>` (also `latest` from releases
 The runtime image does **not** include Terraform. For `--terraform-exec`, mount a binary or extend the image:
 
 ```dockerfile
-FROM ghcr.io/niravraychura/terradrift:v0.4.1
+FROM ghcr.io/niravraychura/terradrift:v1.0.0
 USER root
 RUN apk --no-cache add curl unzip \
   && curl -fsSLo /tmp/terraform.zip https://releases.hashicorp.com/terraform/1.10.5/terraform_1.10.5_linux_amd64.zip \
