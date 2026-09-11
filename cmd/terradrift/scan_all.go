@@ -384,6 +384,9 @@ and --github-pr are refused when more than one root would write the same destina
 			if err := writeMultiScanReport(stdout, aggregate, parsedFormat); err != nil {
 				return err
 			}
+			if err := writeMultiScanGitHubStepSummary(aggregate); err != nil {
+				return err
+			}
 			if incrementalState != "" {
 				if err := writeIncrementalState(incrementalState, aggregate); err != nil {
 					return err
@@ -418,7 +421,7 @@ and --github-pr are refused when more than one root would write the same destina
 	cmd.Flags().DurationVar(&timeout, "timeout", scanner.DefaultTimeout, "maximum scan duration per root")
 	cmd.Flags().IntVar(&concurrency, "concurrency", 4, "maximum concurrent scans")
 	cmd.Flags().BoolVar(&terraformExec, "terraform-exec", false, "run Terraform-compatible scans")
-	cmd.Flags().StringVar(&planMode, "plan-mode", string(terraform.PlanModeRefreshOnly), "default plan mode: refresh-only or normal (overridable per root)")
+	cmd.Flags().StringVar(&planMode, "plan-mode", string(terraform.PlanModeRefreshOnly), "default plan mode: refresh-only, normal, or both (overridable per root)")
 	cmd.Flags().StringVar(&terraformBin, "terraform-bin", "", "Terraform-compatible executable to run (default: terraform)")
 	cmd.Flags().StringVar(&terragruntBin, "terragrunt-bin", "", "Terragrunt executable for roots with terragrunt.hcl (default: terragrunt)")
 	cmd.Flags().StringVar(&workspaceRoot, "workspace-root", "", "require roots to resolve inside this workspace root")

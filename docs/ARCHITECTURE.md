@@ -24,7 +24,8 @@ cmd/terradrift -> config -> scanner -> terraform -> parser -> report
 - **Summarized**: large strings / encoded objects over 200 characters become `[changed, NB]`.
 - **Stdout**: may include safe scalars and redacted/summarized values.
 - **Refresh-only**: reports prefer `resource_drift`. When those entries omit `before`/`after`, TerraDrift copies diffs from the matching `resource_changes` address, then `before_identity`/`after_identity`, then `relevant_attributes` paths.
-- **Default persistence/automation** (history, artifacts, policy stdin, dashboards, notifications): attribute **paths only** unless `--attribute-values` / `attribute_values` is set. Even then, secrets remain redacted.
+- **`--plan-mode both`**: one invocation runs refresh-only then a normal plan. Findings are labeled `change_kind` `refresh` or `config`; optional `config_status` is the normal-plan result. `--plan-file` is incompatible with `both`.
+- **Default persistence/automation** (history, artifacts, policy stdin, dashboards, notifications, GitHub Actions job summary): attribute **paths only** unless `--attribute-values` / `attribute_values` is set. Even then, secrets remain redacted.
 
 External policy, cost, and audit adapters receive report JSON on standard input. They are explicit commands only; use configuration allowlists and trusted command directories in CI. Adapter stdout/stderr that exceeds the size budget fails closed.
 

@@ -3,7 +3,7 @@
   "event_action": "trigger",
   "dedup_key": "terradrift:a1b2-c3d4-e5f6-7890-abcdef123456",
   "payload": {
-    "summary": "Terraform scan completed\nScan ID: a1b2-c3d4-e5f6-7890-abcdef123456\nStatus: drift_detected\nPlan mode: refresh-only\nResources checked: 12\nChanged resources: 1\nTop changes:\n- aws_instance.web (high)",
+    "summary": "Terraform scan completed\nScan ID: a1b2-c3d4-e5f6-7890-abcdef123456\nStatus: drift_detected\nPlan mode: refresh-only\nResources checked: 12\nChanged resources: 1\nBy risk: medium 1\nChanges:\n- MEDIUM  update  aws_instance  aws_instance.web\n  ami",
     "severity": "error",
     "source": "terradrift",
     "component": "terraform",

@@ -28,10 +28,42 @@ func attributeChangesFor(change terraformChange) []report.AttributeChange {
 	if len(diffs) > 1 {
 		sort.Slice(diffs, func(i, j int) bool { return diffs[i].Path < diffs[j].Path })
 	}
+	diffs = dropRedundantTagsAll(diffs)
 	if len(diffs) > maxAttributeDiffsPerResource {
 		return diffs[:maxAttributeDiffsPerResource]
 	}
 	return diffs
+}
+
+func dropRedundantTagsAll(diffs []report.AttributeChange) []report.AttributeChange {
+	byPath := make(map[string]report.AttributeChange, len(diffs))
+	for _, diff := range diffs {
+		byPath[diff.Path] = diff
+	}
+	out := make([]report.AttributeChange, 0, len(diffs))
+	for _, diff := range diffs {
+		tagPath, ok := tagsPathForTagsAll(diff.Path)
+		if ok {
+			if same, found := byPath[tagPath]; found && same.Before == diff.Before && same.After == diff.After {
+				continue
+			}
+		}
+		out = append(out, diff)
+	}
+	return out
+}
+
+func tagsPathForTagsAll(path string) (string, bool) {
+	switch {
+	case path == "tags_all":
+		return "tags", true
+	case strings.HasPrefix(path, "tags_all["):
+		return "tags" + path[len("tags_all"):], true
+	case strings.HasPrefix(path, "tags_all."):
+		return "tags" + path[len("tags_all"):], true
+	default:
+		return "", false
+	}
 }
 
 func diffLeaves(beforeRaw, afterRaw, beforeSensitiveRaw, afterSensitiveRaw, afterUnknownRaw json.RawMessage) []report.AttributeChange {

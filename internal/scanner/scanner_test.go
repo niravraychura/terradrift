@@ -26,6 +26,7 @@ type fakeRunner struct {
 	showErr    error
 	planPath   string
 	showPath   string
+	planCount  int
 	planMode   terraform.PlanMode
 	planCalled bool
 	showCalled bool
@@ -38,6 +39,7 @@ func (runner *fakeRunner) Init(ctx context.Context, directory string) error {
 
 func (runner *fakeRunner) Plan(ctx context.Context, directory string, outputPath string, mode terraform.PlanMode) (int, error) {
 	runner.planCalled = true
+	runner.planCount++
 	runner.planPath = outputPath
 	runner.planMode = mode
 	return runner.planExit, runner.planErr
@@ -218,6 +220,43 @@ func TestScanRejectsInvalidPlanMode(t *testing.T) {
 	_, err := Scan(context.Background(), Options{Directory: t.TempDir(), PlanMode: "apply"})
 	if err == nil || !strings.Contains(err.Error(), "plan mode") {
 		t.Fatalf("expected invalid plan mode, got %v", err)
+	}
+}
+
+func TestScanBothPlanModeClassifiesRefreshAndConfig(t *testing.T) {
+	plan := []byte(`{
+		"prior_state":{"values":{"root_module":{"resources":[{"mode":"managed"},{"mode":"managed"}]}}},
+		"resource_drift":[{"address":"aws_instance.remote","mode":"managed","change":{"actions":["update"]}}],
+		"resource_changes":[{"address":"aws_instance.config","mode":"managed","change":{"actions":["create"]}}]
+	}`)
+	runner := &fakeRunner{planExit: 2, showJSON: plan}
+	result, err := Scan(context.Background(), Options{Directory: t.TempDir(), Runner: runner, PlanMode: terraform.PlanModeBoth})
+	if err != nil {
+		t.Fatalf("scan: %v", err)
+	}
+	if runner.planCount != 2 || result.Report.PlanMode != "both" || result.Report.Status != report.ScanStatusDriftDetected || result.Report.ConfigStatus != report.ScanStatusChangesDetected {
+		t.Fatalf("unexpected both result: %#v planCount=%d", result.Report, runner.planCount)
+	}
+	if len(result.Report.ResourceChanges) != 2 {
+		t.Fatalf("expected two classified changes, got %#v", result.Report.ResourceChanges)
+	}
+	byKind := map[string]string{}
+	for _, change := range result.Report.ResourceChanges {
+		byKind[change.ChangeKind] = change.Address
+	}
+	if byKind[report.ChangeKindRefresh] != "aws_instance.remote" || byKind[report.ChangeKindConfig] != "aws_instance.config" {
+		t.Fatalf("unexpected change kinds: %#v", byKind)
+	}
+}
+
+func TestScanRejectsPlanFileWithBothPlanMode(t *testing.T) {
+	planPath := filepath.Join(t.TempDir(), "plan.tfplan")
+	if err := os.WriteFile(planPath, []byte("not-a-secret"), 0o600); err != nil {
+		t.Fatalf("write plan: %v", err)
+	}
+	_, err := Scan(context.Background(), Options{Directory: t.TempDir(), Runner: &fakeRunner{}, PlanMode: terraform.PlanModeBoth, PlanFile: planPath})
+	if err == nil || !strings.Contains(err.Error(), "--plan-file") {
+		t.Fatalf("expected plan-file/both incompatibility, got %v", err)
 	}
 }
 

@@ -158,6 +158,13 @@ func TestParsePlanModeRejectsInvalidValue(t *testing.T) {
 	}
 }
 
+func TestParsePlanModeAcceptsBoth(t *testing.T) {
+	mode, err := ParsePlanMode("both")
+	if err != nil || mode != PlanModeBoth {
+		t.Fatalf("both plan mode: %q %v", mode, err)
+	}
+}
+
 func TestCLIRunnerRedactsStderr(t *testing.T) {
 	runner := NewCLIRunner(writeTerraformStub(t, `#!/bin/sh
 printf 'token=super-secret' >&2

@@ -190,19 +190,30 @@ func Scan(ctx context.Context, options Options) (Result, error) {
 		options.PlanFile = planFile
 	}
 
+	if options.PlanMode == terraform.PlanModeBoth && options.PlanFile != "" {
+		err := fmt.Errorf("--plan-file is incompatible with --plan-mode both")
+		logger.Error(ctx, "scan failed", "directory", logDirectory(options.RedactPaths, absDir), "error", logError(options.RedactPaths, err, absDir, options.PlanFile))
+		return Result{Outcome: OutcomeFailed}, err
+	}
+
 	if options.Runner == nil {
 		now := time.Now().UTC()
 		status := report.ScanStatusNoDrift
 		outcome := OutcomeNoDrift
+		configStatus := report.ScanStatus("")
 		if options.PlanMode == terraform.PlanModeNormal {
 			status = report.ScanStatusNoChanges
 			outcome = OutcomeNoChanges
+		}
+		if options.PlanMode == terraform.PlanModeBoth {
+			configStatus = report.ScanStatusNoChanges
 		}
 		logger.Info(ctx, "scan completed", "directory", logDirectory(options.RedactPaths, absDir), "outcome", string(outcome))
 		return Result{Outcome: outcome, Report: report.DriftReport{
 			ScanID:          scanID,
 			RootID:          rootID(absDir),
 			Status:          status,
+			ConfigStatus:    configStatus,
 			Directory:       absDir,
 			PlanMode:        string(options.PlanMode),
 			ResourceChanges: []report.ResourceChange{},
@@ -243,10 +254,23 @@ func Scan(ctx context.Context, options Options) (Result, error) {
 		options.PlanFile = planFile
 	}
 
-	scanReport, err := runTerraformScan(ctx, options.Runner, absDir, scanID, options.PlanMode, options.SkipInit, options.RedactPaths, options.PlanFile)
+	firstMode := options.PlanMode
+	if firstMode == terraform.PlanModeBoth {
+		firstMode = terraform.PlanModeRefreshOnly
+	}
+	scanReport, err := runTerraformScan(ctx, options.Runner, absDir, scanID, firstMode, options.SkipInit, options.RedactPaths, options.PlanFile)
 	if err != nil {
 		logger.Error(ctx, "scan failed", "directory", logDirectory(options.RedactPaths, absDir), "error", logError(options.RedactPaths, err, absDir))
 		return Result{Outcome: OutcomeFailed, Report: scanReport}, err
+	}
+	if options.PlanMode == terraform.PlanModeBoth {
+		configReport, err := runTerraformScan(ctx, options.Runner, absDir, scanID, terraform.PlanModeNormal, options.SkipInit, options.RedactPaths, "")
+		if err != nil {
+			logger.Error(ctx, "scan failed", "directory", logDirectory(options.RedactPaths, absDir), "error", logError(options.RedactPaths, err, absDir))
+			return Result{Outcome: OutcomeFailed, Report: configReport}, err
+		}
+		scanReport = mergeBothReports(scanReport, configReport)
+		return completedScanResult(ctx, absDir, options.RedactPaths, scanReport), nil
 	}
 	if scanReport.TotalChangedResources > 0 {
 		if options.PlanMode == terraform.PlanModeNormal {
@@ -266,6 +290,54 @@ func Scan(ctx context.Context, options Options) (Result, error) {
 	scanReport.Status = report.ScanStatusNoDrift
 	logger.Info(ctx, "scan completed", "directory", logDirectory(options.RedactPaths, absDir), "outcome", string(OutcomeNoDrift))
 	return Result{Outcome: OutcomeNoDrift, Report: scanReport}, nil
+}
+
+func mergeBothReports(refresh, config report.DriftReport) report.DriftReport {
+	merged := refresh
+	merged.PlanMode = string(terraform.PlanModeBoth)
+	for i := range merged.ResourceChanges {
+		merged.ResourceChanges[i].ChangeKind = report.ChangeKindRefresh
+	}
+	for _, change := range config.ResourceChanges {
+		change.ChangeKind = report.ChangeKindConfig
+		merged.ResourceChanges = append(merged.ResourceChanges, change)
+	}
+	if len(config.OutputChanges) > 0 {
+		merged.OutputChanges = append(append([]report.OutputChange{}, refresh.OutputChanges...), config.OutputChanges...)
+	}
+	merged.TotalChangedResources = len(merged.ResourceChanges)
+	if !config.CompletedAt.IsZero() {
+		merged.CompletedAt = config.CompletedAt
+	}
+	refreshHas := len(refresh.ResourceChanges) > 0
+	configHas := len(config.ResourceChanges) > 0
+	merged.ConfigStatus = report.ScanStatusNoChanges
+	if configHas {
+		merged.ConfigStatus = report.ScanStatusChangesDetected
+	}
+	switch {
+	case refreshHas:
+		merged.Status = report.ScanStatusDriftDetected
+	case configHas:
+		merged.Status = report.ScanStatusChangesDetected
+	default:
+		merged.Status = report.ScanStatusNoDrift
+	}
+	return merged
+}
+
+func completedScanResult(ctx context.Context, absDir string, redactPaths bool, scanReport report.DriftReport) Result {
+	outcome := OutcomeNoDrift
+	switch scanReport.Status {
+	case report.ScanStatusChangesDetected:
+		outcome = OutcomeChangesDetected
+	case report.ScanStatusDriftDetected:
+		outcome = OutcomeDriftDetected
+	case report.ScanStatusNoChanges:
+		outcome = OutcomeNoChanges
+	}
+	logger.Info(ctx, "scan completed", "directory", logDirectory(redactPaths, absDir), "outcome", string(outcome))
+	return Result{Outcome: outcome, Report: scanReport}
 }
 
 // ValidateWorkspaceRoot ensures directory resolves inside workspaceRoot after symlink evaluation.

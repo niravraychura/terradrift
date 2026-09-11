@@ -52,8 +52,33 @@ func ApplyIgnoreRules(scanReport *DriftReport, rules []IgnoreRule) error {
 		case ScanStatusChangesDetected:
 			scanReport.Status = ScanStatusNoChanges
 		}
+		return nil
+	}
+	if scanReport.PlanMode == "both" {
+		scanReport.Status = statusForBoth(scanReport.ResourceChanges)
 	}
 	return nil
+}
+
+func statusForBoth(changes []ResourceChange) ScanStatus {
+	hasRefresh, hasConfig := false, false
+	for _, change := range changes {
+		if change.Ignored {
+			continue
+		}
+		if change.ChangeKind == ChangeKindConfig {
+			hasConfig = true
+			continue
+		}
+		hasRefresh = true
+	}
+	if hasRefresh {
+		return ScanStatusDriftDetected
+	}
+	if hasConfig {
+		return ScanStatusChangesDetected
+	}
+	return ScanStatusNoDrift
 }
 
 func matchIgnoreRule(rules []IgnoreRule, address string) (IgnoreRule, bool) {
