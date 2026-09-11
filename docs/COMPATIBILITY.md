@@ -39,6 +39,8 @@ Stable fields (always present unless noted): `scan_id`, `status`, `directory`, `
 
 `status` values: `no_drift`, `drift_detected`, `no_changes`, `changes_detected`, `failed`, `skipped`. `running` is internal and is not a completed stdout report.
 
+`--plan-mode both` is additive. The report keeps a single `status` (`drift_detected` if refresh-only found anything, otherwise `changes_detected` if the normal plan did). Optional fields: `config_status`, and `change_kind` (`refresh` or `config`) on `resource_changes[]`. `--plan-file` cannot be combined with `both`.
+
 New **optional** fields may be added (**MINOR**). Removing/renaming a stable field or changing a `status` string is a **MAJOR**. Consumers must ignore unknown fields.
 
 Attribute `before`/`after` may be omitted (`omitempty`) in paths-only reports. Secrets stay redacted. See [ARCHITECTURE.md](ARCHITECTURE.md).

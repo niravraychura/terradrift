@@ -627,8 +627,9 @@ func TestScanValidDirectoryTableOutput(t *testing.T) {
 		t.Fatalf("resolve fixture: %v", err)
 	}
 	for _, want := range []string{
-		"TerraDrift scan initialized",
+		"TerraDrift scan complete",
 		"Status: no_drift",
+		"Diff: state -> remote",
 		"Terraform directory: " + absDir,
 		"Resources checked: 0",
 		"Changed resources: 0",
@@ -695,6 +696,17 @@ func TestScanNormalModeJSONOutput(t *testing.T) {
 	}
 }
 
+func TestScanBothModeJSONOutput(t *testing.T) {
+	stdout, _, err := executeCommand("scan", "-d", t.TempDir(), "--plan-mode", "both", "--output", "json")
+	if err != nil {
+		t.Fatalf("scan: %v", err)
+	}
+	var scanReport report.DriftReport
+	if err := json.Unmarshal([]byte(stdout), &scanReport); err != nil || scanReport.PlanMode != "both" || scanReport.Status != report.ScanStatusNoDrift || scanReport.ConfigStatus != report.ScanStatusNoChanges {
+		t.Fatalf("unexpected both report: %#v, err=%v", scanReport, err)
+	}
+}
+
 func TestWriteScanReportTableIncludesAttributeDiffs(t *testing.T) {
 	var output bytes.Buffer
 	err := writeScanReport(&output, report.DriftReport{
@@ -706,6 +718,7 @@ func TestWriteScanReportTableIncludesAttributeDiffs(t *testing.T) {
 		TotalChangedResources: 1,
 		ResourceChanges: []report.ResourceChange{{
 			Address:      "aws_lb.main",
+			Type:         "aws_lb",
 			Actions:      []string{"update"},
 			RiskLevel:    "medium",
 			ActionReason: "",
@@ -722,7 +735,10 @@ func TestWriteScanReportTableIncludesAttributeDiffs(t *testing.T) {
 	got := output.String()
 	for _, want := range []string{
 		"Status: changes_detected",
-		"MEDIUM  update  aws_lb.main",
+		"Diff: state -> planned config",
+		"MEDIUM",
+		"update",
+		"aws_lb  aws_lb.main",
 		"  idle_timeout: 60 -> 120",
 		`  tags.Environment: "staging" -> "dev"`,
 		"Output changes:",
@@ -730,6 +746,44 @@ func TestWriteScanReportTableIncludesAttributeDiffs(t *testing.T) {
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("expected table output to contain %q, got %q", want, got)
+		}
+	}
+}
+
+func TestWriteScanGitHubStepSummaryIsPathsOnly(t *testing.T) {
+	summary := filepath.Join(t.TempDir(), "summary.md")
+	t.Setenv("GITHUB_ACTIONS", "true")
+	t.Setenv("GITHUB_STEP_SUMMARY", summary)
+	scanReport := report.DriftReport{
+		Status:                report.ScanStatusDriftDetected,
+		PlanMode:              "refresh-only",
+		TotalResourcesChecked: 4,
+		TotalChangedResources: 1,
+		Directory:             "/secret/local/path",
+		ResourceChanges: []report.ResourceChange{{
+			Address:   "aws_lb.main",
+			Type:      "aws_lb",
+			Actions:   []string{"update"},
+			RiskLevel: "medium",
+			AttributeChanges: []report.AttributeChange{
+				{Path: "idle_timeout", Before: "120", After: "600"},
+			},
+		}},
+	}
+	if err := writeScanGitHubStepSummary(scanReport); err != nil {
+		t.Fatalf("step summary: %v", err)
+	}
+	data, err := os.ReadFile(summary)
+	if err != nil {
+		t.Fatalf("read summary: %v", err)
+	}
+	got := string(data)
+	if strings.Contains(got, "/secret/local/path") || strings.Contains(got, "120") || strings.Contains(got, "600") {
+		t.Fatalf("step summary leaked path or values: %q", got)
+	}
+	for _, want := range []string{"Changed resources: 1", "aws_lb.main", "idle_timeout"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("expected %q in step summary, got %q", want, got)
 		}
 	}
 }
@@ -1147,6 +1201,9 @@ func TestScanHelpIncludesAttributeValuesAndWorkspace(t *testing.T) {
 		if !strings.Contains(stdout, flag) {
 			t.Fatalf("expected scan help to contain %q", flag)
 		}
+	}
+	if !strings.Contains(stdout, "both") {
+		t.Fatalf("expected scan help to mention plan-mode both, got %q", stdout)
 	}
 }
 

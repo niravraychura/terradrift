@@ -5,8 +5,10 @@ import (
 	"encoding/xml"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 
+	"github.com/niravraychura/terradrift/internal/notify"
 	"github.com/niravraychura/terradrift/internal/report"
 )
 
@@ -80,11 +82,16 @@ func writeScanReport(stdout io.Writer, scanReport report.DriftReport, format out
 	case outputFormatPrometheus:
 		return writePrometheusScan(stdout, scanReport)
 	case outputFormatTable:
-		if _, err := fmt.Fprintln(stdout, "TerraDrift scan initialized"); err != nil {
+		if _, err := fmt.Fprintln(stdout, "TerraDrift scan complete"); err != nil {
 			return fmt.Errorf("write scan output: %w", err)
 		}
 		if _, err := fmt.Fprintf(stdout, "Status: %s\n", scanReport.Status); err != nil {
 			return fmt.Errorf("write scan output: %w", err)
+		}
+		if scanReport.ConfigStatus != "" {
+			if _, err := fmt.Fprintf(stdout, "Config status: %s\n", scanReport.ConfigStatus); err != nil {
+				return fmt.Errorf("write scan output: %w", err)
+			}
 		}
 		if _, err := fmt.Fprintf(stdout, "Plan mode: %s\n", scanReport.PlanMode); err != nil {
 			return fmt.Errorf("write scan output: %w", err)
@@ -101,22 +108,27 @@ func writeScanReport(stdout io.Writer, scanReport report.DriftReport, format out
 		if _, err := fmt.Fprintf(stdout, "Changed resources: %d\n", scanReport.TotalChangedResources); err != nil {
 			return fmt.Errorf("write scan output: %w", err)
 		}
+		if _, err := fmt.Fprintf(stdout, "Diff: %s. (absent) means missing on that side. MEDIUM=update HIGH=delete CRITICAL=replace\n", report.AttributeSides(scanReport.PlanMode)); err != nil {
+			return fmt.Errorf("write scan output: %w", err)
+		}
 		if len(scanReport.ResourceChanges) == 0 {
 			return nil
 		}
 		if _, err := fmt.Fprintln(stdout); err != nil {
 			return fmt.Errorf("write scan output: %w", err)
 		}
+		printed := false
 		for _, change := range scanReport.ResourceChanges {
 			if change.Ignored {
 				continue
 			}
-			actions := strings.Join(change.Actions, ",")
-			risk := strings.ToUpper(change.RiskLevel)
-			if risk == "" {
-				risk = "UNKNOWN"
+			if printed {
+				if _, err := fmt.Fprintln(stdout); err != nil {
+					return fmt.Errorf("write scan output: %w", err)
+				}
 			}
-			if _, err := fmt.Fprintf(stdout, "%s  %s  %s\n", risk, actions, change.Address); err != nil {
+			printed = true
+			if _, err := fmt.Fprintln(stdout, tableChangeLine(change)); err != nil {
 				return fmt.Errorf("write scan output: %w", err)
 			}
 			if change.ActionReason != "" {
@@ -125,6 +137,14 @@ func writeScanReport(stdout io.Writer, scanReport report.DriftReport, format out
 				}
 			}
 			for _, attr := range change.AttributeChanges {
+				if attr.Before == "" && attr.After == "" {
+					if attr.Path != "" {
+						if _, err := fmt.Fprintf(stdout, "  %s\n", attr.Path); err != nil {
+							return fmt.Errorf("write scan output: %w", err)
+						}
+					}
+					continue
+				}
 				if _, err := fmt.Fprintf(stdout, "  %s: %s -> %s\n", attr.Path, attr.Before, attr.After); err != nil {
 					return fmt.Errorf("write scan output: %w", err)
 				}
@@ -147,6 +167,62 @@ func writeScanReport(stdout io.Writer, scanReport report.DriftReport, format out
 	default:
 		return fmt.Errorf("unsupported output format %q; supported values: table, json, junit, sarif, prometheus", format)
 	}
+}
+
+func tableChangeLine(change report.ResourceChange) string {
+	risk := strings.ToUpper(strings.TrimSpace(change.RiskLevel))
+	if risk == "" {
+		risk = "UNKNOWN"
+	}
+	actions := strings.Join(change.Actions, ",")
+	if actions == "" {
+		actions = "update"
+	}
+	parts := []string{fmt.Sprintf("%-8s", risk), actions}
+	if kind := strings.TrimSpace(change.ChangeKind); kind != "" {
+		parts = append(parts, kind)
+	}
+	if typeName := strings.TrimSpace(change.Type); typeName != "" {
+		parts = append(parts, typeName)
+	}
+	if address := strings.TrimSpace(change.Address); address != "" {
+		parts = append(parts, address)
+	}
+	return strings.Join(parts, "  ")
+}
+
+func writeGitHubStepSummary(text string) error {
+	if !strings.EqualFold(strings.TrimSpace(os.Getenv("GITHUB_ACTIONS")), "true") {
+		return nil
+	}
+	path := strings.TrimSpace(os.Getenv("GITHUB_STEP_SUMMARY"))
+	if path == "" {
+		return nil
+	}
+	file, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+	if err != nil {
+		return fmt.Errorf("write GitHub step summary: %w", err)
+	}
+	if _, err := io.WriteString(file, strings.TrimRight(text, "\n")+"\n"); err != nil {
+		_ = file.Close()
+		return fmt.Errorf("write GitHub step summary: %w", err)
+	}
+	if err := file.Close(); err != nil {
+		return fmt.Errorf("write GitHub step summary: %w", err)
+	}
+	return nil
+}
+
+func writeScanGitHubStepSummary(scanReport report.DriftReport) error {
+	return writeGitHubStepSummary(notify.RedactedNotificationMessage(report.WithoutAttributeValues(scanReport)))
+}
+
+func writeMultiScanGitHubStepSummary(aggregate multiScanReport) error {
+	var buf strings.Builder
+	if err := writeMultiScanTable(&buf, aggregate); err != nil {
+		return err
+	}
+	return writeGitHubStepSummary(buf.String())
 }
 
 func writeMultiScanReport(stdout io.Writer, aggregate multiScanReport, format outputFormat) error {

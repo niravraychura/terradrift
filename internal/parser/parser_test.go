@@ -302,6 +302,42 @@ func TestParsePlanRefreshOnlyCopiesAttributeDiffsFromResourceChanges(t *testing.
 	}
 }
 
+func TestAttributeChangesDropsDuplicateTagsAll(t *testing.T) {
+	plan := []byte(`{
+		"resource_changes":[{
+			"address":"aws_lb.main",
+			"type":"aws_lb",
+			"name":"main",
+			"mode":"managed",
+			"change":{
+				"actions":["update"],
+				"before":{"tags":{},"tags_all":{}},
+				"after":{"tags":{"aws-apn-id":"pc-example"},"tags_all":{"aws-apn-id":"pc-example","Name":"kept-all-only"}}
+			}
+		}]
+	}`)
+	changes, _, _, _, err := ParsePlan(plan, terraform.PlanModeNormal)
+	if err != nil || len(changes) != 1 {
+		t.Fatalf("parse: %#v err=%v", changes, err)
+	}
+	attrs := map[string]report.AttributeChange{}
+	for _, attr := range changes[0].AttributeChanges {
+		attrs[attr.Path] = attr
+	}
+	if _, ok := attrs[`tags_all["aws-apn-id"]`]; ok {
+		t.Fatalf("duplicate tags_all should be dropped, attrs=%#v", attrs)
+	}
+	if got := attrs[`tags["aws-apn-id"]`]; got.After != `"pc-example"` {
+		t.Fatalf("tags aws-apn-id = %#v", got)
+	}
+	if _, ok := attrs["tags_all.Name"]; !ok {
+		t.Fatalf("tags_all-only Name should remain, attrs=%#v", attrs)
+	}
+	if _, ok := attrs["tags_all"]; ok {
+		t.Fatalf("duplicate tags_all object should be dropped, attrs=%#v", attrs)
+	}
+}
+
 func TestParsePlanRefreshOnlyUsesRelevantAttributePaths(t *testing.T) {
 	plan := []byte(`{
 		"resource_drift":[{

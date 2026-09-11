@@ -14,6 +14,7 @@ type PlanMode string
 const (
 	PlanModeRefreshOnly PlanMode = "refresh-only"
 	PlanModeNormal      PlanMode = "normal"
+	PlanModeBoth        PlanMode = "both"
 )
 
 // ParsePlanMode validates a user-supplied plan mode. An empty mode defaults to refresh-only.
@@ -23,10 +24,10 @@ func ParsePlanMode(value string) (PlanMode, error) {
 		return PlanModeRefreshOnly, nil
 	}
 	switch mode {
-	case PlanModeRefreshOnly, PlanModeNormal:
+	case PlanModeRefreshOnly, PlanModeNormal, PlanModeBoth:
 		return mode, nil
 	default:
-		return "", fmt.Errorf("unsupported plan mode %q; supported values: refresh-only, normal", value)
+		return "", fmt.Errorf("unsupported plan mode %q; supported values: refresh-only, normal, both", value)
 	}
 }
 

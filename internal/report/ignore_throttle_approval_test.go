@@ -39,6 +39,28 @@ func TestApplyIgnoreRulesRejectsExpired(t *testing.T) {
 	}
 }
 
+func TestApplyIgnoreRulesBothRecalculatesStatus(t *testing.T) {
+	expires := time.Now().UTC().Add(time.Hour).Format(time.RFC3339)
+	scanReport := DriftReport{
+		Status:       ScanStatusDriftDetected,
+		PlanMode:     "both",
+		ConfigStatus: ScanStatusChangesDetected,
+		ResourceChanges: []ResourceChange{
+			{Address: "aws_instance.remote", ChangeKind: ChangeKindRefresh, Actions: []string{"update"}},
+			{Address: "aws_instance.config", ChangeKind: ChangeKindConfig, Actions: []string{"create"}},
+		},
+		TotalChangedResources: 2,
+	}
+	if err := ApplyIgnoreRules(&scanReport, []IgnoreRule{{
+		Address: "aws_instance.remote", Owner: "platform", Reason: "refresh baseline", ExpiresAt: expires,
+	}}); err != nil {
+		t.Fatalf("ApplyIgnoreRules: %v", err)
+	}
+	if scanReport.Status != ScanStatusChangesDetected || scanReport.TotalChangedResources != 1 || !scanReport.ResourceChanges[0].Ignored || scanReport.ResourceChanges[1].Ignored {
+		t.Fatalf("expected remaining config finding after ignoring refresh: %#v", scanReport)
+	}
+}
+
 func TestApplyIgnoreRulesMatchesGlob(t *testing.T) {
 	expires := time.Now().UTC().Add(time.Hour).Format(time.RFC3339)
 	scanReport := DriftReport{

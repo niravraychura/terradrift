@@ -295,6 +295,9 @@ input, and notifications store attribute paths only unless --attribute-values is
 				if err := writeScanReport(stdout, skipped, parsedFormat); err != nil {
 					return err
 				}
+				if err := writeScanGitHubStepSummary(skipped); err != nil {
+					return err
+				}
 				return nil
 			}
 			if planFile != "" && !terraformExec {
@@ -355,6 +358,9 @@ input, and notifications store attribute paths only unless --attribute-values is
 			if err := writeScanReport(stdout, scanReport, parsedFormat); err != nil {
 				return err
 			}
+			if err := writeScanGitHubStepSummary(scanReport); err != nil {
+				return err
+			}
 			if err := finalizeRootScan(scanContext, scanReport, deliveryOptions{
 				AttributeValues:      attributeValues,
 				ArtifactURL:          artifactURL,
@@ -403,7 +409,7 @@ input, and notifications store attribute paths only unless --attribute-values is
 	cmd.Flags().BoolVar(&terraformExec, "terraform-exec", false, "run Terraform init, plan, and show -json (required with --plan-file)")
 	cmd.Flags().StringVar(&terraformBin, "terraform-bin", "", "Terraform-compatible executable to run (default: terraform)")
 	cmd.Flags().StringVar(&terragruntBin, "terragrunt-bin", "", "Terragrunt executable for roots with terragrunt.hcl (default: terragrunt)")
-	cmd.Flags().StringVar(&planMode, "plan-mode", string(terraform.PlanModeRefreshOnly), "plan mode: refresh-only (remote drift) or normal (configuration reconciliation)")
+	cmd.Flags().StringVar(&planMode, "plan-mode", string(terraform.PlanModeRefreshOnly), "plan mode: refresh-only (remote drift), normal (unapplied config), or both")
 	cmd.Flags().StringVar(&scanConfigPath, "config", "", "optional TerraDrift config file to load")
 	cmd.Flags().StringVar(&configProfile, "profile", "", "named config profile to load")
 	cmd.Flags().StringVar(&failureSeverity, "failure-severity", "", "minimum drift severity that fails the scan: low, medium, high, critical")

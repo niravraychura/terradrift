@@ -97,6 +97,12 @@ To see unapplied config changes as well:
 terradrift scan -d ./terraform/prod --terraform-exec --plan-mode normal
 ```
 
+To classify **both** in one invocation (refresh-only, then a normal plan; each finding gets `change_kind`):
+
+```bash
+terradrift scan -d ./terraform/prod --terraform-exec --plan-mode both
+```
+
 OpenTofu:
 
 ```bash
@@ -121,8 +127,9 @@ Plan mode: refresh-only
 Terraform directory: ./terraform/prod
 Resources checked: 12
 Changed resources: 1
+Diff: state -> remote. (absent) means missing on that side. MEDIUM=update HIGH=delete CRITICAL=replace
 
-HIGH  update  aws_instance.web
+MEDIUM  update  aws_instance  aws_instance.web
   ami: [REDACTED] -> [REDACTED]
 ```
 
@@ -150,13 +157,14 @@ The generated file includes `"$schema"` pointing at [`docs/terradrift.schema.jso
 ### Example table output
 
 ```text
-TerraDrift scan initialized
+TerraDrift scan complete
 Status: drift_detected
 Plan mode: refresh-only
 Resources checked: 144
 Changed resources: 2
+Diff: state -> remote. (absent) means missing on that side. MEDIUM=update HIGH=delete CRITICAL=replace
 
-CRITICAL  delete,create  module.ecs.aws_ecs_task_definition.td
+CRITICAL  delete,create  aws_ecs_task_definition  module.ecs.aws_ecs_task_definition.td
   reason: replace_because_cannot_update
   cpu: "256" -> "512"
 ```
@@ -234,7 +242,7 @@ terradrift scan -d ./terraform/prod --terraform-exec \
   --notify webhook --webhook-url "$WEBHOOK_URL"
 ```
 
-PagerDuty Events API v2 and Opsgenie are **not** first-party notifiers. Map the webhook JSON in an adapter you host: [`examples/webhooks`](examples/webhooks).
+PagerDuty Events API v2 and Opsgenie are **not** first-party notifiers. Map the webhook JSON in an adapter you host: [`examples/webhooks`](examples/webhooks). Slack/Teams/webhook `message` includes resource type, address, actions, and attribute **paths** (values only with `--attribute-values`). Long scans are capped. GitHub Actions jobs also write `$GITHUB_STEP_SUMMARY` (paths-only).
 
 ### Approvals vs CI exit code
 

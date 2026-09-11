@@ -20,11 +20,11 @@ terradrift scan -d ./terraform/prod --terraform-exec \
   "plan_mode": "refresh-only",
   "total_resources_checked": 12,
   "total_changed_resources": 1,
-  "message": "Terraform scan completed\nScan ID: a1b2-c3d4-e5f6-7890-abcdef123456\nStatus: drift_detected\nPlan mode: refresh-only\nResources checked: 12\nChanged resources: 1\nTop changes:\n- aws_instance.web (high)"
+  "message": "Terraform scan completed\nScan ID: a1b2-c3d4-e5f6-7890-abcdef123456\nStatus: drift_detected\nPlan mode: refresh-only\nResources checked: 12\nChanged resources: 1\nBy risk: medium 1\nChanges:\n- MEDIUM  update  aws_instance  aws_instance.web\n  ami"
 }
 ```
 
-Synthetic fixture: [`terradrift-webhook.json`](terradrift-webhook.json). `message` includes at most five resource addresses and risk levels — no secret-like attribute values.
+Synthetic fixture: [`terradrift-webhook.json`](terradrift-webhook.json). `message` includes capped findings (type, address, actions, attribute paths) — no secret-like attribute values unless `--attribute-values`.
 
 Suggested `status` → page mapping (skip paging on `no_drift` / `skipped` unless you want a resolve event):
 
