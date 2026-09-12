@@ -37,7 +37,7 @@ TerraDrift runs `terraform plan` or `tofu plan` (refresh-only by default), turns
 Download a binary from [GitHub Releases](https://github.com/niravraychura/terradrift/releases) (Linux amd64/arm64, macOS amd64/arm64), or install with checksum verification:
 
 ```bash
-TERRADRIFT_VERSION=v1.1.0 PREFIX=/usr/local ./scripts/install.sh
+TERRADRIFT_VERSION=v1.1.1 PREFIX=/usr/local ./scripts/install.sh
 ```
 
 Optional Cosign verification (v0.4.0+; download the matching `.bundle` from the same GitHub Release):
@@ -196,7 +196,7 @@ Preferred: the official Action (always `--terraform-exec`; fails if Terraform is
 - uses: hashicorp/setup-terraform@v4
   with:
     terraform_wrapper: false
-- uses: niravraychura/terradrift@v1.1.0
+- uses: niravraychura/terradrift@v1.1.1
   with:
     directory: ./terraform/prod
 ```
@@ -404,7 +404,7 @@ Image: `ghcr.io/niravraychura/terradrift:<version>` (also `latest` from releases
 The runtime image does **not** include Terraform. For `--terraform-exec`, mount a binary or extend the image:
 
 ```dockerfile
-FROM ghcr.io/niravraychura/terradrift:v1.1.0
+FROM ghcr.io/niravraychura/terradrift:v1.1.1
 USER root
 RUN apk --no-cache add curl unzip \
   && curl -fsSLo /tmp/terraform.zip https://releases.hashicorp.com/terraform/1.10.5/terraform_1.10.5_linux_amd64.zip \
