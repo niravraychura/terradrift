@@ -13,6 +13,7 @@ TerraDrift is an **open-source, self-hosted** Terraform/OpenTofu **drift detecti
 3. **Ask before assuming** — clarify ambiguous requirements; if the user has no further instructions, recommend a default and proceed.
 4. **Tracker first** (`.cursor/rules/tracker-first.mdc`) — even when asked to “just do it”, search GitHub/Linear, file if missing, then PR with `Closes #N`.
 5. **Verify** — run tests before push; after push, confirm GitHub PR/CI is green.
+6. **Learn from misses** (`.cursor/rules/learn-from-misses.mdc`) — environment errors: retry the same call with the right permissions. Real misses: write them into a rule/skill/`AGENTS.md`. Chat does not persist.
 
 ## Branch and PR defaults
 
