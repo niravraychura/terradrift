@@ -10,6 +10,7 @@ alwaysApply: true
 - Feature work: branch from `dev`, open PRs into **`dev`** (not `main`).
 - Releases: promote `dev` → `main` when CI is green, then annotated `v*` tag on `main` per `docs/RELEASE.md`.
 - Do not force-push shared branches or rewrite published release tags.
+- Official Action: `uses: @vX.Y.Z` needs no `version:` input. A SHA or branch pin **must** set `with.version: vX.Y.Z`. `TERRADRIFT_VERSION` / `install.sh` takes a published tag, not a commit SHA.
 
 ## Docs ownership
 

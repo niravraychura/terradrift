@@ -2,6 +2,8 @@ name: TerraDrift Official Action
 
 # Preferred install path. Pin `uses:` to a release tag that includes action.yml
 # (v0.4.0+). Empty `version:` then installs that tag.
+# SHA/branch pin: uses: niravraychura/terradrift@<sha> # v1.1.1
+#                 with: { version: v1.1.1 }  — required; a SHA is not a v* tag.
 #
 # Always passes --terraform-exec. Fails if terraform/tofu is missing.
 # Extra flags: `args: --github-pr ...` (GITHUB_TOKEN is already in the job env).

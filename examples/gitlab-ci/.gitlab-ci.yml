@@ -3,7 +3,7 @@
 # Cloud auth: GitLab OIDC (`id_tokens`), not long-lived keys — docs/DRIFT_SCAN_IAM.md
 # Do not upload *.tfplan artifacts (plans can contain secrets). Prefer JSON reports.
 #
-# Pin the image digest in production. Pin TERRADRIFT_VERSION to a GitHub Release tag.
+# Pin the image digest in production. Pin TERRADRIFT_VERSION to a GitHub Release tag (vX.Y.Z), not a commit SHA.
 
 stages:
   - scan

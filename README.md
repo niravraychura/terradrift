@@ -201,6 +201,17 @@ Preferred: the official Action (always `--terraform-exec`; fails if Terraform is
     directory: ./terraform/prod
 ```
 
+A tag pin (`@v1.1.1`) needs no `version:` input. A SHA or branch pin cannot infer the GitHub Release — set `version:` to that tag:
+
+```yaml
+- uses: niravraychura/terradrift@188034031ee2b9ad1ed042d17cd811d5b3767292 # v1.1.1
+  with:
+    version: v1.1.1
+    directory: ./terraform/prod
+```
+
+`scripts/install.sh` / `TERRADRIFT_VERSION` is the same: a published `vX.Y.Z` tag, not a commit SHA.
+
 Details: [GitHub Marketplace](https://github.com/marketplace/actions/terradrift-scan) · [docs/GITHUB_ACTION.md](docs/GITHUB_ACTION.md) · [examples/github-actions](examples/github-actions/README.md) · [examples/gitlab-ci](examples/gitlab-ci/README.md).
 
 Minimal pattern without the Action:
