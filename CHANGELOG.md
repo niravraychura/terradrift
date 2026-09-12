@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.1] - 2026-09-12
+
+### Fixed
+
+- `install.sh` verifies checksums that list `dist/terradrift_*.tar.gz` (every current GitHub Release, including v1.1.0). `release.yml` now writes bare archive names so new tags match `sha256sum -c` (#172)
+
 ## [1.1.0] - 2026-09-11
 
 ### Added
@@ -130,7 +136,8 @@ First public tagged release of the self-hosted TerraDrift CLI.
 - SSRF-safe GitHub HTTP client, fail-closed truncated I/O, attribute value heuristics
 - Size budgets and redaction defaults for user-facing output
 
-[Unreleased]: https://github.com/niravraychura/terradrift/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/niravraychura/terradrift/compare/v1.1.1...HEAD
+[1.1.1]: https://github.com/niravraychura/terradrift/releases/tag/v1.1.1
 [1.1.0]: https://github.com/niravraychura/terradrift/releases/tag/v1.1.0
 [1.0.0]: https://github.com/niravraychura/terradrift/releases/tag/v1.0.0
 [0.4.1]: https://github.com/niravraychura/terradrift/releases/tag/v0.4.1

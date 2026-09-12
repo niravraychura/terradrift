@@ -24,8 +24,22 @@ git push origin vX.Y.Z
 ```
 
 5. **Verify** — watch `.github/workflows/release.yml` for that tag; confirm GitHub Release assets (archives, checksums, SBOM) and GHCR image.
-   - Open `checksums.txt` on the Release: lines must be bare names (`terradrift_linux_amd64.tar.gz`), not `dist/…`.
-   - Spot-check: `TERRADRIFT_VERSION=vX.Y.Z PREFIX=$(mktemp -d) ./scripts/install.sh` succeeds for `linux_amd64` (or run `scripts/install_checksum_lines_test.sh`).
+
+   **`checksums.txt` must use bare archive names** (not `dist/…`). `install.sh` and `sha256sum -c` look for ` terradrift_linux_amd64.tar.gz`. Generate with `(cd dist && sha256sum *.tar.gz > checksums.txt)` in `release.yml`. After the Release exists:
+
+   ```bash
+   tag=vX.Y.Z
+   curl -fsSL -o /tmp/td-checksums.txt \
+     "https://github.com/niravraychura/terradrift/releases/download/${tag}/checksums.txt"
+   # Must print four lines like: <sha256>  terradrift_linux_amd64.tar.gz
+   grep -E ' terradrift_(linux|darwin)_(amd64|arm64)\.tar\.gz$' /tmp/td-checksums.txt
+   if grep -q ' dist/' /tmp/td-checksums.txt; then
+     echo "checksums.txt still has dist/ prefixes; install.sh will fail on older grep" >&2
+     exit 1
+   fi
+   ```
+
+   Do not declare the release installable until that grep matches. v1.1.0 and earlier shipped `dist/` prefixes (#172); `install.sh` accepts those lines, but new tags must ship bare names. Spot-check: `scripts/install_checksum_lines_test.sh` (and `scripts/install_checksum_test.sh`).
 6. **Back-merge** — if `main` is ahead of `dev` (promotion merge commit), PR `main` → `dev` and merge after CI.
 7. **Consume pins** — only after the GitHub Release archives exist. PR into `dev` (do not bump a default to a tag with no assets — `install.sh` will 404). Update:
    - `scripts/install.sh` default `TERRADRIFT_VERSION` and its usage comment
