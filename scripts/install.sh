@@ -34,12 +34,22 @@ trap 'rm -rf "${tmpdir}"' EXIT
 curl -fsSL -o "${tmpdir}/checksums.txt" "${BASE}/checksums.txt"
 curl -fsSL -o "${tmpdir}/${archive}" "${BASE}/${archive}"
 
+# Match bare names (current releases) or legacy "dist/<archive>" lines.
+# Normalize to the bare name so sha256sum/shasum -c finds the local file.
+verify_line="$(
+  grep -E " (dist/)?${archive}\$" "${tmpdir}/checksums.txt" | head -n1 | sed -E "s| dist/${archive}\$| ${archive}|"
+)"
+if [[ -z "${verify_line}" ]]; then
+  echo "no checksum line for ${archive} in checksums.txt" >&2
+  exit 1
+fi
+
 (
   cd "${tmpdir}"
   if command -v sha256sum >/dev/null 2>&1; then
-    grep " ${archive}\$" checksums.txt | sha256sum -c -
+    printf '%s\n' "${verify_line}" | sha256sum -c -
   else
-    grep " ${archive}\$" checksums.txt | shasum -a 256 -c -
+    printf '%s\n' "${verify_line}" | shasum -a 256 -c -
   fi
 )
 

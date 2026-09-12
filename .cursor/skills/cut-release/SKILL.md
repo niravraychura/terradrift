@@ -24,6 +24,8 @@ git push origin vX.Y.Z
 ```
 
 5. **Verify** — watch `.github/workflows/release.yml` for that tag; confirm GitHub Release assets (archives, checksums, SBOM) and GHCR image.
+   - Open `checksums.txt` on the Release: lines must be bare names (`terradrift_linux_amd64.tar.gz`), not `dist/…`.
+   - Spot-check: `TERRADRIFT_VERSION=vX.Y.Z PREFIX=$(mktemp -d) ./scripts/install.sh` succeeds for `linux_amd64` (or run `scripts/install_checksum_lines_test.sh`).
 6. **Back-merge** — if `main` is ahead of `dev` (promotion merge commit), PR `main` → `dev` and merge after CI.
 7. **Consume pins** — only after the GitHub Release archives exist. PR into `dev` (do not bump a default to a tag with no assets — `install.sh` will 404). Update:
    - `scripts/install.sh` default `TERRADRIFT_VERSION` and its usage comment
