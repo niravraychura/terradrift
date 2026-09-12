@@ -38,7 +38,8 @@ jobs:
             GOOS="$os" GOARCH="$arch" CGO_ENABLED=0 go build -trimpath -ldflags="$ldflags" -o "$directory/terradrift" ./cmd/terradrift
             tar -C "$directory" -czf "dist/terradrift_${os}_${arch}.tar.gz" terradrift
           done
-          sha256sum dist/*.tar.gz > dist/checksums.txt
+          # Bare archive names so install.sh can grep ` terradrift_linux_amd64.tar.gz$`.
+          (cd dist && sha256sum *.tar.gz > checksums.txt)
       - name: Build runtime image
         run: docker build --build-arg VERSION="$GITHUB_REF_NAME" -t "$IMAGE" .
       - name: Generate image SBOM

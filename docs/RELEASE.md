@@ -38,7 +38,7 @@ git tag -a v0.1.0 -m "TerraDrift v0.1.0"
 git push origin v0.1.0
 ```
 
-4. Confirm the GitHub Release and artifacts from `release.yml`.
+4. Confirm the GitHub Release and artifacts from `release.yml`. `checksums.txt` must list **bare** archive names (`terradrift_linux_amd64.tar.gz`), not `dist/…`. `install.sh` greps the basename; a `dist/` prefix makes `sha256sum -c` report `no properly formatted checksum lines found` (#172). `release.yml` generates them with `(cd dist && sha256sum *.tar.gz > checksums.txt)`.
 5. Confirm release binaries report the tag: `terradrift --version` (injected via `-ldflags` / Docker `VERSION` build-arg).
 6. Back-merge `main` into `dev` if `main` gained commits (changelog, hotfixes) not already on `dev`.
 7. After archives exist, PR consume-pin updates into `dev`: `scripts/install.sh` default, README install/GHCR examples, `examples/github-actions` `TERRADRIFT_VERSION`, and Action `uses:` (see [Install / consume](#install--consume)). Do not point those defaults at a tag that has no GitHub Release yet.
