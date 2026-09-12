@@ -32,4 +32,5 @@ alwaysApply: true
 - Always apply **Ponytail** (`.cursor/rules/ponytail.mdc`) — simplest solution that works
 - Apply engineering quality + verify-before-done rules on every change
 - **Tracker first** (`.cursor/rules/tracker-first.mdc`) — GitHub issue + Linear dual-write + Project before implementing, even when the user says to just do it
+- **Learn from misses** (`.cursor/rules/learn-from-misses.mdc`) — retry the same tool call on sandbox/permission failures; write real misses into a rule
 - Match existing Go and docs style; keep changes focused
