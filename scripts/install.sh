@@ -34,17 +34,22 @@ trap 'rm -rf "${tmpdir}"' EXIT
 curl -fsSL -o "${tmpdir}/checksums.txt" "${BASE}/checksums.txt"
 curl -fsSL -o "${tmpdir}/${archive}" "${BASE}/${archive}"
 
+# Match bare names (current releases) or legacy "dist/<archive>" lines.
+# Normalize to the bare name so sha256sum/shasum -c finds the local file.
+verify_line="$(
+  grep -E " (dist/)?${archive}\$" "${tmpdir}/checksums.txt" | head -n1 | sed -E "s| dist/${archive}\$| ${archive}|"
+)"
+if [[ -z "${verify_line}" ]]; then
+  echo "no checksum line for ${archive} in checksums.txt" >&2
+  exit 1
+fi
+
 (
   cd "${tmpdir}"
-  # Older releases list `dist/terradrift_*.tar.gz`; rewrite to the downloaded basename.
-  hash="$(awk -v a="${archive}" '$2 == a || $2 == "dist/" a { print $1; found=1; exit } END { if (!found) exit 1 }' checksums.txt)" || {
-    echo "no checksum line for ${archive}" >&2
-    exit 1
-  }
   if command -v sha256sum >/dev/null 2>&1; then
-    printf '%s  %s\n' "${hash}" "${archive}" | sha256sum -c -
+    printf '%s\n' "${verify_line}" | sha256sum -c -
   else
-    printf '%s  %s\n' "${hash}" "${archive}" | shasum -a 256 -c -
+    printf '%s\n' "${verify_line}" | shasum -a 256 -c -
   fi
 )
 

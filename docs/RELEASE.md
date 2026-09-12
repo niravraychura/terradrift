@@ -10,6 +10,7 @@ TerraDrift uses SemVer (`vMAJOR.MINOR.PATCH`) and ships artifacts from annotated
 | Stable | Promote `dev` → `main` only when CI is green |
 | Version | Annotated tag `vMAJOR.MINOR.PATCH` on `main` |
 | Artifacts | Tag push runs `.github/workflows/release.yml` (archives, checksums, SBOM, GHCR image) |
+| Checksums | `scripts/install.sh` accepts bare archive names and legacy `dist/…` lines. Prefer writing bare names in `release.yml` (`(cd dist && sha256sum *.tar.gz > checksums.txt)`). After tagging, confirm `install.sh` verifies `linux_amd64`. |
 | Pre-1.0 | Breaking CLI/JSON changes allowed in minors if called out in release notes |
 | After 1.0 | Breaking flags, exit codes, or published JSON is a MAJOR — [COMPATIBILITY.md](COMPATIBILITY.md) |
 | Hotfix | Patch on `main`, then back-merge to `dev` |

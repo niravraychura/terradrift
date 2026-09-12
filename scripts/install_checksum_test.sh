@@ -24,7 +24,7 @@ if hash_for "${dir}/missing.txt" >/dev/null 2>&1; then
 fi
 
 # Keep the matcher in install.sh and the generator in release.yml.
-grep -q '$2 == "dist/" a' "${root}/scripts/install.sh"
+grep -qE '\(dist/\)\?' "${root}/scripts/install.sh"
 grep -q '(cd dist && sha256sum \*.tar.gz > checksums.txt)' "${root}/.github/workflows/release.yml"
 
 echo "install checksum lines ok"
