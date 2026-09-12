@@ -52,3 +52,5 @@ make ci    # full local gate when tooling is available
 | Historical plans | `docs/archive/` (root `PLAN.md` is a stub) |
 
 Do not contradict `docs/RELEASE.md` or `CONTRIBUTING.md` when proposing git workflow.
+
+Official Action: `uses: @vX.Y.Z` needs no `version:` input. A SHA or branch pin must set `with.version: vX.Y.Z`. `TERRADRIFT_VERSION` / `install.sh` takes a published tag, not a commit SHA.

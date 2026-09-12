@@ -27,4 +27,9 @@ fi
 grep -q '$2 == "dist/" a' "${root}/scripts/install.sh"
 grep -q '(cd dist && sha256sum \*.tar.gz > checksums.txt)' "${root}/.github/workflows/release.yml"
 
+if TERRADRIFT_VERSION=188034031ee2b9ad1ed042d17cd811d5b3767292 PREFIX="${dir}/prefix" "${root}/scripts/install.sh" >/dev/null 2>&1; then
+  echo "expected SHA TERRADRIFT_VERSION to fail" >&2
+  exit 1
+fi
+
 echo "install checksum lines ok"

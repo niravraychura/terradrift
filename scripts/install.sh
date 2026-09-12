@@ -1,9 +1,17 @@
 #!/usr/bin/env bash
 # Checksum-verifying installer for TerraDrift GitHub Release archives.
+# TERRADRIFT_VERSION must be a published tag (vX.Y.Z), not a commit SHA or branch.
 # Usage: TERRADRIFT_VERSION=v1.1.1 PREFIX=/usr/local ./scripts/install.sh
 set -euo pipefail
 
 VERSION="${TERRADRIFT_VERSION:-v1.1.1}"
+case "${VERSION}" in
+  v[0-9]*.[0-9]*.[0-9]*) ;;
+  *)
+    echo "TERRADRIFT_VERSION must be a published release tag (vX.Y.Z), not a commit SHA or branch" >&2
+    exit 1
+    ;;
+esac
 PREFIX="${PREFIX:-/usr/local}"
 REPO="${TERRADRIFT_REPO:-niravraychura/terradrift}"
 BASE="https://github.com/${REPO}/releases/download/${VERSION}"

@@ -7,7 +7,7 @@ branding:
 
 inputs:
   version:
-    description: TerraDrift release tag (vX.Y.Z). Defaults to the action ref when it is a v* tag.
+    description: GitHub Release tag to install (vX.Y.Z). Required when uses: is a SHA or branch — those refs are not v* tags, so the Action cannot infer the archive. Omit only when uses: is @vX.Y.Z.
     required: false
     default: ""
   directory:
@@ -55,7 +55,7 @@ runs:
           case "${TERRADRIFT_ACTION_REF}" in
             v*.*.*) version="${TERRADRIFT_ACTION_REF}" ;;
             *)
-              echo "set input version to a release tag (for example v1.1.1); action ref is ${TERRADRIFT_ACTION_REF}" >&2
+              echo "version: vX.Y.Z is required because uses: is pinned to ${TERRADRIFT_ACTION_REF}, which is not a v* tag. Tag pins (@v1.1.1) can omit version; SHA/branch pins cannot." >&2
               exit 1
               ;;
           esac
