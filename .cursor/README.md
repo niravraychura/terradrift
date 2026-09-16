@@ -42,7 +42,7 @@ Installed for Cursor via `npx skills add … -a cursor`. **When to fire** is `.c
 
 | Tool | Role |
 |------|------|
-| Serena (`.cursor/mcp.json`) | Symbol-level navigation for **medium/large** Go changes. Optional local MCP (`uv tool install serena-agent`); GPL-3.0 application, not a TerraDrift dependency. Needs `gopls` on `PATH`. Reload Cursor after MCP edits. |
+| Serena (`.cursor/mcp.json`) | Symbol-level navigation for **medium/large** Go changes. Optional local MCP (`uv tool install serena-agent`); GPL-3.0 application, not a TerraDrift dependency. Needs `gopls` on `PATH`. Reload Cursor after MCP edits. Shared project graph: `.serena/memories/` (`mem:core` first). Do not commit `project.local.yml` or `.serena/cache/`. |
 | Context7 CLI | `ctx7 library` then `ctx7 docs`. CLI + skill only (no Context7 MCP unless someone asks). |
 | Repomix CLI | Used by `repomix-explorer`. Do not commit `repomix-output.*`. |
 
