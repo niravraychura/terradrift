@@ -1,0 +1,33 @@
+---
+description: Auto-invoke installed agent skills and MCP tools when their trigger matches
+alwaysApply: true
+---
+
+# Auto-invoke agent skills
+
+When a row matches, **read that skill before acting** (Cursor: Read the `SKILL.md`; do not rely on memory). TerraDrift `AGENTS.md` and always-on rules win if a skill conflicts.
+
+Installed copies: `.agents/skills/<name>/`. Product skills stay in `.cursor/skills/`.
+
+| When | Read / use | Skip when |
+|------|------------|-----------|
+| Bug, test failure, unexpected behavior, or a fix that already failed once | `.agents/skills/systematic-debugging/SKILL.md` | Pure docs/typo with an obvious root cause |
+| New or changed **Go behavior** (feature, bugfix, refactor of logic) | `.agents/skills/test-driven-development/SKILL.md` — failing test first | Docs, rules, config-only, generated files, Ponytail trivial one-liners |
+| About to claim done, fixed, or tests/CI pass | `.agents/skills/verification-before-completion/SKILL.md` **and** `.cursor/rules/verify-before-done.mdc` | — |
+| New product behavior or design is still ambiguous | `.agents/skills/brainstorming/SKILL.md` then `ask-before-assuming` | Already-ticketed, bounded change (tracker-first + this request is enough; do not wait for a second design-approval gate) |
+| Third-party API/docs may be stale (Go modules, Terraform JSON, Cobra, GitHub Actions, …) | `.agents/skills/context7-cli/SKILL.md` — `ctx7 library` then `ctx7 docs` | TerraDrift’s own README/`docs/` (read the repo) |
+| Medium/large code change: several packages, rename, find-refs, symbol edit | **Serena MCP** (`.cursor/mcp.json`) — symbol search/refs/rename | One-file docs or a single obvious `StrReplace` |
+| Unfamiliar, large, or **remote** repo overview; cross-repo pattern hunt | `.agents/skills/repomix-explorer/SKILL.md` | Targeted edit in this repo; single-symbol grep; packing secrets/state/plans |
+
+`using-superpowers` is installed as the upstream dispatcher. This table replaces it for TerraDrift so Ponytail, tracker-first, and ask-before-assuming stay in charge.
+
+## Precedence
+
+1. Safety / secrets / fail-closed (`SECURITY.md`, `fixtures-no-secrets`)
+2. Tracker-first, Ponytail, ask-before-assuming, verify-before-done
+3. The matching skill above
+4. Default Cursor behavior
+
+Do not add Context7 MCP unless someone explicitly asks; this repo uses **Context7 CLI + skill**. Serena is a **local optional** MCP (GPL-3.0 application), not a TerraDrift runtime dependency. Requires `uv tool install serena-agent`, `gopls` on `PATH`, and a Cursor reload after MCP changes.
+
+Repomix output is gitignored. Never pack `.env`, Terraform state, plans, or webhook URLs.

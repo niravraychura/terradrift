@@ -12,3 +12,6 @@ coverage.out
 crash.log
 .tools/
 .opencode/
+repomix-output.*
+.serena/cache/
+.serena/*.local.yml
