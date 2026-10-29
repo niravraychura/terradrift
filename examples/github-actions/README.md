@@ -20,6 +20,7 @@ These install TerraDrift with checksum-verifying `scripts/install.sh` (not `v0.0
 | [`terradrift-pr.yml`](terradrift-pr.yml) | PR comment upsert (`GITHUB_TOKEN`) |
 | [`terradrift-opentofu.yml`](terradrift-opentofu.yml) | OpenTofu (`--terraform-bin tofu`) |
 | [`terradrift-scheduled-multi-root.yml`](terradrift-scheduled-multi-root.yml) | `scan-all` + severity gate |
+| [`terradrift-sarif.yml`](terradrift-sarif.yml) | `--output sarif` + `upload-sarif` (Security tab) |
 
 ## Operator notes
 

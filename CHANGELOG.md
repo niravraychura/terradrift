@@ -7,8 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- OpenSSF Scorecard workflow (`.github/workflows/scorecard.yml`) on `main` / `dev` (#158)
+- Copy-paste Azure DevOps and Bitbucket Pipelines scheduled scans (Ubuntu/Linux agents) (#157)
+- GitHub Actions example that uploads `--output sarif` to code scanning (#156)
+- aqua local registry (`contrib/aqua`) using GitHub Release checksums; mise via aqua backend (#161)
+
 ### Changed
 
+- State that GitHub Release archives and `install.sh` are Linux and macOS only (#160)
 - Always-on agent rule: retry the same tool call on sandbox/permission failures; write real misses into rules (#182)
 - Document that Action SHA/branch pins need `version: vX.Y.Z`; `install.sh` rejects non-tag `TERRADRIFT_VERSION` values (#179)
 

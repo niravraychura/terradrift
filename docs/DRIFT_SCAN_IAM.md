@@ -23,6 +23,10 @@ Pin third-party actions to SHAs in real workflows. Full scheduled examples: [exa
 
 Prefer ID tokens (`id_tokens`) over long-lived keys. Copy-paste job: [examples/gitlab-ci](../examples/gitlab-ci/README.md).
 
+## Azure DevOps and Bitbucket
+
+Same `--terraform-exec` / `--redact-paths` contract on **Linux** agents (no Windows archives). Copy-paste: [examples/azure-pipelines](../examples/azure-pipelines/README.md), [examples/bitbucket-pipelines](../examples/bitbucket-pipelines/README.md). Prefer a federated / OIDC identity (Azure Resource Manager service connection, Bitbucket `oidc: true`) over long-lived keys.
+
 AWS (`aud` must match the identity provider; GitLab.com shown):
 
 ```yaml

@@ -22,7 +22,7 @@ case "${uname_s}" in
   linux) os=linux ;;
   darwin) os=darwin ;;
   *)
-    echo "unsupported OS: ${uname_s}" >&2
+    echo "unsupported OS: ${uname_s} (TerraDrift publishes Linux and macOS archives only)" >&2
     exit 1
     ;;
 esac

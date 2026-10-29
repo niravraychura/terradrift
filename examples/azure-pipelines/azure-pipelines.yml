@@ -1,0 +1,62 @@
+# Copy to azure-pipelines.yml in your infrastructure repository.
+# Pin TERRADRIFT_VERSION to a GitHub Release tag (vX.Y.Z), not a commit SHA.
+# Ubuntu agents only — TerraDrift does not publish Windows archives.
+# Cloud auth: Azure Resource Manager service connection (OIDC/federated), not long-lived keys — docs/DRIFT_SCAN_IAM.md
+# Do not publish *.tfplan artifacts (plans can contain secrets). Prefer JSON reports.
+#
+# Schedule: Pipelines → this pipeline → Settings → Scheduled runs (or keep `schedules:` below).
+
+trigger: none
+pr: none
+
+schedules:
+  - cron: "17 */6 * * *"
+    displayName: TerraDrift every 6 hours
+    branches:
+      include:
+        - main
+    always: true
+
+pool:
+  vmImage: ubuntu-24.04
+
+variables:
+  TERRADRIFT_VERSION: v1.1.1
+  TERRAFORM_VERSION: 1.10.5
+  TF_PLUGIN_CACHE_DIR: $(Build.SourcesDirectory)/.terraform-plugin-cache
+  TF_IN_AUTOMATION: "true"
+
+steps:
+  - checkout: self
+    persistCredentials: false
+
+  # Optional OIDC: AzureCLI@2 with an Azure Resource Manager service connection
+  # that uses a federated credential (Workload Identity). Reader-scope identity.
+  # - task: AzureCLI@2
+  #   inputs:
+  #     azureSubscription: terradrift-readonly
+  #     scriptType: bash
+  #     scriptLocation: inlineScript
+  #     inlineScript: az account show
+
+  - bash: |
+      set -euo pipefail
+      mkdir -p "${HOME}/.local/bin"
+      curl -fsSLo /tmp/terraform.zip "https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_amd64.zip"
+      unzip -o /tmp/terraform.zip -d "${HOME}/.local/bin"
+      rm /tmp/terraform.zip
+      chmod +x "${HOME}/.local/bin/terraform"
+      curl -fsSLo install-terradrift.sh "https://raw.githubusercontent.com/niravraychura/terradrift/${TERRADRIFT_VERSION}/scripts/install.sh"
+      PREFIX="${HOME}/.local" bash install-terradrift.sh
+      echo "##vso[task.prependpath]${HOME}/.local/bin"
+      mkdir -p "${TF_PLUGIN_CACHE_DIR}"
+      terradrift scan \
+        --directory ./terraform/prod \
+        --workspace-root "${BUILD_SOURCESDIRECTORY}" \
+        --terraform-exec \
+        --redact-paths
+    displayName: Install Terraform + TerraDrift and scan
+    env:
+      TF_PLUGIN_CACHE_DIR: $(TF_PLUGIN_CACHE_DIR)
+      # Keep webhook URLs in secret pipeline variables, not in this file:
+      # SLACK_WEBHOOK_URL: $(SLACK_WEBHOOK_URL)

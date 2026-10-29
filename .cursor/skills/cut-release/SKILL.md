@@ -47,6 +47,7 @@ git push origin vX.Y.Z
    - `examples/github-actions/*.yml` `TERRADRIFT_VERSION` (install.sh workflows)
    - Official Action examples / README / `docs/GITHUB_ACTION.md`: `uses: niravraychura/terradrift@vX.Y.Z` and drop `version:` (`action.yml` infers the tag). A SHA or branch pin **must** keep `with.version: vX.Y.Z` — the Action cannot infer a release from a SHA. `install.sh` / `TERRADRIFT_VERSION` is a published tag only (not a SHA). Until that tag includes `action.yml`, keep `uses: @dev` plus `version:` of the latest CLI release.
    - Homebrew tap: `./scripts/gen-homebrew-formula.sh vX.Y.Z` → commit `Formula/terradrift.rb` in `niravraychura/homebrew-tap` (see `contrib/homebrew/README.md`)
+   - aqua / mise: if the package is already in aquaproj/aqua-registry, no bump. Otherwise set the version in a local `contrib/aqua/aqua.yaml` (see `contrib/aqua/README.md`).
 8. **Milestone** — if an open GitHub milestone exists for this version, **close** it after the release succeeds. Do not create empty milestones for future versions.
 9. **v1.0.0 LinkedIn** — do **not** remind or post unless the maintainer explicitly asks. Copy lives on [#95](https://github.com/niravraychura/terradrift/issues/95) (parked from #111). Never post from the agent.
 

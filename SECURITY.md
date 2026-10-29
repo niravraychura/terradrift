@@ -83,6 +83,7 @@ Do not commit cloud credentials, webhook URLs, or `GITHUB_TOKEN` values. Keep th
 - User-facing and CI workflows pin third-party GitHub Actions to immutable SHAs. The official TerraDrift Action always passes `--terraform-exec`.
 - GitHub **secret scanning** and **push protection** are enabled for this public repository.
 - **CodeQL** runs via `.github/workflows/codeql.yml` (PRs, pushes to `main`/`dev`, weekly); findings appear under Security → Code scanning.
+- **OpenSSF Scorecard** runs via `.github/workflows/scorecard.yml` (pushes to `main`/`dev`, weekly, branch protection); SARIF is uploaded to code scanning and `publish_results` posts to the public Scorecard API.
 - Releases produce checksums, SBOM, provenance, and image scanning as configured in repository workflows.
 - Prefer pinned Terraform/OpenTofu and committed `.terraform.lock.hcl`; TerraDrift init uses `-lockfile=readonly` and does not upgrade providers.
 

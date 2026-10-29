@@ -32,7 +32,7 @@ echo "    create a milestone only when attaching real issues/PRs; close when the
 echo "==> Repository topics + Discussions + private vuln reporting"
 gh api --method PATCH "$API" \
   -f description='Self-hosted Terraform/OpenTofu drift detection CLI' \
-  -f homepage='https://github.com/niravraychura/terradrift' \
+  -f homepage='https://github.com/marketplace/actions/terradrift-scan' \
   -F has_discussions=true \
   -F has_issues=true \
   -f "topics[]=terraform" \
@@ -40,10 +40,14 @@ gh api --method PATCH "$API" \
   -f "topics[]=golang" \
   -f "topics[]=cli" \
   -f "topics[]=opentofu" \
-  -f "topics[]=infrastructure-as-code" >/dev/null || \
+  -f "topics[]=infrastructure-as-code" \
+  -f "topics[]=drift-detection" \
+  -f "topics[]=github-actions" \
+  -f "topics[]=terragrunt" >/dev/null || \
 gh repo edit "$REPO" \
   --description "Self-hosted Terraform/OpenTofu drift detection CLI" \
   --add-topic terraform --add-topic drift --add-topic golang --add-topic cli --add-topic opentofu \
+  --add-topic drift-detection --add-topic github-actions --add-topic terragrunt \
   --enable-discussions 2>/dev/null || true
 
 # Topics via dedicated endpoint (more reliable)
@@ -54,7 +58,10 @@ gh api --method PUT "$API/topics" \
   -f "names[]=golang" \
   -f "names[]=cli" \
   -f "names[]=opentofu" \
-  -f "names[]=infrastructure-as-code" >/dev/null || true
+  -f "names[]=infrastructure-as-code" \
+  -f "names[]=drift-detection" \
+  -f "names[]=github-actions" \
+  -f "names[]=terragrunt" >/dev/null || true
 
 # Private vulnerability reporting
 gh api --method PUT "$API/private-vulnerability-reporting" >/dev/null 2>&1 || \

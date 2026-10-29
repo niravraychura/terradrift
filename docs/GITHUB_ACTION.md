@@ -45,4 +45,6 @@ On GitHub Enterprise Server or GHEC with data residency, GitHub Actions already 
 
 Listed: [TerraDrift Scan](https://github.com/marketplace/actions/terradrift-scan) (free Action listing). Pin `uses: niravraychura/terradrift@v1.1.1`.
 
+To publish scan findings to **Security → Code scanning**, copy [`examples/github-actions/terradrift-sarif.yml`](../examples/github-actions/terradrift-sarif.yml) (`--output sarif` + pinned `github/codeql-action/upload-sarif`). The official Action still reports via logs / step summary; the SARIF example is the Security-tab path.
+
 To refresh the listing after a new tag, edit that release and keep **Publish this release to the GitHub Marketplace** checked.

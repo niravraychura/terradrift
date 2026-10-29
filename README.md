@@ -34,7 +34,7 @@ TerraDrift runs `terraform plan` or `tofu plan` (refresh-only by default), turns
 
 ### Step 1 — Install TerraDrift
 
-Download a binary from [GitHub Releases](https://github.com/niravraychura/terradrift/releases) (Linux amd64/arm64, macOS amd64/arm64), or install with checksum verification:
+Download a binary from [GitHub Releases](https://github.com/niravraychura/terradrift/releases). Archives are **Linux and macOS only** (`linux_amd64`, `linux_arm64`, `darwin_amd64`, `darwin_arm64`). There is no Windows GitHub Release; `install.sh` rejects Windows. Or install with checksum verification:
 
 ```bash
 TERRADRIFT_VERSION=v1.1.1 PREFIX=/usr/local ./scripts/install.sh
@@ -57,7 +57,14 @@ Homebrew (macOS/Linux):
 brew install niravraychura/tap/terradrift
 ```
 
-Tap: [`niravraychura/homebrew-tap`](https://github.com/niravraychura/homebrew-tap). Or build from source:
+Tap: [`niravraychura/homebrew-tap`](https://github.com/niravraychura/homebrew-tap). aqua (same GitHub Release checksums; Linux/macOS):
+
+```bash
+# Copy contrib/aqua/registry.yaml into a local aqua registry, then:
+aqua i -l
+```
+
+Details: [`contrib/aqua/README.md`](contrib/aqua/README.md). mise uses the aqua backend (`mise use aqua:github.com/niravraychura/terradrift@v1.1.1`) once the standard aqua-registry lists the package. Or build from source:
 
 ```bash
 git clone https://github.com/niravraychura/terradrift.git
@@ -212,7 +219,7 @@ A tag pin (`@v1.1.1`) needs no `version:` input. A SHA or branch pin cannot infe
 
 `scripts/install.sh` / `TERRADRIFT_VERSION` is the same: a published `vX.Y.Z` tag, not a commit SHA.
 
-Details: [GitHub Marketplace](https://github.com/marketplace/actions/terradrift-scan) · [docs/GITHUB_ACTION.md](docs/GITHUB_ACTION.md) · [examples/github-actions](examples/github-actions/README.md) · [examples/gitlab-ci](examples/gitlab-ci/README.md).
+Details: [GitHub Marketplace](https://github.com/marketplace/actions/terradrift-scan) · [docs/GITHUB_ACTION.md](docs/GITHUB_ACTION.md) · [examples/github-actions](examples/github-actions/README.md) · [examples/gitlab-ci](examples/gitlab-ci/README.md) · [examples/azure-pipelines](examples/azure-pipelines/README.md) · [examples/bitbucket-pipelines](examples/bitbucket-pipelines/README.md).
 
 Minimal pattern without the Action:
 
@@ -233,6 +240,9 @@ Full scheduled examples:
 - Multi-root + Slack: [`examples/github-actions/terradrift-scheduled-multi-root.yml`](examples/github-actions/terradrift-scheduled-multi-root.yml)
 - Cron: [`examples/cron/terradrift.cron`](examples/cron/terradrift.cron)
 - GitLab CI (install.sh): [`examples/gitlab-ci/.gitlab-ci.yml`](examples/gitlab-ci/.gitlab-ci.yml)
+- Azure DevOps (Ubuntu agent): [`examples/azure-pipelines/azure-pipelines.yml`](examples/azure-pipelines/azure-pipelines.yml)
+- Bitbucket Pipelines (Ubuntu image): [`examples/bitbucket-pipelines/bitbucket-pipelines.yml`](examples/bitbucket-pipelines/bitbucket-pipelines.yml)
+- SARIF → GitHub code scanning: [`examples/github-actions/terradrift-sarif.yml`](examples/github-actions/terradrift-sarif.yml)
 
 Pin TerraDrift, Terraform/OpenTofu, and provider versions. Use OIDC for cloud roles ([docs/DRIFT_SCAN_IAM.md](docs/DRIFT_SCAN_IAM.md)), not long-lived keys. Cache providers with `TF_PLUGIN_CACHE_DIR`. Keep webhook URLs in CI secrets. Do not upload `*.tfplan` artifacts. OpenTofu is a drop-in planner: set `--terraform-bin tofu` (or `terraform_bin` in config) and keep using `--terraform-exec`. Terragrunt stacked roots use `--terragrunt-bin` (default `terragrunt`); `--terraform-bin terragrunt` is also accepted as a passthrough.
 
@@ -465,6 +475,8 @@ Compare both modes when unsure whether a finding is out-of-band change vs unappl
 | --- | --- |
 | GitHub Action | [docs/GITHUB_ACTION.md](docs/GITHUB_ACTION.md) |
 | GitLab CI example | [examples/gitlab-ci/README.md](examples/gitlab-ci/README.md) |
+| Azure DevOps / Bitbucket examples | [examples/azure-pipelines](examples/azure-pipelines/README.md) · [examples/bitbucket-pipelines](examples/bitbucket-pipelines/README.md) |
+| aqua / mise install | [contrib/aqua/README.md](contrib/aqua/README.md) |
 | PagerDuty / Opsgenie webhook mapping | [examples/webhooks](examples/webhooks/README.md) |
 | vs plan / driftctl / HCP / rootsami | [docs/COMPARE.md](docs/COMPARE.md) |
 | Architecture & report JSON | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
