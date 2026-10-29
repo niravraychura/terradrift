@@ -1,0 +1,28 @@
+---
+description: Retry the same tool call on environment failures; write real misses into rules
+alwaysApply: true
+---
+
+# Learn from misses
+
+Chat memory does not persist. A repeated miss that is not written into a rule, skill, or `AGENTS.md` will happen again.
+
+## Environment failure — retry the same call
+
+Sandbox `Forbidden`, GraphQL blocked, network denied, or a permission prompt is an **environment** miss, not a product miss.
+
+- Retry the **same** command with the right permission (`all` for `gh`, Linear, remote git, and most GitHub/Linear APIs).
+- Do it on the **first** `gh` / Linear / remote-git call when you already know the sandbox will block GraphQL or `api.github.com`.
+- Do **not** invent a different GitHub, Linear, Azure, or install process because of that error.
+- Do **not** treat `Post https://api.github.com/graphql: Forbidden` as “GraphQL is unavailable.”
+
+```text
+❌ gh issue list --search "…"  (sandbox) → Forbidden → stop using search / change tracker flow
+✅ same gh command with required_permissions: ["all"]
+```
+
+## Real miss — write it down
+
+Wrong default, wrong API, or the same retry twice in one session: add or tighten a `.cursor/rules/` entry, a skill, or `AGENTS.md`. One short rule beats another apology next chat.
+
+Do not grow this file into a diary. One lesson, one line, in the rule that owns that topic.

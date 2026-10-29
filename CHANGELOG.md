@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Always-on agent rule: retry the same tool call on sandbox/permission failures; write real misses into rules (#182)
 - Document that Action SHA/branch pins need `version: vX.Y.Z`; `install.sh` rejects non-tag `TERRADRIFT_VERSION` values (#179)
 
 ## [1.1.1] - 2026-09-12
