@@ -13,6 +13,7 @@ Committed rules under `.cursor/rules/` so every agent session inherits the same 
 | `docs-with-flags.mdc` | CLI/flag changes must update README help path + `--help` |
 | `fixtures-no-secrets.mdc` | Tests/examples: synthetic placeholders only |
 | `github-milestones.mdc` | No empty milestones; attach real work; close on ship |
+| `learn-from-misses.mdc` | Retry the same tool call on environment failures; write real misses down |
 | `agent-skills.mdc` | Auto-invoke `.agents/skills/` + Serena / Context7 CLI |
 
 ## Project skills (`.cursor/skills/`)
