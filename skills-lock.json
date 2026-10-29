@@ -13,12 +13,6 @@
       "skillPath": "skills/context7-cli/SKILL.md",
       "computedHash": "f22d21491528a0aaaf21a2a7c546428ffd208852473d6afbaf5e2d4845388639"
     },
-    "repomix-explorer": {
-      "source": "yamadashy/repomix",
-      "sourceType": "github",
-      "skillPath": "skills/repomix-explorer/SKILL.md",
-      "computedHash": "bea98370ef35e710b4e4d900d0e250be37b0270e377ac011f7d346f056d8348f"
-    },
     "systematic-debugging": {
       "source": "obra/superpowers",
       "sourceType": "github",
@@ -30,12 +24,6 @@
       "sourceType": "github",
       "skillPath": "skills/test-driven-development/SKILL.md",
       "computedHash": "a4126a9c5f17be3c228aa9e5755898ade283448b86099f56f40852e8c14532be"
-    },
-    "using-superpowers": {
-      "source": "obra/superpowers",
-      "sourceType": "github",
-      "skillPath": "skills/using-superpowers/SKILL.md",
-      "computedHash": "c7abe8bdc2099bbe4f245454d32c7563ccd2bb41dcc218b02b461c2acc3c6ae6"
     },
     "verification-before-completion": {
       "source": "obra/superpowers",

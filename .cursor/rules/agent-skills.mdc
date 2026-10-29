@@ -17,9 +17,8 @@ Installed copies: `.agents/skills/<name>/`. Product skills stay in `.cursor/skil
 | New product behavior or design is still ambiguous | `.agents/skills/brainstorming/SKILL.md` then `ask-before-assuming` | Already-ticketed, bounded change (tracker-first + this request is enough; do not wait for a second design-approval gate) |
 | Third-party API/docs may be stale (Go modules, Terraform JSON, Cobra, GitHub Actions, …) | `.agents/skills/context7-cli/SKILL.md` — `ctx7 library` then `ctx7 docs` | TerraDrift’s own README/`docs/` (read the repo) |
 | Medium/large code change: several packages, rename, find-refs, symbol edit | **Serena MCP** (`.cursor/mcp.json`) — symbol search/refs/rename | One-file docs or a single obvious `StrReplace` |
-| Unfamiliar, large, or **remote** repo overview; cross-repo pattern hunt | `.agents/skills/repomix-explorer/SKILL.md` | Targeted edit in this repo; single-symbol grep; packing secrets/state/plans |
 
-`using-superpowers` is installed as the upstream dispatcher. This table replaces it for TerraDrift so Ponytail, tracker-first, and ask-before-assuming stay in charge.
+Do not install `using-superpowers` or Repomix in this repo: the table above is the dispatcher, and this tree is small enough for Grep/Serena.
 
 ## Precedence
 
@@ -28,6 +27,4 @@ Installed copies: `.agents/skills/<name>/`. Product skills stay in `.cursor/skil
 3. The matching skill above
 4. Default Cursor behavior
 
-Do not add Context7 MCP unless someone explicitly asks; this repo uses **Context7 CLI + skill**. Serena is a **local optional** MCP (GPL-3.0 application), not a TerraDrift runtime dependency. Requires `uv tool install serena-agent`, `gopls` on `PATH`, and a Cursor reload after MCP changes.
-
-Repomix output is gitignored. Never pack `.env`, Terraform state, plans, or webhook URLs.
+Do not add Context7 MCP unless someone explicitly asks; this repo uses **Context7 CLI + skill**. Serena is a **local optional** MCP (GPL-3.0 application), not a TerraDrift runtime dependency. Requires `uv tool install serena-agent`, `gopls` on `PATH`, and a Cursor reload after MCP changes. Cursor already has Read/Grep/StrReplace/Shell — do not use Serena’s overlapping search/replace tools.

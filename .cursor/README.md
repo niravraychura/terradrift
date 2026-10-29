@@ -13,7 +13,7 @@ Committed rules under `.cursor/rules/` so every agent session inherits the same 
 | `docs-with-flags.mdc` | CLI/flag changes must update README help path + `--help` |
 | `fixtures-no-secrets.mdc` | Tests/examples: synthetic placeholders only |
 | `github-milestones.mdc` | No empty milestones; attach real work; close on ship |
-| `agent-skills.mdc` | Auto-invoke `.agents/skills/` + Serena / Context7 CLI / Repomix |
+| `agent-skills.mdc` | Auto-invoke `.agents/skills/` + Serena / Context7 CLI |
 
 ## Project skills (`.cursor/skills/`)
 
@@ -35,8 +35,6 @@ Installed for Cursor via `npx skills add … -a cursor`. **When to fire** is `.c
 | `verification-before-completion` | Before claiming done — with `verify-before-done` |
 | `brainstorming` | Ambiguous new product behavior |
 | `context7-cli` | Current third-party library docs via `ctx7` CLI |
-| `repomix-explorer` | Large / remote / unfamiliar repo overview |
-| `using-superpowers` | Upstream dispatcher; TerraDrift mapping table wins |
 
 ## MCP / CLIs (local)
 
@@ -44,7 +42,6 @@ Installed for Cursor via `npx skills add … -a cursor`. **When to fire** is `.c
 |------|------|
 | Serena (`.cursor/mcp.json`) | Symbol-level navigation for **medium/large** Go changes. Optional local MCP (`uv tool install serena-agent`); GPL-3.0 application, not a TerraDrift dependency. Needs `gopls` on `PATH`. Reload Cursor after MCP edits. Shared project graph: `.serena/memories/` (`mem:core` first). Do not commit `project.local.yml` or `.serena/cache/`. |
 | Context7 CLI | `ctx7 library` then `ctx7 docs`. CLI + skill only (no Context7 MCP unless someone asks). |
-| Repomix CLI | Used by `repomix-explorer`. Do not commit `repomix-output.*`. |
 
 ## Suggested additions later (optional)
 
