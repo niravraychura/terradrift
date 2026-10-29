@@ -28,7 +28,7 @@ lint: ## Run golangci-lint
 	golangci-lint run
 
 vuln: ## Run govulncheck
-	GOTOOLCHAIN=go1.26.5 go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+	GOTOOLCHAIN=go1.26.10 go run golang.org/x/vuln/cmd/govulncheck@latest ./...
 
 ci: ## Run the local CI quality gate without modifying files
 	test -z "$$(gofmt -l $$(rg --files -g '*.go' -g '!vendor/**'))"
