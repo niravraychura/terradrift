@@ -14,6 +14,7 @@ TerraDrift is an **open-source, self-hosted** Terraform/OpenTofu **drift detecti
 4. **Tracker first** (`.cursor/rules/tracker-first.mdc`) — even when asked to “just do it”, search GitHub/Linear, file if missing, then PR with `Closes #N`.
 5. **Verify** — run tests before push; after push, confirm GitHub PR/CI is green.
 6. **Learn from misses** (`.cursor/rules/learn-from-misses.mdc`) — environment errors: retry the same call with the right permissions. Real misses: write them into a rule/skill/`AGENTS.md`. Chat does not persist.
+7. **Auto-invoke skills** (`.cursor/rules/agent-skills.mdc`) — when a trigger matches, read that skill (or use Serena / `ctx7`) before acting. Mapping lives in that rule; copies in `.agents/skills/`. Does not replace Ponytail, tracker-first, or verify-before-done.
 
 ## Branch and PR defaults
 
@@ -50,6 +51,7 @@ make ci    # full local gate when tooling is available
 | Architecture | `docs/ARCHITECTURE.md` |
 | Cursor rules | `.cursor/rules/` |
 | Project skills | `.cursor/skills/cut-release`, `.cursor/skills/add-scan-flag` |
+| Auto-invoke skills | `.cursor/rules/agent-skills.mdc` + `.agents/skills/` |
 | Historical plans | `docs/archive/` (root `PLAN.md` is a stub) |
 
 Do not contradict `docs/RELEASE.md` or `CONTRIBUTING.md` when proposing git workflow.
