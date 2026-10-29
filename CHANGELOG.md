@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- OpenSSF Scorecard workflow (`.github/workflows/scorecard.yml`) on `main` / `dev` (#158)
+- OpenSSF Scorecard workflow (`.github/workflows/scorecard.yml`) on `main` (#158)
 - Copy-paste Azure DevOps and Bitbucket Pipelines scheduled scans (Ubuntu/Linux agents) (#157)
 - GitHub Actions example that uploads `--output sarif` to code scanning (#156)
 - aqua local registry (`contrib/aqua`) using GitHub Release checksums; mise via aqua backend (#161)
