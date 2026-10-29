@@ -24,6 +24,8 @@ Those products run plans/applies in their control plane, with run history, VCS c
 
 That project is a 2023 Go **server** (last push 2023) with a different architecture and GitHub path. This repository (`niravraychura/terradrift`) is a CLI. Same name, different product. TerraDrift is also not a HashiCorp or OpenTofu product — see the trademarks note in the README.
 
+Listed under [Awesome Terraform Tools](https://github.com/shuaibiyy/awesome-tf) ([PR #420](https://github.com/shuaibiyy/awesome-tf/pull/420)).
+
 ## Out of scope (still)
 
 Auto-apply, remediating infrastructure, and a hosted SaaS — see [ROADMAP.md](ROADMAP.md).

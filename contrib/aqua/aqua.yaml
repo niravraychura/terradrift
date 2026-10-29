@@ -1,0 +1,9 @@
+# Example aqua.yaml that uses the sibling local registry.
+# Copy both files into a repo that already runs aqua, or merge the `registries`
+# and `packages` entries into an existing aqua.yaml.
+registries:
+  - name: local
+    type: local
+    path: registry.yaml
+packages:
+  - name: github.com/niravraychura/terradrift@v1.1.1

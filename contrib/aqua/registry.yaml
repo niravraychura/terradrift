@@ -1,0 +1,21 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/aquaproj/aqua/main/json-schema/registry.json
+# Local aqua registry for TerraDrift GitHub Release archives + checksums.txt.
+# Listing PR for the standard registry: copy to
+# aquaproj/aqua-registry pkgs/niravraychura/terradrift/registry.yaml
+packages:
+  - type: github_release
+    repo_owner: niravraychura
+    repo_name: terradrift
+    description: Plan-based Terraform/OpenTofu drift detection CLI
+    asset: terradrift_{{.OS}}_{{.Arch}}.tar.gz
+    format: tar.gz
+    files:
+      - name: terradrift
+        src: terradrift
+    checksum:
+      type: github_release
+      asset: checksums.txt
+      algorithm: sha256
+    supported_envs:
+      - linux
+      - darwin
