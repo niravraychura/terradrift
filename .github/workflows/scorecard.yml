@@ -1,5 +1,7 @@
 # OpenSSF Scorecard → Security → Code scanning. No secrets.
 # publish_results posts to the public Scorecard API (id-token: write).
+# ossf/scorecard-action only analyzes the default branch ("only default branch
+# is supported"); do not trigger on `dev`.
 name: OpenSSF Scorecard
 
 on:
@@ -7,7 +9,7 @@ on:
   schedule:
     - cron: "31 5 * * 1"
   push:
-    branches: [main, dev]
+    branches: [main]
   workflow_dispatch:
 
 permissions: read-all
